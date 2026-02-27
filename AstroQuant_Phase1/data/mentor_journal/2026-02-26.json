@@ -1,0 +1,5314 @@
+[
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:24:49.634449",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Higher Low",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Higher Low"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 21,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "45\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 72,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Higher Low. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 72% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:25:42.793877+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:25:46.749471+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:27:20.302327+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:27:24.777333+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:27:29.739630+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:27:35.071420+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:27:39.757889+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:27:44.723498+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:27:50.135634+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:27:55.178782+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:27:59.737366+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:28:05.250029+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:28:09.742073+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:28:17.811903+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:28:22.781660+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:28:27.730364+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:28:31.490984+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:28:37.282016+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:28:42.430614+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:28:48.010286+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:28:54.000253+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:29:00.372674+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:29:03.763437+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:29:08.625082+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:29:14.986812+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:29:22.979430+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:29:27.619694+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:29:31.446526+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:29:36.371220+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:29:40.905354+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:29:46.084364+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:30:20.788496+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:31:16.034111+00:00",
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:32:15.796499+00:00",
+        "prices": {
+            "current_price": 5320.1,
+            "equilibrium": 5320.1,
+            "range_low": 5292.9,
+            "range_high": 5347.3,
+            "execution_zone": "5292.9-5347.3"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3",
+            "institutional_buying_pressure": 0,
+            "institutional_selling_pressure": 0,
+            "net_pressure": 0,
+            "dominant_pressure": "Balanced"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "recommended_side": "WAIT",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Preferred side is WAIT. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:32:16.819250+00:00",
+        "prices": {
+            "current_price": 5320.1,
+            "equilibrium": 5320.1,
+            "range_low": 5292.9,
+            "range_high": 5347.3,
+            "execution_zone": "5292.9-5347.3"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3",
+            "institutional_buying_pressure": 0,
+            "institutional_selling_pressure": 0,
+            "net_pressure": 0,
+            "dominant_pressure": "Balanced"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "recommended_side": "WAIT",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Preferred side is WAIT. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:32:22.026447+00:00",
+        "prices": {
+            "current_price": 5320.1,
+            "equilibrium": 5320.1,
+            "range_low": 5292.9,
+            "range_high": 5347.3,
+            "execution_zone": "5292.9-5347.3"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 0,
+            "sell_volume": 0,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3",
+            "institutional_buying_pressure": 0,
+            "institutional_selling_pressure": 0,
+            "net_pressure": 0,
+            "dominant_pressure": "Balanced"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "recommended_side": "WAIT",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Preferred side is WAIT. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:33:11.910054+00:00",
+        "prices": {
+            "current_price": 5320.1,
+            "equilibrium": 5320.1,
+            "range_low": 5292.9,
+            "range_high": 5347.3,
+            "execution_zone": "5292.9-5347.3"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 12,
+            "sell_volume": 17,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3",
+            "institutional_buying_pressure": 12,
+            "institutional_selling_pressure": 17,
+            "net_pressure": -5,
+            "dominant_pressure": "Selling"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "recommended_side": "SELL",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Preferred side is SELL. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:33:15.831076+00:00",
+        "prices": {
+            "current_price": 5320.1,
+            "equilibrium": 5320.1,
+            "range_low": 5292.9,
+            "range_high": 5347.3,
+            "execution_zone": "5292.9-5347.3"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 12,
+            "sell_volume": 17,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3",
+            "institutional_buying_pressure": 12,
+            "institutional_selling_pressure": 17,
+            "net_pressure": -5,
+            "dominant_pressure": "Selling"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "recommended_side": "SELL",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Preferred side is SELL. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T16:34:15.422008+00:00",
+        "prices": {
+            "current_price": 5320.1,
+            "equilibrium": 5320.1,
+            "range_low": 5292.9,
+            "range_high": 5347.3,
+            "execution_zone": "5292.9-5347.3"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 12,
+            "sell_volume": 17,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3",
+            "institutional_buying_pressure": 12,
+            "institutional_selling_pressure": 17,
+            "net_pressure": -5,
+            "dominant_pressure": "Selling"
+        },
+        "gann": {
+            "day_count": 22,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 63,
+        "recommended_side": "SELL",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional sell pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 63% confidence with risk 0.5% and target RR 1:2. Preferred side is SELL. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:35:14.443593+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:36:12.174206+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:36:14.813453+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:36:15.890954+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:36:20.948581+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:36:25.751907+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:36:31.146686+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:36:36.189161+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:36:40.755228+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:36:46.777975+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:36:50.840822+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:36:55.793916+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:37:00.955039+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:37:13.805696+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:37:16.459893+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:37:22.424807+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:37:25.385330+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:37:30.663328+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:37:35.434029+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:37:40.969249+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:37:45.334995+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:48:27.170575+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:48:31.917898+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:48:37.255757+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T16:49:46.390810+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "New York Active"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Transition",
+            "planetary_alignment": "New York Active",
+            "phase": "Transition",
+            "window": "New York Active"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T17:02:24.930999+00:00",
+        "prices": {
+            "current_price": 5320.1,
+            "equilibrium": 5320.1,
+            "range_low": 5292.9,
+            "range_high": 5347.3,
+            "execution_zone": "5292.9-5347.3"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Higher Low",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Higher Low"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 12,
+            "sell_volume": 17,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3",
+            "institutional_buying_pressure": 12,
+            "institutional_selling_pressure": 17,
+            "net_pressure": -5,
+            "dominant_pressure": "Selling"
+        },
+        "gann": {
+            "day_count": 16,
+            "bar_count": 16,
+            "angle_alignment": "2 Days",
+            "square_level": "45\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 67,
+        "recommended_side": "SELL",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Higher Low. Orderflow indicates institutional sell pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 67% confidence with risk 0.5% and target RR 1:2. Preferred side is SELL. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T17:02:32.563369+00:00",
+        "prices": {
+            "current_price": 5320.1,
+            "equilibrium": 5320.1,
+            "range_low": 5292.9,
+            "range_high": 5347.3,
+            "execution_zone": "5292.9-5347.3"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Higher Low",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Higher Low"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 12,
+            "sell_volume": 17,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3",
+            "institutional_buying_pressure": 12,
+            "institutional_selling_pressure": 17,
+            "net_pressure": -5,
+            "dominant_pressure": "Selling"
+        },
+        "gann": {
+            "day_count": 16,
+            "bar_count": 16,
+            "angle_alignment": "2 Days",
+            "square_level": "45\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 67,
+        "recommended_side": "SELL",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Higher Low. Orderflow indicates institutional sell pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 67% confidence with risk 0.5% and target RR 1:2. Preferred side is SELL. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T17:02:42.906749+00:00",
+        "prices": {
+            "current_price": 5320.1,
+            "equilibrium": 5320.1,
+            "range_low": 5292.9,
+            "range_high": 5347.3,
+            "execution_zone": "5292.9-5347.3"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Higher Low",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Higher Low"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 12,
+            "sell_volume": 17,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3",
+            "institutional_buying_pressure": 12,
+            "institutional_selling_pressure": 17,
+            "net_pressure": -5,
+            "dominant_pressure": "Selling"
+        },
+        "gann": {
+            "day_count": 16,
+            "bar_count": 16,
+            "angle_alignment": "2 Days",
+            "square_level": "45\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 67,
+        "recommended_side": "SELL",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Higher Low. Orderflow indicates institutional sell pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 67% confidence with risk 0.5% and target RR 1:2. Preferred side is SELL. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T17:03:15.638904+00:00",
+        "prices": {
+            "current_price": 5320.1,
+            "equilibrium": 5320.1,
+            "range_low": 5292.9,
+            "range_high": 5347.3,
+            "execution_zone": "5292.9-5347.3"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Higher Low",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Higher Low"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 12,
+            "sell_volume": 17,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3",
+            "institutional_buying_pressure": 12,
+            "institutional_selling_pressure": 17,
+            "net_pressure": -5,
+            "dominant_pressure": "Selling"
+        },
+        "gann": {
+            "day_count": 16,
+            "bar_count": 16,
+            "angle_alignment": "2 Days",
+            "square_level": "45\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 67,
+        "recommended_side": "SELL",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Higher Low. Orderflow indicates institutional sell pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 67% confidence with risk 0.5% and target RR 1:2. Preferred side is SELL. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T17:03:34.080975+00:00",
+        "prices": {
+            "current_price": 5320.1,
+            "equilibrium": 5320.1,
+            "range_low": 5292.9,
+            "range_high": 5347.3,
+            "execution_zone": "5292.9-5347.3"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Higher Low",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Higher Low"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 12,
+            "sell_volume": 17,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3",
+            "institutional_buying_pressure": 12,
+            "institutional_selling_pressure": 17,
+            "net_pressure": -5,
+            "dominant_pressure": "Selling"
+        },
+        "gann": {
+            "day_count": 16,
+            "bar_count": 16,
+            "angle_alignment": "2 Days",
+            "square_level": "45\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 67,
+        "recommended_side": "SELL",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Higher Low. Orderflow indicates institutional sell pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 67% confidence with risk 0.5% and target RR 1:2. Preferred side is SELL. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T17:05:43.385609+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T17:05:56.431681+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T17:06:13.362508+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T17:06:26.706214+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T17:06:50.589283+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T17:06:57.251907+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T17:07:12.461257+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T17:07:13.116793+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T17:07:22.744354+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T17:07:30.810027+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T17:07:47.397054+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T17:08:13.075760+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T17:08:14.586443+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T17:08:35.717070+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 2348.95,
+        "timestamp": "2026-02-26T17:08:49.108050+00:00",
+        "prices": {
+            "current_price": 2348.95,
+            "equilibrium": 2348.95,
+            "range_low": 2347.3,
+            "range_high": 2350.6,
+            "execution_zone": "2347.3-2350.6"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Lower High",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "2347.3-2350.6",
+            "breaker": "Defensive",
+            "structure_shift": "Lower High"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 39,
+            "sell_volume": 30,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "2347.3-2350.6",
+            "institutional_buying_pressure": 39,
+            "institutional_selling_pressure": 30,
+            "net_pressure": 9,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 120,
+            "bar_count": 20,
+            "angle_alignment": "2 Days",
+            "square_level": "90\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.25,
+            "rr_ratio": "1:3",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Defensive"
+        },
+        "confidence": 88,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Lower High. Orderflow indicates institutional buy pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 88% confidence with risk 0.25% and target RR 1:3. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "High Probability Institutional Setup"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T17:09:41.158898+00:00",
+        "prices": {
+            "current_price": 5320.1,
+            "equilibrium": 5320.1,
+            "range_low": 5292.9,
+            "range_high": 5347.3,
+            "execution_zone": "5292.9-5347.3"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Higher Low",
+            "liquidity_zones": "Sell-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Higher Low"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 12,
+            "sell_volume": 17,
+            "institutional_side": "Sell",
+            "pressure": "Selling",
+            "zone": "5292.9-5347.3",
+            "institutional_buying_pressure": 12,
+            "institutional_selling_pressure": 17,
+            "net_pressure": -5,
+            "dominant_pressure": "Selling"
+        },
+        "gann": {
+            "day_count": 16,
+            "bar_count": 16,
+            "angle_alignment": "2 Days",
+            "square_level": "45\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Neutral",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "No major event detected"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 67,
+        "recommended_side": "SELL",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Higher Low. Orderflow indicates institutional sell pressure while news bias is neutral.",
+        "trade_justification": "Setup qualifies at 67% confidence with risk 0.5% and target RR 1:2. Preferred side is SELL. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T17:42:24.287666+00:00",
+        "prices": {
+            "current_price": 5320.1,
+            "equilibrium": 5320.1,
+            "range_low": 5292.9,
+            "range_high": 5347.3,
+            "execution_zone": "5292.9-5347.3"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Higher Low",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Higher Low"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 17,
+            "sell_volume": 12,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "5292.9-5347.3",
+            "institutional_buying_pressure": 17,
+            "institutional_selling_pressure": 12,
+            "net_pressure": 5,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 9,
+            "bar_count": 9,
+            "angle_alignment": "2 Days",
+            "square_level": "45\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 67,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Higher Low. Orderflow indicates institutional buy pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 67% confidence with risk 0.5% and target RR 1:2. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    },
+    {
+        "symbol": "GCZ6",
+        "price": 5320.1,
+        "timestamp": "2026-02-26T17:42:35.697547+00:00",
+        "prices": {
+            "current_price": 5320.1,
+            "equilibrium": 5320.1,
+            "range_low": 5292.9,
+            "range_high": 5347.3,
+            "execution_zone": "5292.9-5347.3"
+        },
+        "context": {
+            "htf_bias": "Bullish",
+            "ltf_structure": "Higher Low",
+            "liquidity_zones": "Buy-side (Sell-side)",
+            "kill_zone": "Off Session"
+        },
+        "ict": {
+            "fvg_detected": false,
+            "order_block": "5292.9-5347.3",
+            "breaker": "Stable",
+            "structure_shift": "Higher Low"
+        },
+        "iceberg": {
+            "absorption_detected": true,
+            "buy_volume": 17,
+            "sell_volume": 12,
+            "institutional_side": "Buy",
+            "pressure": "Buying",
+            "zone": "5292.9-5347.3",
+            "institutional_buying_pressure": 17,
+            "institutional_selling_pressure": 12,
+            "net_pressure": 5,
+            "dominant_pressure": "Buying"
+        },
+        "gann": {
+            "day_count": 9,
+            "bar_count": 9,
+            "angle_alignment": "2 Days",
+            "square_level": "45\u00b0"
+        },
+        "astro": {
+            "cycle_active": "Distribution",
+            "planetary_alignment": "US Afternoon",
+            "phase": "Distribution",
+            "window": "US Afternoon"
+        },
+        "news": {
+            "news_bias": "Directional",
+            "volatility_expected": "Medium",
+            "trade_halt": false,
+            "high_impact": "Elevated macro sensitivity"
+        },
+        "risk": {
+            "risk_percent": 0.5,
+            "rr_ratio": "1:2",
+            "max_loss_today": "1.5%",
+            "risk_mode": "Normal"
+        },
+        "confidence": 67,
+        "recommended_side": "BUY",
+        "institutional_reasoning": "HTF bias Bullish with LTF structure Higher Low. Orderflow indicates institutional buy pressure while news bias is directional.",
+        "trade_justification": "Setup qualifies at 67% confidence with risk 0.5% and target RR 1:2. Preferred side is BUY. Execution allowed only if volatility regime remains compliant.",
+        "verdict": "Moderate Setup \u2013 Managed Risk"
+    }
+]

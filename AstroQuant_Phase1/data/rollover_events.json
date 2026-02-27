@@ -1,0 +1,18 @@
+[
+  {
+    "symbol": "GC",
+    "old_contract": "GCZ6",
+    "new_contract": "GCG6",
+    "rollover_date": "2026-02-24",
+    "adjustment_value": 11.0,
+    "recorded_at": "2026-02-27T01:48:48.667066+00:00"
+  },
+  {
+    "symbol": "CL",
+    "old_contract": "CL.FUT",
+    "new_contract": "CLZ6",
+    "rollover_date": "2026-02-27",
+    "adjustment_value": 0.17999999999999972,
+    "recorded_at": "2026-02-27T16:48:45.090155+00:00"
+  }
+]

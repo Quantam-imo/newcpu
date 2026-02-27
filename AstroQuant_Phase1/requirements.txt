@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+databento
+pandas
+python-dotenv
+requests

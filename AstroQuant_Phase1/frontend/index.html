@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>AstroQuant Institutional</title>
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b0f14'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' font-size='34' fill='%2390caf9' font-family='Segoe UI,Arial,sans-serif'%3EAQ%3C/text%3E%3C/svg%3E" />
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+    <div class="topbar">
+        <div class="left-top">
+            <select id="symbolSelect"></select>
+            <div class="phase-display" id="phaseDisplay">PHASE_1</div>
+            <div>Balance: <span id="balance">--</span></div>
+            <div>Daily Loss: <span id="dailyLoss">--</span></div>
+        </div>
+        <div class="center-top">
+            <div class="control-group">
+                <span class="control-title">Tables</span>
+                <button id="enginesToggleBtn">Engines</button>
+                <button id="journalToggleBtn">Journal</button>
+                <button id="icebergToggleBtn">Iceberg</button>
+                <button id="orderflowToggleBtn">Order Flow</button>
+                <button id="ladderToggleBtn">Ladder</button>
+                <button id="timeSalesToggleBtn">Time & Sales</button>
+                <button id="cycleToggleBtn">Cycle</button>
+                <button id="liquidityToggleBtn">Liquidity</button>
+            </div>
+        </div>
+        <div class="right-top admin-panel">
+            <div class="admin-section compact-trading-controls"><b>Trading</b><br>
+                <div class="admin-trading-actions">
+                    <button id="manualTradeBtn" class="compact-btn">Manual</button>
+                    <button id="alertBtn" class="compact-btn">Alert</button>
+                    <button id="modelOverrideBtn" class="compact-btn">Override</button>
+                </div>
+            </div>
+            <div class="admin-section compact-system-controls"><b>System</b><br>
+                <div class="admin-system-actions">
+                    <button id="autoToggle" class="compact-btn">AUTO: OFF</button>
+                    <button id="emergencyBtn" class="compact-btn">EMERGENCY STOP</button>
+                </div>
+            </div>
+            <div class="admin-section"><b>Phase Control</b><br>
+                <button onclick="setPhase('PHASE_1')">Phase 1</button>
+                <button onclick="setPhase('PHASE_2')">Phase 2</button>
+                <button onclick="setPhase('FUNDED')">Funded</button>
+            </div>
+            <div class="admin-section"><b>Withdraw Rule</b><br>
+                <div id="withdrawDisplay">Lock: 52,000 USD</div>
+                <div id="withdrawCycle">Cycle: 14 Days</div>
+            </div>
+            <div class="admin-section"><b>Execution</b><br>
+                <div id="playwrightStatus" class="status-red">Browser: Disconnected</div>
+            </div>
+            <div class="admin-section"><b>Telegram</b><br>
+                <div id="telegramStatus" class="status-red">Bot: Offline</div>
+            </div>
+            <div class="admin-section"><b>Clawbot</b><br>
+                <div id="clawStatus" class="status-red">Inactive</div>
+            </div>
+            <div class="admin-section"><b>Engine Health</b><br>
+                <div id="engineHealth">CPU: -- | RAM: -- | Data: --</div>
+            </div>
+            <div class="admin-section"><b>Rollover Watch</b><br>
+                <div id="rolloverStatus" class="status-green">Status: --</div>
+            </div>
+            <div class="admin-section"><b>Broker Feed</b><br>
+                <div id="brokerFeedStatus" class="status-red">Feed: --</div>
+                <div id="brokerPriceStatus">Bid/Ask: --</div>
+            </div>
+            <div class="admin-section"><b>Broker Brain</b><br>
+                <div id="brokerBrainStatus" class="status-red">Adaptation: --</div>
+            </div>
+        </div>
+    </div>
+    <div id="brokerKillBanner" class="kill-banner" style="display:none;">BROKER KILL SWITCH ACTIVE</div>
+
+    <div id="layout">
+        <!-- ================= AI MENTOR DRAWER ================= -->
+        <div class="mentor-drawer" id="mentorDrawer">
+            <div class="mentor-header">
+                <h3>AI Institutional Mentor</h3>
+                <button id="mentorToggleBtn" onclick="toggleMentor()">Open</button>
+            </div>
+
+            <div id="mentorMeta" class="mentor-meta">Awaiting live narrative...</div>
+
+            <div id="mentorContent"></div>
+        </div>
+
+        <div class="chart-panel-main">
+            <div class="chart-controls">
+                <div class="chart-primary-controls">
+                    <div class="tf-btns">
+                        <button onclick="changeTF('1m')">M1</button>
+                        <button onclick="changeTF('5m')">M5</button>
+                        <button onclick="changeTF('15m')">M15</button>
+                        <button onclick="changeTF('1h')">H1</button>
+                        <button onclick="changeTF('4h')">H4</button>
+                    </div>
+                    <div class="tool-btns">
+                        <button onclick="reloadChartData()">Reload</button>
+                        <button onclick="zoomInChart()">Zoom In</button>
+                        <button onclick="zoomOutChart()">Zoom Out</button>
+                        <button onclick="resetChartView()">Reset View</button>
+                        <button id="scrollZoomToggle" onclick="toggleScrollZoom()">Scroll Zoom: ON</button>
+                        <button id="volumeToggleBtn" onclick="toggleVolumePanel()">Volume: OFF</button>
+                    </div>
+                    <div class="chart-symbol-tools">
+                        <span class="control-title">Symbols</span>
+                        <select id="symbolMultiSelect" multiple size="4" title="Select multiple symbols for chart loading"></select>
+                    </div>
+                </div>
+                <div class="chart-indicators">
+                    <span class="control-title">Indicators</span>
+                    <div class="overlay-btns">
+                        <button onclick="toggleOverlay('gann')">Gann</button>
+                        <button onclick="toggleOverlay('cycle')">Cycle</button>
+                        <button onclick="toggleOverlay('astro')">Astro</button>
+                        <button onclick="toggleOverlay('liquidity')">Liquidity</button>
+                        <button onclick="toggleOverlay('iceberg')">Iceberg</button>
+                        <button onclick="toggleOverlay('news')">News</button>
+                    </div>
+                    <div class="mentor-side-inline" id="chartMentorSide">
+                        <span class="control-title">Mentor Side</span>
+                        <span class="mentor-side-badge is-wait" id="chartMentorSideBadge">WAIT</span>
+                    </div>
+                    <div class="chart-data-quality" id="chartDataQuality">
+                        <span class="control-title">Data</span>
+                        <span class="data-quality-badge is-unknown" id="chartDataQualityBadge">--</span>
+                    </div>
+                    <div class="chart-live-price" id="chartLivePrice">
+                        <span class="control-title">Live</span>
+                        <span class="live-price-badge" id="chartLivePriceBadge">--</span>
+                    </div>
+                    <div class="chart-stream-status" id="chartStreamStatus">
+                        <span class="control-title">Stream</span>
+                        <span class="stream-status-badge is-unknown" id="chartStreamStatusBadge">--</span>
+                    </div>
+                </div>
+            </div>
+            <div id="chart"></div>
+        </div>
+    </div>
+
+    <div id="enginePanel" class="floating-panel" style="display:none;">
+        <div class="floating-header">
+            <span>🚦 Live Engines</span>
+            <div class="floating-controls">
+                <button class="floating-minimize" data-panel="enginePanel">—</button>
+                <button id="enginePanelClose" class="floating-close">✕</button>
+            </div>
+        </div>
+        <div class="panel-body">
+            <table id="engineTable" class="styled-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Symbol</th>
+                        <th>Status</th>
+                        <th>Model</th>
+                        <th>Confidence</th>
+                        <th>Top Signals</th>
+                        <th>AI Score</th>
+                        <th>Chosen</th>
+                        <th>Blocked Reason</th>
+                        <th>Active Model</th>
+                        <th>Score Gap</th>
+                        <th>Slots</th>
+                        <th>Data</th>
+                        <th>Rollover</th>
+                        <th>Contract</th>
+                        <th>Spread</th>
+                        <th>PnL%</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="journalTablePanel" class="floating-panel" style="display:none;">
+        <div class="floating-header">
+            <span>📓 Trade Journal</span>
+            <div class="floating-controls">
+                <button class="floating-minimize" data-panel="journalTablePanel">—</button>
+                <button id="journalTableClose" class="floating-close">✕</button>
+            </div>
+        </div>
+        <div class="panel-body">
+            <table id="journalTable" class="styled-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Symbol</th>
+                        <th>Model</th>
+                        <th>Direction</th>
+                        <th>Entry</th>
+                        <th>SL</th>
+                        <th>TP</th>
+                        <th>Confidence</th>
+                        <th>Result</th>
+                        <th>Slippage</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="icebergPanel" class="floating-panel" style="display:none;">
+        <div class="floating-header">
+            <span>🧊 Iceberg Table</span>
+            <div class="floating-controls">
+                <button class="floating-minimize" data-panel="icebergPanel">—</button>
+                <button id="icebergPanelClose" class="floating-close">✕</button>
+            </div>
+        </div>
+        <div class="panel-body">
+            <table id="icebergTable" class="styled-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Price</th>
+                        <th>Buy Vol</th>
+                        <th>Sell Vol</th>
+                        <th>Bias</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="orderflowPanel" class="floating-panel" style="display:none;">
+        <div class="floating-header">
+            <span>🌊 Order Flow Table</span>
+            <div class="floating-controls">
+                <button class="floating-minimize" data-panel="orderflowPanel">—</button>
+                <button id="orderflowPanelClose" class="floating-close">✕</button>
+            </div>
+        </div>
+        <div class="panel-body">
+            <table id="orderflowTable" class="styled-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Delta</th>
+                        <th>Volume</th>
+                        <th>Imbalance</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="ladderPanel" class="floating-panel" style="display:none;">
+        <div class="floating-header">
+            <span>🪜 DOM Ladder</span>
+            <div class="floating-controls">
+                <button class="floating-minimize" data-panel="ladderPanel">—</button>
+                <button id="ladderPanelClose" class="floating-close">✕</button>
+            </div>
+        </div>
+        <div class="panel-body">
+            <table id="ladderTable" class="styled-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Bid Size</th>
+                        <th>Price</th>
+                        <th>Ask Size</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="timeSalesPanel" class="floating-panel" style="display:none;">
+        <div class="floating-header">
+            <span>⏱️ Time & Sales</span>
+            <div class="floating-controls">
+                <button class="floating-minimize" data-panel="timeSalesPanel">—</button>
+                <button id="timeSalesPanelClose" class="floating-close">✕</button>
+            </div>
+        </div>
+        <div class="panel-body">
+            <table id="timeSalesTable" class="styled-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Price</th>
+                        <th>Size</th>
+                        <th>Side</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="cyclePanel" class="floating-panel" style="display:none;">
+        <div class="floating-header">
+            <span>🔁 Cycle Engine</span>
+            <div class="floating-controls">
+                <button class="floating-minimize" data-panel="cyclePanel">—</button>
+                <button id="cyclePanelClose" class="floating-close">✕</button>
+            </div>
+        </div>
+        <div class="panel-body">
+            <table id="cycleTable" class="styled-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Bar Count</th>
+                        <th>Phase</th>
+                        <th>Is Cycle</th>
+                        <th>Active Cycles</th>
+                        <th>Next Cycle</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="liquidityPanel" class="floating-panel" style="display:none;">
+        <div class="floating-header">
+            <span>💧 Liquidity Engine</span>
+            <div class="floating-controls">
+                <button class="floating-minimize" data-panel="liquidityPanel">—</button>
+                <button id="liquidityPanelClose" class="floating-close">✕</button>
+            </div>
+        </div>
+        <div class="panel-body">
+            <table id="liquidityTable" class="styled-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Zone</th>
+                        <th>Bias</th>
+                        <th>Range Low</th>
+                        <th>Range High</th>
+                        <th>Equilibrium</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script src="js/chart.js"></script>
+    <script src="js/mentor.js"></script>
+    <script src="js/journal.js"></script>
+    <script src="js/admin.js"></script>
+    <script src="js/orderflow.js"></script>
+    <script src="js/panels.js"></script>
+</body>
+</html>
