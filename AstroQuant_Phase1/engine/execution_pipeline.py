@@ -1,6 +1,7 @@
 from engine.ai_decision_engine import AIDecisionEngine
 from engine.risk_manager import RiskManager
 from engine.signal_manager import SignalManager
+from engine.runtime_singletons import get_governance_engine
 
 
 class ExecutionPipeline:
@@ -9,6 +10,7 @@ class ExecutionPipeline:
         self.signal_manager = SignalManager()
         self.ai_engine = AIDecisionEngine()
         self.risk_manager = RiskManager()
+        self.governance = get_governance_engine()
 
     def process(self, market_data, account):
         signals = self.signal_manager.evaluate(market_data)
@@ -23,6 +25,10 @@ class ExecutionPipeline:
 
         best_signal = self.ai_engine.evaluate(signals)
         if not best_signal:
+            return None
+
+        allowed, _ = self.governance.trade_allowed(best_signal)
+        if not allowed:
             return None
 
         approved = self.risk_manager.approve(best_signal, account)
@@ -43,6 +49,10 @@ class ExecutionPipeline:
 
         best_signal = self.ai_engine.evaluate(signals)
         if not best_signal:
+            return None
+
+        allowed, _ = self.governance.trade_allowed(best_signal)
+        if not allowed:
             return None
 
         approved = self.risk_manager.approve(best_signal, account)
@@ -66,6 +76,10 @@ class ExecutionPipeline:
             return []
 
         top = ranked[0]
+        allowed_top, _ = self.governance.trade_allowed(top)
+        if not allowed_top:
+            return []
+
         if not self.risk_manager.approve(top, account):
             return []
 
@@ -82,7 +96,8 @@ class ExecutionPipeline:
         same_side = str(top.get("side", "")).upper() == str(second.get("side", "")).upper()
         close_enough = score_gap_ratio <= float(close_score_delta_pct)
 
-        if same_side and close_enough and self.risk_manager.approve(second, account):
+        allowed_second, _ = self.governance.trade_allowed(second)
+        if same_side and close_enough and allowed_second and self.risk_manager.approve(second, account):
             selected.append(second)
 
         return selected[:slots]

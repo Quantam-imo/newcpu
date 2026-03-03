@@ -1,0 +1,36 @@
+{
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/__pycache__/**": true,
+    "**/.venv/**": true,
+    "**/node_modules/**": true,
+    "**/logs/**": true,
+    "**/data/playwright_*/**": true,
+    "**/.pytest_cache/**": true,
+    "**/.mypy_cache/**": true
+  },
+  "search.exclude": {
+    "**/__pycache__": true,
+    "**/.venv": true,
+    "**/logs": true,
+    "**/data/playwright_*": true,
+    "**/.pytest_cache": true,
+    "**/.mypy_cache": true
+  },
+  "python.analysis.diagnosticMode": "openFilesOnly",
+  "python.analysis.indexing": false,
+  "python.analysis.autoImportCompletions": false,
+  "python.analysis.exclude": [
+    "**/.venv/**",
+    "**/__pycache__/**",
+    "**/logs/**",
+    "**/data/**",
+    "**/AstroQuant_Phase1/data/**"
+  ],
+  "python.analysis.userFileIndexingLimit": 2000,
+  "python.analysis.languageServerMode": "light",
+  "git.decorations.enabled": false,
+  "git.autorefresh": false,
+  "typescript.tsserver.maxTsServerMemory": 1024
+}

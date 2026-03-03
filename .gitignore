@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+.venv-1/
+venv/
+
+# Runtime / local state
+*.db
+*.sqlite
+*.sqlite3
+*.log
+logs/
+
+# Env files
+.env
+
+# Browser/runtime profiles
+**/data/playwright_user/
+**/data/playwright_matchtrader/
+
+# Cache and tooling
+.pytest_cache/
+.mypy_cache/

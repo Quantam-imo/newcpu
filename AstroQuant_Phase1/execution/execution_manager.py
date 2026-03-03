@@ -8,6 +8,7 @@ from engine.risk_engine import RiskEngine
 from engine.prop_phase_engine import PropPhaseEngine
 
 from engine.ai_governance_engine import AIGovernanceEngine
+from engine.runtime_singletons import get_governance_engine
 from execution.broker_adaptation_engine import BrokerAdaptationEngine
 from execution.trade_guardian import TradeGuardian
 from execution.config import SYMBOL_SPREAD_LIMITS
@@ -31,7 +32,7 @@ class ExecutionManager:
         self.execution_engine = PlaywrightEngine()
         self.risk_engine = RiskEngine()
         self.phase_engine = PropPhaseEngine()
-        self.governance = AIGovernanceEngine()
+        self.governance = get_governance_engine()
         self.broker_brain = BrokerAdaptationEngine()
 
         self.telegram = TelegramEngine()

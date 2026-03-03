@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AstroQuant Admin Control Panel</title>
+  <link rel="icon" href="data:," />
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --text: #0f172a;
+      --muted: #475569;
+      --surface: #ffffff;
+      --surface-alt: #f8fafc;
+      --border: #dbe3ee;
+      --border-strong: #c8d4e3;
+      --accent: #2563eb;
+      --accent-soft: #dbeafe;
+      --shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+    }
+    body { margin: 0; font-family: Inter, "Segoe UI", Arial, sans-serif; background: var(--bg); color: var(--text); }
+    .container { max-width: 1280px; margin: 0 auto; padding: 16px; }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow);
+    }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 12px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+    input, select, button {
+      background: #ffffff;
+      color: var(--text);
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      padding: 7px 10px;
+      font-size: 12px;
+    }
+    button { cursor: pointer; }
+    button:hover { border-color: var(--accent); background: var(--accent-soft); }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    th, td { border-bottom: 1px solid var(--border); padding: 7px 6px; text-align: left; }
+    th { color: var(--muted); font-weight: 600; background: #eef3fa; }
+    h2, h3 { margin: 0 0 10px 0; color: var(--text); }
+    h2 { font-size: 20px; font-weight: 700; }
+    h3 { font-size: 16px; font-weight: 700; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted); }
+    #stateMeta { padding: 6px 8px; border: 1px dashed var(--border); border-radius: 8px; background: var(--surface-alt); }
+    #auditList { border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt); padding: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="panel">
+      <h2>Admin Control Panel (/admin)</h2>
+      <div class="row">
+        <input id="adminToken" type="password" placeholder="ADMIN_API_TOKEN" style="min-width:220px;" />
+        <select id="adminRole">
+          <option value="VIEWER">VIEWER</option>
+          <option value="OPERATOR">OPERATOR</option>
+          <option value="ADMIN" selected>ADMIN</option>
+          <option value="SUPERADMIN">SUPERADMIN</option>
+        </select>
+        <input id="adminUser" type="text" placeholder="actor name" />
+        <button id="saveCredsBtn">Save Credentials</button>
+        <button id="refreshStateBtn">Refresh State</button>
+      </div>
+      <div id="stateMeta" class="mono">--</div>
+    </div>
+
+    <div class="grid">
+      <div class="panel">
+        <h3>User Management</h3>
+        <div class="row">
+          <input id="userName" placeholder="username" />
+          <select id="userRole"><option>VIEWER</option><option>OPERATOR</option><option selected>ADMIN</option><option>SUPERADMIN</option></select>
+          <select id="userPhase"><option>PHASE1</option><option>PHASE2</option><option>FUNDED</option></select>
+        </div>
+        <div class="row">
+          <input id="userRiskMultiplier" type="number" step="0.01" placeholder="risk multiplier" value="1.00" />
+          <button id="userAutoOnBtn">Auto ON</button>
+          <button id="userAutoOffBtn">Auto OFF</button>
+          <button id="userBanBtn">Ban</button>
+          <button id="userUnbanBtn">Unban</button>
+        </div>
+        <table><thead><tr><th>User</th><th>Role</th><th>Phase</th><th>Auto</th><th>Banned</th></tr></thead><tbody id="usersBody"></tbody></table>
+      </div>
+
+      <div class="panel">
+        <h3>Prop Rule Config</h3>
+        <div class="row">
+          <input id="propProfitTarget" type="number" step="0.1" placeholder="profit target %" />
+          <input id="propDailyDd" type="number" step="0.1" placeholder="daily DD %" />
+          <input id="propOverallDd" type="number" step="0.1" placeholder="overall DD %" />
+        </div>
+        <div class="row">
+          <input id="propLockLevel" type="number" step="0.01" placeholder="lock level" />
+          <input id="propMinDays" type="number" step="1" placeholder="min profitable days" />
+          <input id="propLeverage" type="number" step="0.1" placeholder="leverage limit" />
+          <button id="savePropBtn">Save Prop Rules</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Dynamic Prop Engine</h3>
+        <div class="row">
+          <select id="adminPrimaryAccount">
+            <option value="5K">5K</option>
+            <option value="10K">10K</option>
+            <option value="20K">20K</option>
+            <option value="50K" selected>50K</option>
+            <option value="100K">100K</option>
+          </select>
+          <select id="adminAccountMode">
+            <option value="STRICT">STRICT</option>
+            <option value="STANDARD" selected>STANDARD</option>
+            <option value="AGGRESSIVE">AGGRESSIVE</option>
+          </select>
+          <button id="applyDynamicPropBtn">Apply Dynamic Engine</button>
+        </div>
+        <div class="row" style="gap:6px;">
+          <label><input type="checkbox" class="admin-prop-account" value="5K">5K</label>
+          <label><input type="checkbox" class="admin-prop-account" value="10K">10K</label>
+          <label><input type="checkbox" class="admin-prop-account" value="20K">20K</label>
+          <label><input type="checkbox" class="admin-prop-account" value="50K" checked>50K</label>
+          <label><input type="checkbox" class="admin-prop-account" value="100K">100K</label>
+        </div>
+        <div id="dynamicPropMeta" class="mono">--</div>
+      </div>
+
+      <div class="panel">
+        <h3>Engine Controls</h3>
+        <div class="row">
+          <button id="ictToggleBtn">Toggle ICT</button>
+          <button id="icebergToggleBtn">Toggle Iceberg</button>
+          <button id="astroToggleBtn">Toggle Astro</button>
+        </div>
+        <div class="row">
+          <input id="engineConfluence" type="number" step="0.01" placeholder="confluence threshold" />
+          <input id="engineConfidence" type="number" step="0.1" placeholder="confidence threshold" />
+          <button id="saveEngineBtn">Save Engine Controls</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Execution Controls</h3>
+        <div class="row">
+          <input id="execSpread" type="number" step="0.01" placeholder="spread max" />
+          <input id="execSlippage" type="number" step="0.01" placeholder="slippage tol" />
+          <input id="execCooldown" type="number" step="1" placeholder="cooldown sec" />
+        </div>
+        <div class="row">
+          <input id="execMaxTrades" type="number" step="1" placeholder="max trades/day" />
+          <input id="execMaxConcurrent" type="number" step="1" placeholder="max concurrent" />
+          <input id="execTimeout" type="number" step="1" placeholder="timeout sec" />
+          <button id="saveExecBtn">Save Execution Controls</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Risk Limits</h3>
+        <div class="row">
+          <input id="riskMaxLot" type="number" step="0.01" placeholder="max lot" />
+          <input id="riskPerTrade" type="number" step="0.01" placeholder="max risk %" />
+          <input id="riskDailyMaxTrades" type="number" step="1" placeholder="daily max trades" />
+        </div>
+        <div class="row">
+          <input id="riskMultP1" type="number" step="0.01" placeholder="phase1 multiplier" />
+          <input id="riskMultP2" type="number" step="0.01" placeholder="phase2 multiplier" />
+          <input id="riskMultFunded" type="number" step="0.01" placeholder="funded multiplier" />
+          <button id="saveRiskBtn">Save Risk Limits</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Symbol Activation</h3>
+        <div class="row">
+          <input id="symbolName" placeholder="symbol (e.g. XAUUSD)" />
+          <button id="symbolEnableBtn">Enable</button>
+          <button id="symbolDisableBtn">Disable</button>
+        </div>
+        <table><thead><tr><th>Symbol</th><th>Enabled</th><th>Updated</th></tr></thead><tbody id="symbolsBody"></tbody></table>
+      </div>
+
+      <div class="panel">
+        <h3>Logging & Audit</h3>
+        <div class="row">
+          <button id="loadAuditBtn">Load Audit</button>
+          <button id="loadRiskBtn">Risk Violations</button>
+          <button id="loadRejectedBtn">Rejected Trades</button>
+        </div>
+        <div id="auditList" class="mono" style="max-height:240px; overflow:auto; white-space:pre-wrap;">--</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const port = String(window.location.port || "");
+      const prefix = port === "8080" ? "" : "/frontend";
+      const script = document.createElement("script");
+      script.src = `${prefix}/admin_control.js`;
+      script.onerror = () => console.error(`Failed to load script: ${script.src}`);
+      document.body.appendChild(script);
+    })();
+  </script>
+</body>
+</html>
