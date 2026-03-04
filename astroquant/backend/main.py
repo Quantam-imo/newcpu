@@ -42,6 +42,10 @@ from backend.reports.monthly_report import generate_monthly_report
 from backend.router_admin import build_admin_router
 from core.prop_profiles import profile_risk_pct, supported_account_keys, supported_modes
 from engine.multi_symbol_runner import MultiSymbolRunner
+from engine.delta_engine import DeltaEngine
+from engine.dom_engine import DomEngine
+from engine.orderflow_summary_engine import OrderflowSummaryEngine
+from engine.time_sales_engine import TimeSalesEngine
 from execution.playwright_engine import PlaywrightEngine
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -50,6 +54,10 @@ FRONTEND_DIR = BASE_DIR / "frontend"
 symbols = ["XAUUSD", "NQ", "EURUSD", "BTC", "US30"]
 prop_engine = PropGovernance(PropConfig())
 runner = MultiSymbolRunner(symbols, prop_engine=prop_engine)
+time_sales_engine = TimeSalesEngine(getattr(getattr(runner, "signal_manager", None), "orderflow_engine", None))
+delta_engine = DeltaEngine()
+dom_engine = DomEngine()
+orderflow_summary_engine = OrderflowSummaryEngine()
 dynamic_prop_engine = DynamicPropEngine()
 mentor_engine = MentorEngine()
 runner_thread = None
@@ -1801,6 +1809,38 @@ def chart_data(symbol: str, timeframe: str = "1m", limit: int = 300):
     if str(data_source).startswith("SYNTHETIC_FALLBACK") or str(data_source).startswith("CACHE_FALLBACK"):
         live_quote = None
     overlays = _chart_overlays(candles)
+    trades = []
+    try:
+        if getattr(getattr(runner, "signal_manager", None), "orderflow_engine", None):
+            trades = _run_with_timeout(
+                1.8,
+                lambda: runner.signal_manager.orderflow_engine.get_recent_trades(
+                    dataset=dataset,
+                    symbol=active_symbol,
+                ),
+                [],
+            )
+    except Exception:
+        trades = []
+
+    time_sales_rows = time_sales_engine.build(trades=trades, candles=candles, limit=40)
+    delta_payload = delta_engine.build(
+        time_sales_rows=time_sales_rows,
+        candles=candles,
+        timeframe_minutes=timeframe_minutes,
+        limit=max(32, requested_limit),
+    )
+    dom_payload = dom_engine.build(
+        time_sales_rows=time_sales_rows,
+        candles=candles,
+        depth=12,
+    )
+    orderflow_summary = orderflow_summary_engine.build(
+        delta_summary=delta_payload.get("summary", {}),
+        dom_summary=dom_payload.get("summary", {}),
+        iceberg_rows=(overlays or {}).get("iceberg", []),
+        time_sales_rows=time_sales_rows,
+    )
     volume = [
         {
             "time": int(c.get("time", 0)),
@@ -1826,6 +1866,16 @@ def chart_data(symbol: str, timeframe: str = "1m", limit: int = 300):
     payload["meta"]["live_quote"] = live_quote
     payload["meta"]["live_last_error"] = runner.feed.live_last_error
     payload["meta"]["live_started"] = bool(getattr(runner.feed, "live_started", False))
+    payload["meta"]["time_sales"] = time_sales_rows
+    payload["meta"]["delta_summary"] = delta_payload.get("summary", {})
+    payload["meta"]["delta_candles"] = delta_payload.get("candles", [])
+    payload["meta"]["dom_ladder"] = dom_payload.get("levels", [])
+    payload["meta"]["dom_summary"] = dom_payload.get("summary", {})
+    payload["meta"]["orderflow_summary"] = orderflow_summary
+    payload["overlays"]["cumulative_delta"] = [
+        {"time": int(row.get("time", 0)), "value": float(row.get("cum_delta", 0.0))}
+        for row in (delta_payload.get("candles", []) or [])
+    ]
 
     degraded_data = str(data_source).startswith("SYNTHETIC_FALLBACK") or str(data_source).startswith("CACHE_FALLBACK")
     degraded_reason = str(feed_error or runner.feed.last_error or runner.feed.live_last_error or "")
@@ -1850,6 +1900,196 @@ def chart_data(symbol: str, timeframe: str = "1m", limit: int = 300):
     else:
         payload["meta"]["degraded_message"] = None
     return payload
+
+
+@app.get("/market/time_sales")
+def market_time_sales(symbol: str, limit: int = 40):
+    feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
+    canonical_symbol = feed_to_canonical.get(symbol, symbol)
+    dataset = symbol_dataset(canonical_symbol)
+    active_symbol = runner.resolve_active_feed_symbol(canonical_symbol) or runner.SYMBOL_MAP.get(canonical_symbol, canonical_symbol)
+
+    trades = []
+    try:
+        if getattr(getattr(runner, "signal_manager", None), "orderflow_engine", None):
+            trades = _run_with_timeout(
+                2.2,
+                lambda: runner.signal_manager.orderflow_engine.get_recent_trades(
+                    dataset=dataset,
+                    symbol=active_symbol,
+                ),
+                [],
+            )
+    except Exception:
+        trades = []
+
+    candles = []
+    try:
+        _, candles = _run_with_timeout(
+            2.2,
+            lambda: runner.get_futures_candles(
+                canonical_symbol,
+                lookback_minutes=180,
+                record_limit=max(120, min(500, int(limit or 40) * 6)),
+                prefer_cached=True,
+            ),
+            (active_symbol, []),
+        )
+    except Exception:
+        candles = []
+
+    rows = time_sales_engine.build(trades=trades, candles=candles, limit=max(5, min(120, int(limit or 40))))
+    return {
+        "status": "ok",
+        "symbol": canonical_symbol,
+        "active_feed_symbol": active_symbol,
+        "dataset": dataset,
+        "time_sales": rows,
+        "source": "TRADES" if trades else "CANDLE_FALLBACK",
+    }
+
+
+@app.get("/market/delta")
+def market_delta(symbol: str, timeframe: str = "1m", limit: int = 120):
+    feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
+    canonical_symbol = feed_to_canonical.get(symbol, symbol)
+    dataset = symbol_dataset(canonical_symbol)
+    timeframe_minutes = _timeframe_to_minutes(timeframe)
+    active_symbol = runner.resolve_active_feed_symbol(canonical_symbol) or runner.SYMBOL_MAP.get(canonical_symbol, canonical_symbol)
+
+    trades = []
+    try:
+        if getattr(getattr(runner, "signal_manager", None), "orderflow_engine", None):
+            trades = _run_with_timeout(
+                2.2,
+                lambda: runner.signal_manager.orderflow_engine.get_recent_trades(
+                    dataset=dataset,
+                    symbol=active_symbol,
+                ),
+                [],
+            )
+    except Exception:
+        trades = []
+
+    candles = []
+    try:
+        _, candles = _run_with_timeout(
+            2.4,
+            lambda: runner.get_futures_candles(
+                canonical_symbol,
+                lookback_minutes=max(180, min(72 * 60, int(limit or 120) * timeframe_minutes * 2)),
+                record_limit=max(200, min(1600, int(limit or 120) * timeframe_minutes * 3)),
+                prefer_cached=True,
+            ),
+            (active_symbol, []),
+        )
+    except Exception:
+        candles = []
+
+    tape = time_sales_engine.build(trades=trades, candles=candles, limit=max(20, min(200, int(limit or 120))))
+    delta_payload = delta_engine.build(
+        time_sales_rows=tape,
+        candles=candles,
+        timeframe_minutes=timeframe_minutes,
+        limit=max(20, min(400, int(limit or 120))),
+    )
+
+    return {
+        "status": "ok",
+        "symbol": canonical_symbol,
+        "active_feed_symbol": active_symbol,
+        "dataset": dataset,
+        "timeframe": timeframe,
+        "timeframe_minutes": timeframe_minutes,
+        "summary": delta_payload.get("summary", {}),
+        "candles": delta_payload.get("candles", []),
+    }
+
+
+@app.get("/market/dom")
+def market_dom(symbol: str, timeframe: str = "1m", depth: int = 12, limit: int = 120):
+    feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
+    canonical_symbol = feed_to_canonical.get(symbol, symbol)
+    dataset = symbol_dataset(canonical_symbol)
+    timeframe_minutes = _timeframe_to_minutes(timeframe)
+    active_symbol = runner.resolve_active_feed_symbol(canonical_symbol) or runner.SYMBOL_MAP.get(canonical_symbol, canonical_symbol)
+
+    trades = []
+    try:
+        if getattr(getattr(runner, "signal_manager", None), "orderflow_engine", None):
+            trades = _run_with_timeout(
+                2.0,
+                lambda: runner.signal_manager.orderflow_engine.get_recent_trades(
+                    dataset=dataset,
+                    symbol=active_symbol,
+                ),
+                [],
+            )
+    except Exception:
+        trades = []
+
+    candles = []
+    try:
+        _, candles = _run_with_timeout(
+            2.3,
+            lambda: runner.get_futures_candles(
+                canonical_symbol,
+                lookback_minutes=max(180, min(72 * 60, int(limit or 120) * timeframe_minutes * 2)),
+                record_limit=max(220, min(1800, int(limit or 120) * timeframe_minutes * 3)),
+                prefer_cached=True,
+            ),
+            (active_symbol, []),
+        )
+    except Exception:
+        candles = []
+
+    tape = time_sales_engine.build(trades=trades, candles=candles, limit=max(20, min(220, int(limit or 120))))
+    dom_payload = dom_engine.build(
+        time_sales_rows=tape,
+        candles=candles,
+        depth=max(6, min(40, int(depth or 12))),
+    )
+
+    return {
+        "status": "ok",
+        "symbol": canonical_symbol,
+        "active_feed_symbol": active_symbol,
+        "dataset": dataset,
+        "timeframe": timeframe,
+        "timeframe_minutes": timeframe_minutes,
+        "depth": max(6, min(40, int(depth or 12))),
+        "summary": dom_payload.get("summary", {}),
+        "levels": dom_payload.get("levels", []),
+    }
+
+
+@app.get("/market/orderflow_summary")
+def market_orderflow_summary(symbol: str, timeframe: str = "1m", limit: int = 120):
+    feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
+    canonical_symbol = feed_to_canonical.get(symbol, symbol)
+    timeframe_minutes = _timeframe_to_minutes(timeframe)
+
+    chart_payload = chart_data(symbol=symbol, timeframe=timeframe, limit=max(60, min(400, int(limit or 120))))
+    overlays = dict(chart_payload.get("overlays") or {})
+    meta = dict(chart_payload.get("meta") or {})
+
+    summary = orderflow_summary_engine.build(
+        delta_summary=meta.get("delta_summary", {}),
+        dom_summary=meta.get("dom_summary", {}),
+        iceberg_rows=overlays.get("iceberg", []),
+        time_sales_rows=meta.get("time_sales", []),
+    )
+
+    return {
+        "status": "ok",
+        "symbol": canonical_symbol,
+        "timeframe": timeframe,
+        "timeframe_minutes": timeframe_minutes,
+        "summary": summary,
+        "delta_summary": meta.get("delta_summary", {}),
+        "dom_summary": meta.get("dom_summary", {}),
+        "iceberg": overlays.get("iceberg", []),
+    }
 
 
 @app.get("/market/basis")
@@ -1933,6 +2173,24 @@ def mentor_context(symbol: str = "GC.FUT"):
     overlays = _chart_overlays(candles)
     gann_lines = list((overlays or {}).get("gann_lines") or [])
     astro_markers = list((overlays or {}).get("astro_markers") or [])
+    time_sales_rows = time_sales_engine.build(trades=[], candles=candles, limit=40)
+    delta_payload = delta_engine.build(
+        time_sales_rows=time_sales_rows,
+        candles=candles,
+        timeframe_minutes=1,
+        limit=120,
+    )
+    dom_payload = dom_engine.build(
+        time_sales_rows=time_sales_rows,
+        candles=candles,
+        depth=12,
+    )
+    orderflow_summary = orderflow_summary_engine.build(
+        delta_summary=delta_payload.get("summary", {}),
+        dom_summary=dom_payload.get("summary", {}),
+        iceberg_rows=(overlays or {}).get("iceberg", []),
+        time_sales_rows=time_sales_rows,
+    )
 
     market_data = {
         "symbol": symbol,
@@ -1958,6 +2216,7 @@ def mentor_context(symbol: str = "GC.FUT"):
     context["exit"] = exit_data
     context["gann"] = gann_lines
     context["astro"] = astro_markers
+    context["orderflow_summary"] = orderflow_summary
     return context
 
 

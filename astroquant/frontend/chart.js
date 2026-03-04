@@ -1537,34 +1537,110 @@ function renderMicrostructureTables(payload, candles) {
 		const deltaCls = delta >= 0 ? "delta-pos" : "delta-neg";
 		return `<td>${fmtTimeCell(Number(row?.time || 0))}</td><td class="side-buy">${Math.round(buyVol)}</td><td class="side-sell">${Math.round(sellVol)}</td><td class="${deltaCls}">${delta >= 0 ? "+" : ""}${Math.round(delta)}</td>`;
 	});
-	setTableBodyRows("orderflowTableBody", orderflowRows, "No order flow rows", 4);
+	const deltaRows = Array.isArray(payload?.meta?.delta_candles) ? payload.meta.delta_candles : [];
+	const orderflowRowsRendered = deltaRows.length
+		? deltaRows.slice(-16).reverse().map(row => {
+			const buyVol = Math.max(0, Number(row?.buy_volume || 0));
+			const sellVol = Math.max(0, Number(row?.sell_volume || 0));
+			const delta = Number(row?.delta || (buyVol - sellVol));
+			const deltaCls = delta >= 0 ? "delta-pos" : "delta-neg";
+			return `<td>${fmtTimeCell(Number(row?.time || 0))}</td><td class="side-buy">${Math.round(buyVol)}</td><td class="side-sell">${Math.round(sellVol)}</td><td class="${deltaCls}">${delta >= 0 ? "+" : ""}${Math.round(delta)}</td>`;
+		})
+		: orderflowRows;
+	setTableBodyRows("orderflowTableBody", orderflowRowsRendered, "No order flow rows", 4);
 
-	const tapeRows = newestFirst.slice(0, 20).map(row => {
-		const close = Number(row?.close || 0);
-		const volume = Math.max(0, Number(row?.volume || 0));
-		const side = close >= Number(row?.open || 0) ? "BUY" : "SELL";
-		const sideCls = side === "BUY" ? "side-buy" : "side-sell";
-		return `<td>${fmtTimeCell(Number(row?.time || 0))}</td><td>${close.toFixed(2)}</td><td>${Math.round(volume)}</td><td class="${sideCls}">${side}</td>`;
-	});
-	setTableBodyRows("timeSalesTableBody", tapeRows, "No time & sales rows", 4);
+	const deltaSummary = payload?.meta?.delta_summary || {};
+	const orderflowSummary = payload?.meta?.orderflow_summary || {};
+	const setText = (id, value, cls) => {
+		const el = document.getElementById(id);
+		if (!el) return;
+		el.classList.remove("delta-pos", "delta-neg", "side-buy", "side-sell");
+		if (cls) el.classList.add(cls);
+		el.innerText = value;
+	};
+	const netDelta = Number(deltaSummary?.delta || 0);
+	const cumDelta = Number(deltaSummary?.cumulative_delta || 0);
+	setText("orderflowDeltaNet", `${netDelta >= 0 ? "+" : ""}${Math.round(netDelta)}`, netDelta >= 0 ? "delta-pos" : "delta-neg");
+	setText("orderflowCumDelta", `${cumDelta >= 0 ? "+" : ""}${Math.round(cumDelta)}`, cumDelta >= 0 ? "delta-pos" : "delta-neg");
+	setText("orderflowBuyAggr", `${Number(deltaSummary?.buy_aggression || 0).toFixed(1)}%`, "side-buy");
+	setText("orderflowSellAggr", `${Number(deltaSummary?.sell_aggression || 0).toFixed(1)}%`, "side-sell");
+
+	setText("summaryBuyAgg", `${Number(orderflowSummary?.buy_aggression || 0).toFixed(1)}%`, "side-buy");
+	setText("summarySellAgg", `${Number(orderflowSummary?.sell_aggression || 0).toFixed(1)}%`, "side-sell");
+	const summaryDelta = Number(orderflowSummary?.delta || 0);
+	const summaryCvd = Number(orderflowSummary?.cumulative_delta || 0);
+	setText("summaryDelta", `${summaryDelta >= 0 ? "+" : ""}${Math.round(summaryDelta)}`, summaryDelta >= 0 ? "delta-pos" : "delta-neg");
+	setText("summaryCvd", `${summaryCvd >= 0 ? "+" : ""}${Math.round(summaryCvd)}`, summaryCvd >= 0 ? "delta-pos" : "delta-neg");
+	setText("summaryImbalance", String(orderflowSummary?.imbalance || "--"), null);
+	setText("summarySpread", Number(orderflowSummary?.dom_spread || 0).toFixed(2), null);
+	setText("summaryIceberg", `${Math.max(0, Math.round(Number(orderflowSummary?.iceberg_count || 0)))}`, null);
+	const absorption = String(orderflowSummary?.absorption || "NEUTRAL").toUpperCase();
+	setText("summaryAbsorption", absorption, absorption === "BULLISH" ? "side-buy" : (absorption === "BEARISH" ? "side-sell" : null));
+	setText("summaryConfidence", `${Number(orderflowSummary?.confidence || 0).toFixed(1)}%`, null);
+	setText("summaryNarrative", String(orderflowSummary?.narrative || "--"), null);
+
+	const tapeSource = Array.isArray(payload?.meta?.time_sales) ? payload.meta.time_sales : [];
+	let tapeRows = [];
+	if (tapeSource.length) {
+		tapeRows = tapeSource.slice(-24).reverse().map(row => {
+			const side = String(row?.side || "").toUpperCase() === "SELL" ? "SELL" : "BUY";
+			const sideCls = side === "BUY" ? "side-buy" : "side-sell";
+			const delta = Number(row?.delta || 0);
+			const deltaCls = delta >= 0 ? "delta-pos" : "delta-neg";
+			return `<td>${fmtTimeCell(Number(row?.time || 0))}</td><td>${Number(row?.price || 0).toFixed(2)}</td><td>${Math.round(Math.max(0, Number(row?.size || 0)))}</td><td class="${sideCls}">${side}</td><td class="${deltaCls}">${delta >= 0 ? "+" : ""}${Math.round(delta)}</td>`;
+		});
+	} else {
+		let runningDelta = 0;
+		tapeRows = newestFirst.slice(0, 20).map(row => {
+			const close = Number(row?.close || 0);
+			const volume = Math.max(0, Number(row?.volume || 0));
+			const side = close >= Number(row?.open || 0) ? "BUY" : "SELL";
+			const sideCls = side === "BUY" ? "side-buy" : "side-sell";
+			const delta = side === "BUY" ? volume : -volume;
+			runningDelta += delta;
+			const deltaCls = delta >= 0 ? "delta-pos" : "delta-neg";
+			return `<td>${fmtTimeCell(Number(row?.time || 0))}</td><td>${close.toFixed(2)}</td><td>${Math.round(volume)}</td><td class="${sideCls}">${side}</td><td class="${deltaCls}">${delta >= 0 ? "+" : ""}${Math.round(delta)}</td>`;
+		});
+	}
+	setTableBodyRows("timeSalesTableBody", tapeRows, "No time & sales rows", 5);
 
 	const latest = candles[candles.length - 1] || null;
-	const recentSpan = recent.length
-		? (Math.max(...recent.map(c => Number(c?.high || 0))) - Math.min(...recent.map(c => Number(c?.low || 0))))
-		: 0;
-	const base = latest ? Number(latest.close || 0) : 0;
-	const tick = Math.max(0.01, recentSpan > 0 ? recentSpan / 24 : base * 0.0004 || 0.01);
-	const ladderRowsRaw = [];
-	for (let i = 6; i >= -5; i -= 1) {
-		const price = base + (i * tick);
-		if (!Number.isFinite(price) || price <= 0) continue;
-		const proximity = Math.max(0.2, 1.0 - (Math.abs(i) / 8));
-		const refVol = Math.max(1, Number(latest?.volume || 1));
-		const bid = Math.round(refVol * proximity * (i <= 0 ? 0.8 : 0.5));
-		const ask = Math.round(refVol * proximity * (i >= 0 ? 0.8 : 0.5));
-		ladderRowsRaw.push(`<td>${fmtTimeCell(Number(latest?.time || 0))}</td><td>${price.toFixed(2)}</td><td class="ladder-bid">${bid}</td><td class="ladder-ask">${ask}</td>`);
+	const ladderRows = Array.isArray(payload?.meta?.dom_ladder) ? payload.meta.dom_ladder : [];
+	let ladderRowsRaw = [];
+	if (ladderRows.length) {
+		ladderRowsRaw = ladderRows.slice(-28).map(row => {
+			const bid = Math.max(0, Math.round(Number(row?.bid_size || 0)));
+			const ask = Math.max(0, Math.round(Number(row?.ask_size || 0)));
+			return `<td>${fmtTimeCell(Number(row?.time || 0))}</td><td>${Number(row?.price || 0).toFixed(2)}</td><td class="ladder-bid">${bid > 0 ? bid : ""}</td><td class="ladder-ask">${ask > 0 ? ask : ""}</td>`;
+		});
+	} else {
+		const recentSpan = recent.length
+			? (Math.max(...recent.map(c => Number(c?.high || 0))) - Math.min(...recent.map(c => Number(c?.low || 0))))
+			: 0;
+		const base = latest ? Number(latest.close || 0) : 0;
+		const tick = Math.max(0.01, recentSpan > 0 ? recentSpan / 24 : base * 0.0004 || 0.01);
+		for (let i = 6; i >= -5; i -= 1) {
+			const price = base + (i * tick);
+			if (!Number.isFinite(price) || price <= 0) continue;
+			const proximity = Math.max(0.2, 1.0 - (Math.abs(i) / 8));
+			const refVol = Math.max(1, Number(latest?.volume || 1));
+			const bid = Math.round(refVol * proximity * (i <= 0 ? 0.8 : 0.5));
+			const ask = Math.round(refVol * proximity * (i >= 0 ? 0.8 : 0.5));
+			ladderRowsRaw.push(`<td>${fmtTimeCell(Number(latest?.time || 0))}</td><td>${price.toFixed(2)}</td><td class="ladder-bid">${bid}</td><td class="ladder-ask">${ask}</td>`);
+		}
 	}
 	setTableBodyRows("ladderTableBody", ladderRowsRaw, "No ladder levels", 4);
+
+	const domSummary = payload?.meta?.dom_summary || {};
+	setText("ladderSpread", Number(domSummary?.spread || 0).toFixed(2), null);
+	const imbalance = Number(domSummary?.imbalance || 0);
+	setText("ladderImbalance", `${imbalance >= 0 ? "+" : ""}${imbalance.toFixed(1)}%`, imbalance >= 0 ? "delta-pos" : "delta-neg");
+	const bidWallPx = Number(domSummary?.bid_wall?.price || 0);
+	const bidWallSz = Math.round(Math.max(0, Number(domSummary?.bid_wall?.size || 0)));
+	const askWallPx = Number(domSummary?.ask_wall?.price || 0);
+	const askWallSz = Math.round(Math.max(0, Number(domSummary?.ask_wall?.size || 0)));
+	setText("ladderBidWall", bidWallPx > 0 ? `${bidWallPx.toFixed(2)} @ ${bidWallSz}` : "--", "side-buy");
+	setText("ladderAskWall", askWallPx > 0 ? `${askWallPx.toFixed(2)} @ ${askWallSz}` : "--", "side-sell");
 }
 
 function updateCandlesSmoothly(candles, volumeRows, renderKey, timeframe) {

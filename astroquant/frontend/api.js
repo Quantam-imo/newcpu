@@ -31,6 +31,7 @@ const AQ_HEALTH_PANEL_LAYOUT_KEY = "AQ_HEALTH_PANEL_LAYOUT_V1";
 const MICRO_PANEL_CONFIG = {
 	iceberg: { panelId: "microIcebergPanel", buttonId: "microIcebergToggleBtn", dragHandleId: "microIcebergDragHandle", label: "Iceberg" },
 	orderflow: { panelId: "microOrderflowPanel", buttonId: "microOrderflowToggleBtn", dragHandleId: "microOrderflowDragHandle", label: "Order Flow" },
+	summary: { panelId: "microOrderflowSummaryPanel", buttonId: "microSummaryToggleBtn", dragHandleId: "microSummaryDragHandle", label: "OF Summary" },
 	timesales: { panelId: "microTimeSalesPanel", buttonId: "microTimeSalesToggleBtn", dragHandleId: "microTimeSalesDragHandle", label: "Time & Sales" },
 	ladder: { panelId: "microLadderPanel", buttonId: "microLadderToggleBtn", dragHandleId: "microLadderDragHandle", label: "Ladder" },
 };

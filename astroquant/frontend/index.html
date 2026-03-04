@@ -149,6 +149,7 @@
         .micro-orderflow { right: 14px; top: calc(86px + 38vh); }
         .micro-timesales { right: 460px; top: 86px; }
         .micro-ladder { right: 460px; top: calc(86px + 38vh); }
+        .micro-summary { right: 906px; top: 86px; }
         .micro-float.open { display: block; }
         .micro-head {
             display: flex;
@@ -441,6 +442,7 @@
                 <button id="systemHealthToggleBtn" onclick="toggleSystemHealthPanel()">System Health</button>
                 <button id="microIcebergToggleBtn" onclick="toggleMicroPanel('iceberg')">Iceberg</button>
                 <button id="microOrderflowToggleBtn" onclick="toggleMicroPanel('orderflow')">Order Flow</button>
+                <button id="microSummaryToggleBtn" onclick="toggleMicroPanel('summary')">OF Summary</button>
                 <button id="microTimeSalesToggleBtn" onclick="toggleMicroPanel('timesales')">Time &amp; Sales</button>
                 <button id="microLadderToggleBtn" onclick="toggleMicroPanel('ladder')">Ladder</button>
                 <button id="journalToggleBtn" onclick="toggleJournalPanel()">Journal</button>
@@ -654,12 +656,37 @@
                         <h3>Order Flow</h3>
                         <button class="panel-close-btn" onclick="toggleMicroPanel('orderflow', false)" aria-label="Close Order Flow Panel">✕ Close</button>
                     </div>
+                    <div class="micro-flow-summary" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+                        <span class="badge">Δ <span id="orderflowDeltaNet">--</span></span>
+                        <span class="badge">CVD <span id="orderflowCumDelta">--</span></span>
+                        <span class="badge">Buy <span id="orderflowBuyAggr">--</span></span>
+                        <span class="badge">Sell <span id="orderflowSellAggr">--</span></span>
+                    </div>
                     <div class="micro-table-wrap">
                         <table>
                             <thead><tr><th>Time (Local / IST)</th><th>Buy Vol</th><th>Sell Vol</th><th>Delta</th></tr></thead>
                             <tbody id="orderflowTableBody"></tbody>
                         </table>
                     </div>
+                </div>
+
+                <div id="microOrderflowSummaryPanel" class="panel micro-float micro-summary" aria-label="Orderflow Summary Floating Panel">
+                    <div id="microSummaryDragHandle" class="micro-head" style="cursor: move; user-select: none;">
+                        <h3>Orderflow Summary</h3>
+                        <button class="panel-close-btn" onclick="toggleMicroPanel('summary', false)" aria-label="Close Orderflow Summary Panel">✕ Close</button>
+                    </div>
+                    <div class="row-list">
+                        <div><span>Buy Aggression</span><strong id="summaryBuyAgg">--</strong></div>
+                        <div><span>Sell Aggression</span><strong id="summarySellAgg">--</strong></div>
+                        <div><span>Delta</span><strong id="summaryDelta">--</strong></div>
+                        <div><span>Cumulative Delta</span><strong id="summaryCvd">--</strong></div>
+                        <div><span>Imbalance</span><strong id="summaryImbalance">--</strong></div>
+                        <div><span>DOM Spread</span><strong id="summarySpread">--</strong></div>
+                        <div><span>Iceberg Count</span><strong id="summaryIceberg">--</strong></div>
+                        <div><span>Absorption</span><strong id="summaryAbsorption">--</strong></div>
+                        <div><span>Confidence</span><strong id="summaryConfidence">--</strong></div>
+                    </div>
+                    <div class="badge" style="margin-top:8px;display:block;">Narrative: <span id="summaryNarrative">--</span></div>
                 </div>
 
                 <div id="microTimeSalesPanel" class="panel micro-float micro-timesales" aria-label="Time and Sales Floating Panel">
@@ -669,7 +696,7 @@
                     </div>
                     <div class="micro-table-wrap">
                         <table>
-                            <thead><tr><th>Time (Local / IST)</th><th>Price</th><th>Size</th><th>Side</th></tr></thead>
+                            <thead><tr><th>Time (Local / IST)</th><th>Price</th><th>Size</th><th>Side</th><th>Delta</th></tr></thead>
                             <tbody id="timeSalesTableBody"></tbody>
                         </table>
                     </div>
@@ -679,6 +706,12 @@
                     <div id="microLadderDragHandle" class="micro-head" style="cursor: move; user-select: none;">
                         <h3>Ladder</h3>
                         <button class="panel-close-btn" onclick="toggleMicroPanel('ladder', false)" aria-label="Close Ladder Panel">✕ Close</button>
+                    </div>
+                    <div class="micro-flow-summary" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+                        <span class="badge">Spread <span id="ladderSpread">--</span></span>
+                        <span class="badge">Imb <span id="ladderImbalance">--</span></span>
+                        <span class="badge">Bid Wall <span id="ladderBidWall">--</span></span>
+                        <span class="badge">Ask Wall <span id="ladderAskWall">--</span></span>
                     </div>
                     <div class="micro-table-wrap">
                         <table>
