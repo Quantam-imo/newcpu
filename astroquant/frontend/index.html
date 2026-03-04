@@ -256,6 +256,30 @@
             overflow: hidden;
         }
         #chart { height: 100%; }
+        #chartVpOverlay {
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+            pointer-events: none;
+            display: none;
+        }
+        .vp-bar {
+            position: absolute;
+            left: 0;
+            border-radius: 0 3px 3px 0;
+            min-height: 2px;
+            background: rgba(148, 163, 184, 0.28);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            box-sizing: border-box;
+        }
+        .vp-bar.vp-va {
+            background: rgba(56, 189, 248, 0.30);
+            border-color: rgba(56, 189, 248, 0.28);
+        }
+        .vp-bar.vp-poc {
+            background: rgba(250, 204, 21, 0.38);
+            border-color: rgba(250, 204, 21, 0.44);
+        }
         #chartTvHud {
             position: absolute;
             top: 8px;
@@ -278,6 +302,45 @@
         }
         #chartTvHud .tv-pos { color: #22c55e; }
         #chartTvHud .tv-neg { color: #ef4444; }
+        #chartVpLegend {
+            position: absolute;
+            top: 8px;
+            right: 10px;
+            z-index: 5;
+            background: rgba(5, 12, 22, 0.78);
+            border: 1px solid rgba(42, 59, 89, 0.9);
+            border-radius: 8px;
+            padding: 6px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #c7d9ef;
+            backdrop-filter: blur(2px);
+            min-width: 148px;
+            display: none;
+        }
+        #chartVpLegend .vp-title {
+            color: #93c5fd;
+            font-size: 10px;
+            letter-spacing: 0.35px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        #chartVpLegend .vp-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            line-height: 1.35;
+        }
+        #chartVpLegend .vp-levels {
+            margin-top: 4px;
+            color: #93c5fd;
+            font-size: 10px;
+            line-height: 1.35;
+            max-width: 240px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
         #chartState {
             min-height: 18px;
             margin-bottom: 8px;
@@ -434,6 +497,7 @@
                         <label><input type="checkbox" id="toggleIceberg" />Iceberg</label>
                         <label><input type="checkbox" id="toggleVWAP" />VWAP</label>
                         <label><input type="checkbox" id="toggleATR" />ATR</label>
+                        <label><input type="checkbox" id="toggleVP" />VolumeProfile</label>
                         <label><input type="checkbox" id="toggleGann" />Gann</label>
                         <label><input type="checkbox" id="toggleAstro" />Astro</label>
                     </div>
@@ -454,7 +518,16 @@
                     </div>
                     <div id="chartState"></div>
                     <div id="chartWrap">
+                        <div id="chartVpOverlay"></div>
                         <div id="chartTvHud">--</div>
+                        <div id="chartVpLegend">
+                            <div class="vp-title">Volume Profile</div>
+                            <div class="vp-row"><span>POC</span><strong id="vpPoc">--</strong></div>
+                            <div class="vp-row"><span>VAH</span><strong id="vpVah">--</strong></div>
+                            <div class="vp-row"><span>VAL</span><strong id="vpVal">--</strong></div>
+                            <div class="vp-row"><span>Total Vol</span><strong id="vpTotal">--</strong></div>
+                            <div class="vp-levels" id="vpTopLevels">--</div>
+                        </div>
                         <div id="chart"></div>
                     </div>
                 </div>

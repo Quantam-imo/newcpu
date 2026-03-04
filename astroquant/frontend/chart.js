@@ -49,6 +49,8 @@ let orderBlockLines = [];
 let fvgLines = [];
 let icebergLines = [];
 let gannLines = [];
+let vpLines = [];
+let latestVpProfile = null;
 let tradeLines = [];
 let drawingPriceLines = [];
 
@@ -59,6 +61,7 @@ const toggleIds = [
 	"toggleIceberg",
 	"toggleVWAP",
 	"toggleATR",
+	"toggleVP",
 	"toggleGann",
 	"toggleAstro",
 ];
@@ -497,8 +500,14 @@ function createChartIfNeeded() {
 	window.addEventListener("resize", () => {
 		if (!chart || !container) return;
 		chart.applyOptions({ width: container.clientWidth });
+		refreshVpOverlay();
 	});
 	chart.applyOptions({ width: container.clientWidth });
+	try {
+		chart.timeScale()?.subscribeVisibleLogicalRangeChange?.(() => {
+			refreshVpOverlay();
+		});
+	} catch (_) {}
 
 	if (typeof chart.subscribeCrosshairMove === "function") {
 		chart.subscribeCrosshairMove((param) => {
@@ -870,6 +879,227 @@ function clearPriceLines(lines) {
 		try { candlesSeries.removePriceLine(line); } catch (_) {}
 	}
 	lines.length = 0;
+}
+
+function vpOverlayElement() {
+	return document.getElementById("chartVpOverlay");
+}
+
+function clearVpOverlay() {
+	const overlay = vpOverlayElement();
+	if (!overlay) return;
+	overlay.innerHTML = "";
+	overlay.style.display = "none";
+}
+
+function paintVpOverlay(profile) {
+	const overlay = vpOverlayElement();
+	if (!overlay || !candlesSeries) return;
+	overlay.innerHTML = "";
+	if (!profile || !Array.isArray(profile.bins) || !profile.bins.length) {
+		overlay.style.display = "none";
+		return;
+	}
+
+	const maxBinVolume = Math.max(1, ...profile.bins.map(row => Number(row.volume || 0)));
+	const maxWidth = Math.max(20, Math.round((overlay.clientWidth || 0) * 0.34));
+	overlay.style.display = "block";
+
+	for (const row of profile.bins) {
+		const y = candlesSeries.priceToCoordinate(Number(row.price));
+		if (!Number.isFinite(y)) continue;
+		const ratio = Math.max(0, Math.min(1, Number(row.volume || 0) / maxBinVolume));
+		if (ratio <= 0) continue;
+
+		const bar = document.createElement("div");
+		bar.className = "vp-bar";
+		if (Math.abs(Number(row.price) - Number(profile.poc?.price || 0)) <= Number(profile.step || 0) * 0.51) {
+			bar.classList.add("vp-poc");
+		} else if (Number(row.price) >= Number(profile.val) && Number(row.price) <= Number(profile.vah)) {
+			bar.classList.add("vp-va");
+		}
+
+		const barHeight = Math.max(2, Math.floor((profile.stepPx || 0) * 0.82) || 4);
+		const top = Math.max(0, y - Math.floor(barHeight / 2));
+		bar.style.top = `${top}px`;
+		bar.style.height = `${barHeight}px`;
+		bar.style.width = `${Math.max(2, Math.round(maxWidth * ratio))}px`;
+		overlay.appendChild(bar);
+	}
+}
+
+function refreshVpOverlay() {
+	const enabled = document.getElementById("toggleVP")?.checked !== false;
+	if (!enabled || !latestVpProfile) {
+		clearVpOverlay();
+		return;
+	}
+	paintVpOverlay(latestVpProfile);
+}
+
+function formatLargeVolume(value) {
+	const n = Number(value);
+	if (!Number.isFinite(n)) return "--";
+	if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
+	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+	if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+	return `${Math.round(n)}`;
+}
+
+function computeVolumeProfile(candles, requestedBins = 24) {
+	const rows = (candles || []).filter(row =>
+		Number.isFinite(Number(row?.high))
+		&& Number.isFinite(Number(row?.low))
+		&& Number.isFinite(Number(row?.close))
+		&& Number.isFinite(Number(row?.volume))
+		&& Number(row?.high) > 0
+		&& Number(row?.low) > 0
+		&& Number(row?.volume) >= 0
+	);
+	if (!rows.length) return null;
+
+	const minPrice = Math.min(...rows.map(row => Number(row.low)));
+	const maxPrice = Math.max(...rows.map(row => Number(row.high)));
+	if (!Number.isFinite(minPrice) || !Number.isFinite(maxPrice) || maxPrice <= minPrice) return null;
+
+	const binsCount = Math.max(10, Math.min(40, Number(requestedBins) || 24));
+	const step = (maxPrice - minPrice) / binsCount;
+	if (!Number.isFinite(step) || step <= 0) return null;
+
+	const bins = Array.from({ length: binsCount }, (_, idx) => ({
+		idx,
+		price: minPrice + ((idx + 0.5) * step),
+		volume: 0,
+	}));
+
+	const clampIndex = value => Math.max(0, Math.min(binsCount - 1, value));
+
+	for (const row of rows) {
+		const high = Number(row.high);
+		const low = Number(row.low);
+		const close = Number(row.close);
+		const volume = Math.max(0, Number(row.volume || 0));
+		if (volume <= 0) continue;
+
+		const span = Math.max(0, high - low);
+		if (span <= 0) {
+			const idx = clampIndex(Math.floor((close - minPrice) / step));
+			bins[idx].volume += volume;
+			continue;
+		}
+
+		const start = clampIndex(Math.floor((low - minPrice) / step));
+		const end = clampIndex(Math.floor((high - minPrice) / step));
+		const touched = Math.max(1, (end - start) + 1);
+		const share = volume / touched;
+		for (let idx = start; idx <= end; idx += 1) {
+			bins[idx].volume += share;
+		}
+	}
+
+	const totalVolume = bins.reduce((acc, row) => acc + Number(row.volume || 0), 0);
+	if (!Number.isFinite(totalVolume) || totalVolume <= 0) return null;
+
+	const sortedByVol = [...bins].sort((a, b) => b.volume - a.volume);
+	const poc = sortedByVol[0];
+
+	let covered = 0;
+	const target = totalVolume * 0.7;
+	const selected = [];
+	for (const row of sortedByVol) {
+		selected.push(row);
+		covered += Number(row.volume || 0);
+		if (covered >= target) break;
+	}
+
+	const vah = selected.reduce((acc, row) => Math.max(acc, Number(row.price)), Number.NEGATIVE_INFINITY);
+	const val = selected.reduce((acc, row) => Math.min(acc, Number(row.price)), Number.POSITIVE_INFINITY);
+
+	return {
+		bins,
+		topBins: sortedByVol.slice(0, 8),
+		poc,
+		vah,
+		val,
+		totalVolume,
+	};
+}
+
+function updateVpLegend(profile, enabled) {
+	const legend = document.getElementById("chartVpLegend");
+	const pocEl = document.getElementById("vpPoc");
+	const vahEl = document.getElementById("vpVah");
+	const valEl = document.getElementById("vpVal");
+	const totalEl = document.getElementById("vpTotal");
+	const levelsEl = document.getElementById("vpTopLevels");
+	if (!legend || !pocEl || !vahEl || !valEl || !totalEl || !levelsEl) return;
+
+	if (!enabled || !profile) {
+		legend.style.display = "none";
+		pocEl.innerText = "--";
+		vahEl.innerText = "--";
+		valEl.innerText = "--";
+		totalEl.innerText = "--";
+		levelsEl.innerText = "--";
+		return;
+	}
+
+	legend.style.display = "block";
+	pocEl.innerText = Number(profile.poc?.price || 0).toFixed(2);
+	vahEl.innerText = Number(profile.vah || 0).toFixed(2);
+	valEl.innerText = Number(profile.val || 0).toFixed(2);
+	totalEl.innerText = formatLargeVolume(profile.totalVolume);
+	levelsEl.innerText = profile.topBins
+		.map((row, idx) => `${idx + 1}:${Number(row.price).toFixed(2)}`)
+		.join(" · ");
+}
+
+function renderVolumeProfile(candles) {
+	clearPriceLines(vpLines);
+	const enabled = document.getElementById("toggleVP")?.checked !== false;
+	if (!enabled || !Array.isArray(candles) || !candles.length) {
+		latestVpProfile = null;
+		clearVpOverlay();
+		updateVpLegend(null, false);
+		return;
+	}
+
+	const profile = computeVolumeProfile(candles, 24);
+	if (!profile) {
+		latestVpProfile = null;
+		clearVpOverlay();
+		updateVpLegend(null, false);
+		return;
+	}
+	profile.step = Number(profile.bins?.[1]?.price || profile.bins?.[0]?.price || 0) - Number(profile.bins?.[0]?.price || 0);
+	const yA = candlesSeries?.priceToCoordinate?.(Number(profile.bins[0]?.price));
+	const yB = candlesSeries?.priceToCoordinate?.(Number(profile.bins[1]?.price || profile.bins[0]?.price));
+	profile.stepPx = Number.isFinite(yA) && Number.isFinite(yB) ? Math.abs(yA - yB) : 5;
+	latestVpProfile = profile;
+	paintVpOverlay(profile);
+
+	const maxBinVolume = Math.max(1, ...profile.topBins.map(row => Number(row.volume || 0)));
+	for (const row of profile.topBins) {
+		const ratio = Math.max(0.12, Math.min(1, Number(row.volume || 0) / maxBinVolume));
+		const inValueArea = Number(row.price) >= Number(profile.val) && Number(row.price) <= Number(profile.vah);
+		const color = inValueArea
+			? `rgba(56,189,248,${(0.25 + (ratio * 0.55)).toFixed(3)})`
+			: `rgba(148,163,184,${(0.18 + (ratio * 0.35)).toFixed(3)})`;
+		const pct = (Number(row.volume || 0) / Number(profile.totalVolume || 1)) * 100;
+		addHorizontalLine(Number(row.price), `VP ${pct.toFixed(1)}%`, color, vpLines);
+	}
+
+	if (Number.isFinite(Number(profile.poc?.price))) {
+		addHorizontalLine(Number(profile.poc.price), "POC", "#facc15", vpLines);
+	}
+	if (Number.isFinite(Number(profile.vah))) {
+		addHorizontalLine(Number(profile.vah), "VAH", "#60a5fa", vpLines);
+	}
+	if (Number.isFinite(Number(profile.val))) {
+		addHorizontalLine(Number(profile.val), "VAL", "#60a5fa", vpLines);
+	}
+
+	updateVpLegend(profile, true);
 }
 
 function clearDrawingSeries() {
@@ -1449,6 +1679,18 @@ function applyOverlayVisibility() {
 	show(fvgLines, on("toggleFVG"));
 	show(icebergLines, on("toggleIceberg"));
 	show(gannLines, on("toggleGann"));
+	show(vpLines, on("toggleVP"));
+	if (on("toggleVP")) {
+		if (!latestVpProfile && Array.isArray(latestCandleSnapshot) && latestCandleSnapshot.length) {
+			renderVolumeProfile(latestCandleSnapshot);
+		} else {
+			updateVpLegend(latestVpProfile, true);
+			refreshVpOverlay();
+		}
+	} else {
+		updateVpLegend(null, false);
+		clearVpOverlay();
+	}
 
 	if (cachedPayload) {
 		const markers = buildMarkers(cachedPayload);
@@ -1514,8 +1756,12 @@ async function loadInstitutionalChart() {
 		clearPriceLines(fvgLines);
 		clearPriceLines(icebergLines);
 		clearPriceLines(gannLines);
+		clearPriceLines(vpLines);
 		clearPriceLines(tradeLines);
+		latestVpProfile = null;
+		clearVpOverlay();
 		setSeriesMarkersCompat(candlesSeries, []);
+		updateVpLegend(null, false);
 		updateChartMeta(payload, timeframe, candles);
 		renderMicrostructureTables(payload, candles);
 		lastRenderKey = renderKey;
@@ -1529,6 +1775,7 @@ async function loadInstitutionalChart() {
 	atrLowerSeries.setData(sanitizeLineRows(payload?.overlays?.atr_band?.lower || []));
 
 	renderOverlayPriceLines(payload?.overlays || {});
+	renderVolumeProfile(candles);
 	renderTradeLines(payload?.meta || {}, candles);
 	setSeriesMarkersCompat(candlesSeries, buildMarkers(payload));
 	updateChartMeta(payload, timeframe, candles);
