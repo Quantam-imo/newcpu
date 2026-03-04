@@ -4,6 +4,7 @@ let volumeSeries;
 let vwapSeries;
 let atrUpperSeries;
 let atrLowerSeries;
+let cumDeltaSeries;
 let lastRenderKey = "";
 let lastRenderedTime = 0;
 let cachedPayload = null;
@@ -61,6 +62,7 @@ const toggleIds = [
 	"toggleIceberg",
 	"toggleVWAP",
 	"toggleATR",
+	"toggleCVD",
 	"toggleVP",
 	"toggleGann",
 	"toggleAstro",
@@ -493,6 +495,14 @@ function createChartIfNeeded() {
 		color: "#f59e0b",
 		lineWidth: 1,
 		lineStyle: LightweightCharts.LineStyle.Dashed,
+		priceLineVisible: false,
+		lastValueVisible: false,
+	});
+	cumDeltaSeries = addLineSeriesCompat(chart, {
+		priceScaleId: "left",
+		color: "#93c5fd",
+		lineWidth: 2,
+		lineStyle: LightweightCharts.LineStyle.Solid,
 		priceLineVisible: false,
 		lastValueVisible: false,
 	});
@@ -1735,12 +1745,14 @@ function updateCandlesSmoothly(candles, volumeRows, renderKey, timeframe) {
 function applyOverlayVisibility() {
 	const on = id => document.getElementById(id)?.checked !== false;
 	const atrEnabled = on("toggleATR");
+	const cvdEnabled = on("toggleCVD");
 	vwapSeries.applyOptions({ visible: on("toggleVWAP") });
 	atrUpperSeries.applyOptions({ visible: atrEnabled });
 	atrLowerSeries.applyOptions({ visible: atrEnabled });
+	cumDeltaSeries?.applyOptions({ visible: cvdEnabled });
 	try {
 		chart?.applyOptions({
-			leftPriceScale: { visible: atrEnabled, borderColor: "#2b3e5b" },
+			leftPriceScale: { visible: (atrEnabled || cvdEnabled), borderColor: "#2b3e5b" },
 			rightPriceScale: {
 				borderColor: "#2b3e5b",
 				autoScale: true,
@@ -1831,6 +1843,7 @@ async function loadInstitutionalChart() {
 		vwapSeries.setData([]);
 		atrUpperSeries.setData([]);
 		atrLowerSeries.setData([]);
+		cumDeltaSeries.setData([]);
 		clearPriceLines(liquidityLines);
 		clearPriceLines(orderBlockLines);
 		clearPriceLines(fvgLines);
@@ -1853,6 +1866,7 @@ async function loadInstitutionalChart() {
 	vwapSeries.setData(sanitizeLineRows(payload?.overlays?.vwap || []));
 	atrUpperSeries.setData(sanitizeLineRows(payload?.overlays?.atr_band?.upper || []));
 	atrLowerSeries.setData(sanitizeLineRows(payload?.overlays?.atr_band?.lower || []));
+	cumDeltaSeries.setData(sanitizeLineRows(payload?.overlays?.cumulative_delta || []));
 
 	renderOverlayPriceLines(payload?.overlays || {});
 	renderVolumeProfile(candles);
