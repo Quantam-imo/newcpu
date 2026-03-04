@@ -1567,6 +1567,10 @@ function renderMicrostructureTables(payload, candles) {
 
 	setText("summaryBuyAgg", `${Number(orderflowSummary?.buy_aggression || 0).toFixed(1)}%`, "side-buy");
 	setText("summarySellAgg", `${Number(orderflowSummary?.sell_aggression || 0).toFixed(1)}%`, "side-sell");
+	setText("summaryRegime", String(orderflowSummary?.regime_mode || "--"), null);
+	const alertLevel = String(orderflowSummary?.alert_level || "LOW").toUpperCase();
+	setText("summaryAlert", alertLevel, alertLevel === "HIGH" ? "delta-neg" : (alertLevel === "MEDIUM" ? "side-sell" : "side-buy"));
+	setText("summarySignalStrength", `${Number(orderflowSummary?.signal_strength || 0).toFixed(1)}%`, null);
 	const summaryDelta = Number(orderflowSummary?.delta || 0);
 	const summaryCvd = Number(orderflowSummary?.cumulative_delta || 0);
 	setText("summaryDelta", `${summaryDelta >= 0 ? "+" : ""}${Math.round(summaryDelta)}`, summaryDelta >= 0 ? "delta-pos" : "delta-neg");

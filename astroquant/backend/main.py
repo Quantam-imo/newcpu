@@ -1840,6 +1840,8 @@ def chart_data(symbol: str, timeframe: str = "1m", limit: int = 300):
         dom_summary=dom_payload.get("summary", {}),
         iceberg_rows=(overlays or {}).get("iceberg", []),
         time_sales_rows=time_sales_rows,
+        regime_mode=getattr(prop_engine, "active_mode", "STANDARD"),
+        volatility_mode=getattr(prop_engine, "volatility_mode", "NORMAL"),
     )
     volume = [
         {
@@ -2078,6 +2080,8 @@ def market_orderflow_summary(symbol: str, timeframe: str = "1m", limit: int = 12
         dom_summary=meta.get("dom_summary", {}),
         iceberg_rows=overlays.get("iceberg", []),
         time_sales_rows=meta.get("time_sales", []),
+        regime_mode=getattr(prop_engine, "active_mode", "STANDARD"),
+        volatility_mode=getattr(prop_engine, "volatility_mode", "NORMAL"),
     )
 
     return {
@@ -2190,6 +2194,8 @@ def mentor_context(symbol: str = "GC.FUT"):
         dom_summary=dom_payload.get("summary", {}),
         iceberg_rows=(overlays or {}).get("iceberg", []),
         time_sales_rows=time_sales_rows,
+        regime_mode=getattr(prop_engine, "active_mode", "STANDARD"),
+        volatility_mode=getattr(prop_engine, "volatility_mode", "NORMAL"),
     )
 
     market_data = {
