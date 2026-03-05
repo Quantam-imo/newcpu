@@ -242,6 +242,32 @@ body {
     padding: 2px 4px;
 }
 
+.mentor-exec-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    border: 1px solid var(--line-soft);
+    border-left-width: 4px;
+    border-radius: 10px;
+    padding: 8px;
+    margin: 2px 0 10px;
+    background: linear-gradient(180deg, #121b2c 0%, #0f1827 100%);
+}
+
+.mentor-exec-item {
+    font-size: 11px;
+    color: #95a9c7;
+    border: 1px solid var(--line-soft);
+    border-radius: 7px;
+    padding: 4px 6px;
+    background: #121f34;
+}
+
+.mentor-exec-item strong {
+    color: var(--text-main);
+    font-weight: 700;
+}
+
 .chart-data-quality {
     display: inline-flex;
     align-items: center;

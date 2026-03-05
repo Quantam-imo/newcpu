@@ -2,363 +2,910 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <title>AstroQuant Institutional</title>
-    <link rel="stylesheet" href="css/style.css" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%230b0f14'/%3E%3Ctext x='50%25' y='54%25' text-anchor='middle' font-size='34' fill='%2390caf9' font-family='Segoe UI,Arial,sans-serif'%3EAQ%3C/text%3E%3C/svg%3E" />
-    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AstroQuant Institutional Command Center</title>
+    <link rel="icon" href="data:," />
+    <style>
+        :root {
+            --bg: #060b14;
+            --text: #dbe6f4;
+            --muted: #91a4be;
+            --surface: #0a1322;
+            --surface-alt: #0f1b2f;
+            --border: #1b2a43;
+            --border-strong: #2a3b59;
+            --accent: #38bdf8;
+            --accent-soft: #0b2a3f;
+            --danger: #f87171;
+            --danger-soft: #3a1f2a;
+            --shadow: 0 10px 28px rgba(2, 6, 23, 0.45);
+        }
+        body {
+            margin: 0;
+            font-family: Inter, "Segoe UI", Arial, sans-serif;
+            background: radial-gradient(circle at top right, #10233a 0%, #060b14 38%, #050912 100%);
+            color: var(--text);
+            letter-spacing: 0.1px;
+        }
+        .container { max-width: 100%; margin: 0 auto; padding: 8px 10px 12px; }
+        .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px;
+            margin-bottom: 10px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(1px);
+        }
+        .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 10px; }
+        .subgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .micro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .micro-table-wrap { max-height: 220px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-alt); }
+        .ops-float {
+            position: fixed;
+            right: 14px;
+            top: 86px;
+            width: min(460px, calc(100vw - 28px));
+            max-height: calc(100vh - 104px);
+            overflow: auto;
+            z-index: 44;
+            display: none;
+        }
+        .ops-float.open { display: block; }
+        .ops-console-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            cursor: move;
+            user-select: none;
+        }
+        .ops-console-head .ops-head-actions { display: inline-flex; gap: 6px; }
+        .governance-float {
+            position: fixed;
+            left: 14px;
+            top: 86px;
+            width: min(470px, calc(100vw - 28px));
+            max-height: 48vh;
+            overflow: auto;
+            z-index: 42;
+            display: none;
+            resize: both;
+        }
+        .governance-float.open { display: block; }
+        .gov-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            cursor: move;
+            user-select: none;
+        }
+        .system-health-float {
+            position: fixed;
+            left: 500px;
+            top: 86px;
+            width: min(470px, calc(100vw - 28px));
+            max-height: 48vh;
+            overflow: auto;
+            z-index: 42;
+            display: none;
+            resize: both;
+        }
+        .system-health-float.open { display: block; }
+        .health-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            cursor: move;
+            user-select: none;
+        }
+        .journal-float {
+            position: fixed;
+            left: 14px;
+            bottom: 14px;
+            width: min(760px, calc(100vw - 28px));
+            max-height: 40vh;
+            overflow: auto;
+            z-index: 43;
+            display: none;
+        }
+        .journal-float.open { display: block; }
+        .journal-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            cursor: move;
+            user-select: none;
+        }
+        .auto-badge {
+            display: inline-block;
+            border: 1px solid #4ade80;
+            color: #86efac;
+            background: #113625;
+            border-radius: 999px;
+            padding: 2px 8px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.35px;
+            text-transform: uppercase;
+        }
+        .micro-float {
+            position: fixed;
+            width: min(430px, calc(100vw - 32px));
+            max-height: 36vh;
+            overflow: auto;
+            z-index: 45;
+            display: none;
+        }
+        .micro-iceberg { right: 14px; top: 86px; }
+        .micro-orderflow { right: 14px; top: calc(86px + 38vh); }
+        .micro-timesales { right: 460px; top: 86px; }
+        .micro-ladder { right: 460px; top: calc(86px + 38vh); }
+        .micro-summary { right: 906px; top: 86px; }
+        .micro-float.open { display: block; }
+        .micro-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .panel-close-btn {
+            border: 1px solid var(--border-strong);
+            background: var(--surface-alt);
+            color: var(--text);
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+        .panel-close-btn:hover {
+            border-color: var(--danger);
+            background: var(--danger-soft);
+            color: var(--danger);
+        }
+        .micro-float .micro-table-wrap { max-height: 200px; }
+        .time-main { font-weight: 600; color: var(--text); line-height: 1.1; }
+        .time-sub { font-size: 11px; color: var(--muted); line-height: 1.1; margin-top: 2px; }
+        .side-buy, .delta-pos { color: var(--accent); font-weight: 700; }
+        .side-sell, .delta-neg { color: var(--danger); font-weight: 700; }
+        .ladder-bid { color: var(--accent); font-weight: 600; }
+        .ladder-ask { color: var(--danger); font-weight: 600; }
+        .row-list div {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 4px 0;
+            border-bottom: 1px dashed var(--border);
+            font-size: 12px;
+            color: var(--muted);
+        }
+        .row-list strong { color: var(--text); font-weight: 700; }
+        .ops-stack { display: grid; grid-template-columns: 1fr; gap: 8px; }
+        .ops-group {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--surface-alt);
+            padding: 8px;
+        }
+        .ops-group h4 {
+            margin: 0 0 8px 0;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.45px;
+            color: #c2d4ea;
+        }
+        .ops-actions { margin-top: 6px; }
+        .ops-actions .row { margin-bottom: 6px; }
+        .ops-good { color: #22c55e !important; }
+        .ops-warn { color: #f59e0b !important; }
+        .ops-bad { color: var(--danger) !important; }
+        .ops-neutral { color: #9fb4cd !important; }
+        .ops-chip-wrap {
+            display: inline-flex;
+            gap: 4px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            max-width: 100%;
+        }
+        .ops-chip {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 999px;
+            border: 1px solid var(--border-strong);
+            background: var(--surface-alt);
+            color: #bdd0e6;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.25px;
+            line-height: 1.2;
+            text-transform: uppercase;
+        }
+        .ops-chip.warn { border-color: #fbbf24; color: #fcd34d; }
+        .ops-chip.bad { border-color: #f87171; color: #fca5a5; }
+        .ops-chip.good { border-color: #4ade80; color: #86efac; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; background: var(--surface-alt); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+        th, td { border-bottom: 1px solid var(--border); padding: 7px 6px; text-align: left; }
+        th { color: #b6c7dd; font-weight: 600; background: #12243c; text-transform: uppercase; font-size: 11px; letter-spacing: 0.35px; }
+        tr:hover td { background: #12233a; }
+        button, select, input {
+            background: #0d1a2d;
+            color: var(--text);
+            border: 1px solid var(--border-strong);
+            border-radius: 8px;
+            padding: 7px 10px;
+            font-size: 12px;
+        }
+        button:hover { border-color: var(--accent); background: #11304d; }
+        select:focus, input:focus, button:focus { outline: 1px solid var(--accent); outline-offset: 1px; }
+        #chartWrap {
+            position: relative;
+            height: calc(100vh - 210px);
+            min-height: 680px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: #081423;
+            overflow: hidden;
+        }
+        #chart { height: 100%; }
+        #chartVpOverlay {
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+            pointer-events: none;
+            display: none;
+        }
+        .vp-bar {
+            position: absolute;
+            left: 0;
+            border-radius: 0 3px 3px 0;
+            min-height: 2px;
+            background: rgba(148, 163, 184, 0.28);
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            box-sizing: border-box;
+        }
+        .vp-bar.vp-va {
+            background: rgba(56, 189, 248, 0.30);
+            border-color: rgba(56, 189, 248, 0.28);
+        }
+        .vp-bar.vp-poc {
+            background: rgba(250, 204, 21, 0.38);
+            border-color: rgba(250, 204, 21, 0.44);
+        }
+        #chartTvHud {
+            position: absolute;
+            top: 8px;
+            left: 10px;
+            z-index: 5;
+            pointer-events: none;
+            background: rgba(5, 12, 22, 0.78);
+            border: 1px solid rgba(42, 59, 89, 0.9);
+            border-radius: 8px;
+            padding: 5px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #c7d9ef;
+            backdrop-filter: blur(2px);
+            display: inline-flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+            max-width: calc(100% - 16px);
+        }
+        #chartTvHud .tv-pos { color: #22c55e; }
+        #chartTvHud .tv-neg { color: #ef4444; }
+        #chartVpLegend {
+            position: absolute;
+            top: 8px;
+            right: 10px;
+            z-index: 5;
+            background: rgba(5, 12, 22, 0.78);
+            border: 1px solid rgba(42, 59, 89, 0.9);
+            border-radius: 8px;
+            padding: 6px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #c7d9ef;
+            backdrop-filter: blur(2px);
+            min-width: 148px;
+            display: none;
+        }
+        #chartVpLegend .vp-title {
+            color: #93c5fd;
+            font-size: 10px;
+            letter-spacing: 0.35px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        #chartVpLegend .vp-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            line-height: 1.35;
+        }
+        #chartVpLegend .vp-levels {
+            margin-top: 4px;
+            color: #93c5fd;
+            font-size: 10px;
+            line-height: 1.35;
+            max-width: 240px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        #chartState {
+            min-height: 18px;
+            margin-bottom: 8px;
+            padding: 4px 8px;
+            border-radius: 8px;
+            font-size: 12px;
+            color: var(--muted);
+            background: #0f1b2f;
+            border: 1px dashed var(--border);
+            display: none;
+        }
+        .badge {
+            border: 1px solid var(--border-strong);
+            background: var(--surface-alt);
+            color: #bbcee4;
+            border-radius: 999px;
+            padding: 5px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            line-height: 1.25;
+        }
+        h2, h3 { margin: 0 0 10px 0; color: var(--text); }
+        h2 { font-size: 18px; font-weight: 700; letter-spacing: 0.35px; }
+        h3 { font-size: 14px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.35px; color: #c8d7ea; }
+        .mentor-drawer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 420px;
+            max-width: 80vw;
+            height: 100vh;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            box-shadow: 8px 0 24px rgba(2, 6, 23, 0.5);
+            transform: translateX(-100%);
+            transition: transform 0.2s ease;
+            z-index: 50;
+            display: flex;
+        }
+        .mentor-drawer.open { transform: translateX(0); }
+        .mentor-resizer { width: 6px; cursor: ew-resize; background: #d7e1ef; }
+        .mentor-body { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        .mentor-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px; border-bottom: 1px solid var(--border); }
+        .mentor-meta { font-size: 11px; color: var(--muted); padding: 0 10px 8px; }
+        .mentor-content-wrap { padding: 10px; overflow: auto; }
+        .mentor-content details { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; padding: 6px 8px; background: var(--surface-alt); }
+        .mentor-content summary { cursor: pointer; font-weight: 700; }
+        .mentor-content div { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed var(--border); padding: 3px 0; }
+        .mentor-content table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+        .mentor-content th, .mentor-content td { border-bottom: 1px solid var(--border); padding: 6px; text-align: left; }
+        .mentor-content .mentor-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+        .mentor-tag {
+            display: inline-block;
+            border-radius: 999px;
+            border: 1px solid var(--border-strong);
+            padding: 2px 8px;
+            font-size: 11px;
+            font-weight: 700;
+            line-height: 1.2;
+            background: var(--surface-alt);
+            color: var(--text);
+        }
+        .mentor-tag.bull { background: #dcfce7; color: #166534; border-color: #86efac; }
+        .mentor-tag.bear { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+        .mentor-tag.neutral { background: #e2e8f0; color: #334155; border-color: #cbd5e1; }
+        .mentor-tag.risk-low { background: #dcfce7; color: #166534; border-color: #86efac; }
+        .mentor-tag.risk-med { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
+        .mentor-tag.risk-high { background: #fee2e2; color: #991b1b; border-color: #fca5a5; }
+        #volatilityBar { font-weight: 700; letter-spacing: 0.3px; }
+        #equityBar, #drawdownBar { border-radius: 999px; }
+        #newsPanel { color: #c6d8ef; font-size: 12px; margin-bottom: 8px; }
+        .health-inline { margin-top: 8px; }
+        .health-issues-line { margin-top: 8px; font-size: 12px; color: #bbcee4; }
+        .chart-key-hint {
+            font-size: 11px;
+            color: var(--muted);
+            border: 1px dashed var(--border-strong);
+            border-radius: 999px;
+            padding: 5px 10px;
+            line-height: 1.2;
+            background: var(--surface-alt);
+        }
+    </style>
 </head>
 <body>
-    <div class="topbar">
-        <div class="left-top">
-            <select id="symbolSelect"></select>
-            <div class="phase-display" id="phaseDisplay">PHASE_1</div>
-            <div>Balance: <span id="balance">--</span></div>
-            <div>Daily Loss: <span id="dailyLoss">--</span></div>
-        </div>
-        <div class="center-top">
-            <div class="control-group">
-                <span class="control-title">Tables</span>
-                <button id="enginesToggleBtn">Engines</button>
-                <button id="journalToggleBtn">Journal</button>
-                <button id="icebergToggleBtn">Iceberg</button>
-                <button id="orderflowToggleBtn">Order Flow</button>
-                <button id="ladderToggleBtn">Ladder</button>
-                <button id="timeSalesToggleBtn">Time & Sales</button>
-                <button id="cycleToggleBtn">Cycle</button>
-                <button id="liquidityToggleBtn">Liquidity</button>
+    <div class="container">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+        <div class="panel">
+    <link rel="icon" href="data:," />
+            <div class="row">
+                <button id="engineStartBtn">Engine Start</button>
+                <button id="engineStopBtn">Engine Stop</button>
+                <button id="mentorToggleBtn" onclick="toggleMentor()">AI Mentor</button>
+                <button id="opsConsoleToggleBtn" onclick="toggleOperationsConsole()">Operations</button>
+                <button id="governanceToggleBtn" onclick="toggleGovernancePanel()">Governance</button>
+                <button id="systemHealthToggleBtn" onclick="toggleSystemHealthPanel()">System Health</button>
+                <button id="microIcebergToggleBtn" onclick="toggleMicroPanel('iceberg')">Iceberg</button>
+                <button id="microOrderflowToggleBtn" onclick="toggleMicroPanel('orderflow')">Order Flow</button>
+                <button id="microSummaryToggleBtn" onclick="toggleMicroPanel('summary')">OF Summary</button>
+                <button id="microTimeSalesToggleBtn" onclick="toggleMicroPanel('timesales')">Time &amp; Sales</button>
+                <button id="microLadderToggleBtn" onclick="toggleMicroPanel('ladder')">Ladder</button>
+                <button id="journalToggleBtn" onclick="toggleJournalPanel()">Journal</button>
+                <button id="resetLayoutBtn" onclick="resetFloatingPanelLayout()">Reset Layout</button>
+                <button onclick="window.open('/admin', '_blank')">Admin Control</button>
+            </div>
+            <div class="row">
+                <div class="badge">Balance: <span id="balance">--</span></div>
+                <div class="badge">Daily Loss: <span id="dailyLoss">--</span></div>
+                <div class="badge">Phase: <span id="phase">--</span></div>
+                <div class="badge">News: <span id="news-status">--</span></div>
+                <div class="badge" id="volatilityBar">VOL: NORMAL</div>
             </div>
         </div>
-        <div class="right-top admin-panel">
-            <div class="admin-section compact-trading-controls"><b>Trading</b><br>
-                <div class="admin-trading-actions">
-                    <button id="manualTradeBtn" class="compact-btn">Manual</button>
-                    <button id="alertBtn" class="compact-btn">Alert</button>
-                    <button id="modelOverrideBtn" class="compact-btn">Override</button>
+
+        <div class="grid">
+            <div>
+                <div class="panel">
+                    <div class="row">
+                        <select id="chartSymbol">
+                            <option value="GC.FUT">GC.FUT</option>
+                            <option value="NQ.FUT">NQ.FUT</option>
+                            <option value="6E.FUT">6E.FUT</option>
+                            <option value="BTC.FUT">BTC.FUT</option>
+                            <option value="YM.FUT">YM.FUT</option>
+                        </select>
+                        <select id="chartTimeframe">
+                            <option value="1m">1m</option>
+                            <option value="5m">5m</option>
+                            <option value="15m">15m</option>
+                            <option value="30m">30m</option>
+                            <option value="1h">1h</option>
+                        </select>
+                        <button id="reloadChart">Reload</button>
+                        <button id="resetChartSettings">Reset Chart Settings</button>
+                        <button id="chartZoomIn">Zoom +</button>
+                        <button id="chartZoomOut">Zoom -</button>
+                        <button id="chartFit">Fit</button>
+                        <button id="chartRealtime">Realtime</button>
+                        <button id="chartToolCrosshair">Cursor</button>
+                        <button id="chartToolHLine">HLine</button>
+                        <button id="chartToolTrend">Trend</button>
+                        <button id="chartToolMove">Move</button>
+                        <button id="chartDrawDelete">Delete Selected</button>
+                        <button id="chartDrawUndo">Undo</button>
+                        <button id="chartDrawRedo">Redo</button>
+                        <button id="chartToolClear">Clear Drawings</button>
+                        <div class="chart-key-hint">Keys: +/- Zoom · ←/→ Pan · 0 Fit · R Realtime · Del Delete · Ctrl+Z/Y Undo/Redo</div>
+                    </div>
+                    <div class="row">
+                        <label><input type="checkbox" id="toggleLiquidity" />Liquidity</label>
+                        <label><input type="checkbox" id="toggleOrderBlocks" />OrderBlocks</label>
+                        <label><input type="checkbox" id="toggleFVG" />FVG</label>
+                        <label><input type="checkbox" id="toggleIceberg" />Iceberg</label>
+                        <label><input type="checkbox" id="toggleVWAP" />VWAP</label>
+                        <label><input type="checkbox" id="toggleATR" />ATR</label>
+                        <label><input type="checkbox" id="toggleCVD" />CVD</label>
+                        <label><input type="checkbox" id="toggleVP" />VolumeProfile</label>
+                        <label><input type="checkbox" id="toggleGann" />Gann</label>
+                        <label><input type="checkbox" id="toggleAstro" />Astro</label>
+                    </div>
+                    <div class="row">
+                        <div class="badge">Instrument: <span id="chartInstrument">--</span></div>
+                        <div class="badge">TF: <span id="chartTf">--</span></div>
+                        <div class="badge">Live: <span id="chartLivePrice">--</span></div>
+                        <div class="badge">Auto: <span id="chartAutoMode">--</span></div>
+                        <div class="badge">Risk: <span id="chartRisk">--</span></div>
+                        <div class="badge">Vol: <span id="chartVolatility">--</span></div>
+                        <div class="badge">Spread: <span id="chartSpread">--</span></div>
+                        <div class="badge">Session: <span id="chartSession">--</span></div>
+                        <div class="badge">Conf: <span id="chartConfidence">--</span></div>
+                        <div class="badge">VolBadge: <span id="chartVolBadge">--</span></div>
+                        <div class="badge">PhaseBadge: <span id="chartPhaseBadge">--</span></div>
+                        <div class="badge">NewsBadge: <span id="chartNewsBadge">--</span></div>
+                        <div class="badge">Source: <span id="chartDataSource">--</span></div>
+                    </div>
+                    <div id="chartState"></div>
+                    <div id="chartWrap">
+                        <div id="chartVpOverlay"></div>
+                        <div id="chartTvHud">--</div>
+                        <div id="chartVpLegend">
+                            <div class="vp-title">Volume Profile</div>
+                            <div class="vp-row"><span>POC</span><strong id="vpPoc">--</strong></div>
+                            <div class="vp-row"><span>VAH</span><strong id="vpVah">--</strong></div>
+                            <div class="vp-row"><span>VAL</span><strong id="vpVal">--</strong></div>
+                            <div class="vp-row"><span>Total Vol</span><strong id="vpTotal">--</strong></div>
+                            <div class="vp-levels" id="vpTopLevels">--</div>
+                        </div>
+                        <div id="chart"></div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h3>Multi-Symbol Matrix</h3>
+                    <div class="row">
+                        <div class="badge">Feed: <span id="msFeedHealth">--</span></div>
+                        <div class="badge">Rows: <span id="msRowCount">--</span></div>
+                        <div class="badge">Exec Halted: <span id="msExecHalted">--</span></div>
+                        <div class="badge">Updated: <span id="msUpdated">--</span></div>
+                    </div>
+                    <table>
+                        <thead><tr><th>Symbol</th><th>HTF</th><th>LTF</th><th>Model</th><th>Conf</th><th>Risk%</th><th>Phase</th><th>Mode</th><th>Basis</th><th>Resolver</th><th>Watch</th><th>News</th></tr></thead>
+                        <tbody id="multiSymbolBody"></tbody>
+                    </table>
+                </div>
+
+                <div id="governancePanel" class="panel governance-float" aria-label="Governance Panel">
+                    <div id="governanceDragHandle" class="gov-head">
+                        <h3>Governance</h3>
+                        <button class="panel-close-btn" onclick="toggleGovernancePanel(false)" aria-label="Close Governance Panel">✕ Close</button>
+                    </div>
+                    <div class="row">
+                        <button id="phase1Btn">Phase 1</button>
+                        <button id="phase2Btn">Phase 2</button>
+                        <button id="fundedBtn">Funded</button>
+                    </div>
+                    <div class="row">
+                        <select id="propPrimaryAccountSelect">
+                            <option value="5K">Primary 5K</option>
+                            <option value="10K">Primary 10K</option>
+                            <option value="20K">Primary 20K</option>
+                            <option value="50K" selected>Primary 50K</option>
+                            <option value="100K">Primary 100K</option>
+                        </select>
+                        <select id="propModeSelect">
+                            <option value="STRICT">Mode Strict</option>
+                            <option value="STANDARD" selected>Mode Standard</option>
+                            <option value="AGGRESSIVE">Mode Aggressive</option>
+                        </select>
+                        <button id="applyPropEngineBtn">Apply Prop Engine</button>
+                    </div>
+                    <div class="row" id="propMultiAccountRow" style="gap:6px;flex-wrap:wrap;">
+                        <label><input type="checkbox" class="prop-account-cb" value="5K">5K</label>
+                        <label><input type="checkbox" class="prop-account-cb" value="10K">10K</label>
+                        <label><input type="checkbox" class="prop-account-cb" value="20K">20K</label>
+                        <label><input type="checkbox" class="prop-account-cb" value="50K" checked>50K</label>
+                        <label><input type="checkbox" class="prop-account-cb" value="100K">100K</label>
+                    </div>
+                    <div class="row">
+                        <div class="badge">Primary: <span id="accountSizeDisplay">--</span></div>
+                        <div class="badge">Mode: <span id="accountModeDisplay">--</span></div>
+                    </div>
+                    <div class="ops-group">
+                        <h4>Prop &amp; Risk</h4>
+                        <div class="row-list">
+                            <div><span>Phase</span><strong id="phaseDisplay">--</strong></div>
+                            <div><span>Static Floor</span><strong id="floorDisplay">--</strong></div>
+                            <div><span>Profitable Days</span><strong id="profitDays">--</strong></div>
+                            <div><span>Trading</span><strong id="tradeStatus">--</strong></div>
+                            <div><span>Completion</span><strong id="phaseCompletion">--</strong></div>
+                            <div><span>Daily Max Loss</span><strong id="dailyMaxLossDisplay">--</strong></div>
+                            <div><span>Total Max Loss</span><strong id="totalMaxLossDisplay">--</strong></div>
+                            <div><span>Phase 1 Target</span><strong id="phase1TargetDisplay">--</strong></div>
+                            <div><span>Phase 2 Target</span><strong id="phase2TargetDisplay">--</strong></div>
+                            <div><span>Risk / Trade</span><strong id="riskPerTradeDisplay">--</strong></div>
+                            <div><span>Active Accounts</span><strong id="activeAccountsDisplay">--</strong></div>
+                        </div>
+                        <div id="equityBar" style="height:8px;background:#22c55e;margin-top:8px"></div>
+                        <div id="equityLabel">--</div>
+                        <div id="drawdownBar" style="height:8px;background:#f59e0b;margin-top:8px"></div>
+                        <div id="drawdownLabel">--</div>
+                    </div>
+                </div>
+
+                <div id="systemHealthPanel" class="panel system-health-float" aria-label="System Health Panel">
+                    <div id="systemHealthDragHandle" class="health-head">
+                        <h3>System Health</h3>
+                        <button class="panel-close-btn" onclick="toggleSystemHealthPanel(false)" aria-label="Close System Health Panel">✕ Close</button>
+                    </div>
+                    <div class="row">
+                        <div class="badge">Health: <span id="healthSummary">--</span></div>
+                    </div>
+                    <div class="ops-group">
+                        <div class="row-list">
+                            <div><span>Playwright</span><strong id="healthPlaywright">--</strong></div>
+                            <div><span>Databento</span><strong id="healthDatabento">--</strong></div>
+                            <div><span>Governance</span><strong id="healthGovernance">--</strong></div>
+                            <div><span>Execution</span><strong id="healthExecution">--</strong></div>
+                            <div><span>Reconciliation</span><strong id="healthReconciliation">--</strong></div>
+                            <div><span>Equity Verify</span><strong id="healthEquityVerify">--</strong></div>
+                            <div><span>CPU</span><strong id="healthCpuLoad">--</strong></div>
+                            <div><span>Memory</span><strong id="healthMemory">--</strong></div>
+                            <div><span>Disk</span><strong id="healthDisk">--</strong></div>
+                            <div><span>Uptime</span><strong id="healthUptime">--</strong></div>
+                        </div>
+                        <div class="health-issues-line">Issues: <strong id="healthIssues">--</strong></div>
+                    </div>
+                    <div id="newsPanel" class="health-inline">--</div>
+                    <div id="news-list"></div>
+                </div>
+
+                <div class="panel">
+                    <h3>Model Performance</h3>
+                    <table><thead><tr><th>Model</th><th>Wins</th><th>Losses</th><th>Win Rate</th></tr></thead><tbody id="modelStatsBody"></tbody></table>
+                </div>
+
+                <div id="microIcebergPanel" class="panel micro-float micro-iceberg" aria-label="Iceberg Floating Panel">
+                    <div id="microIcebergDragHandle" class="micro-head" style="cursor: move; user-select: none;">
+                        <h3>Iceberg</h3>
+                        <button class="panel-close-btn" onclick="toggleMicroPanel('iceberg', false)" aria-label="Close Iceberg Panel">✕ Close</button>
+                    </div>
+                    <div class="micro-table-wrap">
+                        <table>
+                            <thead><tr><th>Time (Local / IST)</th><th>Price</th><th>Strength</th><th>Confidence</th></tr></thead>
+                            <tbody id="icebergTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="microOrderflowPanel" class="panel micro-float micro-orderflow" aria-label="Order Flow Floating Panel">
+                    <div id="microOrderflowDragHandle" class="micro-head" style="cursor: move; user-select: none;">
+                        <h3>Order Flow</h3>
+                        <button class="panel-close-btn" onclick="toggleMicroPanel('orderflow', false)" aria-label="Close Order Flow Panel">✕ Close</button>
+                    </div>
+                    <div class="micro-flow-summary" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+                        <span class="badge">Δ <span id="orderflowDeltaNet">--</span></span>
+                        <span class="badge">CVD <span id="orderflowCumDelta">--</span></span>
+                        <span class="badge">Buy <span id="orderflowBuyAggr">--</span></span>
+                        <span class="badge">Sell <span id="orderflowSellAggr">--</span></span>
+                    </div>
+                    <div class="micro-table-wrap">
+                        <table>
+                            <thead><tr><th>Time (Local / IST)</th><th>Buy Vol</th><th>Sell Vol</th><th>Delta</th></tr></thead>
+                            <tbody id="orderflowTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="microOrderflowSummaryPanel" class="panel micro-float micro-summary" aria-label="Orderflow Summary Floating Panel">
+                    <div id="microSummaryDragHandle" class="micro-head" style="cursor: move; user-select: none;">
+                        <h3>Orderflow Summary</h3>
+                        <button class="panel-close-btn" onclick="toggleMicroPanel('summary', false)" aria-label="Close Orderflow Summary Panel">✕ Close</button>
+                    </div>
+                    <div class="row-list">
+                        <div><span>Regime</span><strong id="summaryRegime">--</strong></div>
+                        <div><span>Alert Level</span><strong id="summaryAlert">--</strong></div>
+                        <div><span>Signal Strength</span><strong id="summarySignalStrength">--</strong></div>
+                        <div><span>Buy Aggression</span><strong id="summaryBuyAgg">--</strong></div>
+                        <div><span>Sell Aggression</span><strong id="summarySellAgg">--</strong></div>
+                        <div><span>Delta</span><strong id="summaryDelta">--</strong></div>
+                        <div><span>Cumulative Delta</span><strong id="summaryCvd">--</strong></div>
+                        <div><span>Imbalance</span><strong id="summaryImbalance">--</strong></div>
+                        <div><span>DOM Spread</span><strong id="summarySpread">--</strong></div>
+                        <div><span>Iceberg Count</span><strong id="summaryIceberg">--</strong></div>
+                        <div><span>Absorption</span><strong id="summaryAbsorption">--</strong></div>
+                        <div><span>Confidence</span><strong id="summaryConfidence">--</strong></div>
+                    </div>
+                    <div class="badge" style="margin-top:8px;display:block;">Narrative: <span id="summaryNarrative">--</span></div>
+                </div>
+
+                <div id="microTimeSalesPanel" class="panel micro-float micro-timesales" aria-label="Time and Sales Floating Panel">
+                    <div id="microTimeSalesDragHandle" class="micro-head" style="cursor: move; user-select: none;">
+                        <h3>Time &amp; Sales</h3>
+                        <button class="panel-close-btn" onclick="toggleMicroPanel('timesales', false)" aria-label="Close Time and Sales Panel">✕ Close</button>
+                    </div>
+                    <div class="micro-table-wrap">
+                        <table>
+                            <thead><tr><th>Time (Local / IST)</th><th>Price</th><th>Size</th><th>Side</th><th>Delta</th></tr></thead>
+                            <tbody id="timeSalesTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="microLadderPanel" class="panel micro-float micro-ladder" aria-label="Ladder Floating Panel">
+                    <div id="microLadderDragHandle" class="micro-head" style="cursor: move; user-select: none;">
+                        <h3>Ladder</h3>
+                        <button class="panel-close-btn" onclick="toggleMicroPanel('ladder', false)" aria-label="Close Ladder Panel">✕ Close</button>
+                    </div>
+                    <div class="micro-flow-summary" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+                        <span class="badge">Spread <span id="ladderSpread">--</span></span>
+                        <span class="badge">Imb <span id="ladderImbalance">--</span></span>
+                        <span class="badge">Bid Wall <span id="ladderBidWall">--</span></span>
+                        <span class="badge">Ask Wall <span id="ladderAskWall">--</span></span>
+                    </div>
+                    <div class="micro-table-wrap">
+                        <table>
+                            <thead><tr><th>Time (Local / IST)</th><th>Price</th><th>Bid Size</th><th>Ask Size</th></tr></thead>
+                            <tbody id="ladderTableBody"></tbody>
+                        </table>
+                    </div>
+                    </div>
+                </div>
+
+                <div id="journalPanel" class="panel journal-float" aria-label="Journal Floating Panel">
+                    <div id="journalDragHandle" class="journal-head">
+                        <div style="display:flex;align-items:center;gap:6px;"><h3 style="margin:0;">Journal</h3><span class="auto-badge">Auto</span></div>
+                        <button id="journalCloseBtn" class="panel-close-btn" onclick="toggleJournalPanel(false)" aria-label="Close Journal Panel">✕ Close</button>
+                    </div>
+                    <table id="journalTable"><tbody></tbody></table>
                 </div>
             </div>
-            <div class="admin-section compact-system-controls"><b>System</b><br>
-                <div class="admin-system-actions">
-                    <button id="autoToggle" class="compact-btn">AUTO: OFF</button>
-                    <button id="emergencyBtn" class="compact-btn">EMERGENCY STOP</button>
+
+            <div>
+                <div id="operationsConsolePanel" class="panel ops-float" aria-label="Operations Console Panel">
+                    <div id="opsConsoleDragHandle" class="ops-console-head">
+                        <h3>Operations Console</h3>
+                        <div class="ops-head-actions">
+                            <button id="opsConsoleCloseBtn" class="panel-close-btn" onclick="toggleOperationsConsole(false)" aria-label="Close Operations Console">✕ Close</button>
+                        </div>
+                    </div>
+                    <div class="ops-stack">
+                        <div class="ops-group">
+                            <h4>Runtime &amp; Prop</h4>
+                            <div class="row-list">
+                                <div><span>Engine Runtime</span><strong id="engineRuntimeStatus">--</strong></div>
+                                <div><span>Active Phase</span><strong id="opsActivePhase">--</strong></div>
+                                <div><span>Current Balance</span><strong id="opsCurrentBalance">--</strong></div>
+                                <div><span>Current Equity</span><strong id="opsCurrentEquity">--</strong></div>
+                                <div><span>Daily DD %</span><strong id="opsDailyDdPct">--</strong></div>
+                                <div><span>Overall DD %</span><strong id="opsOverallDdPct">--</strong></div>
+                                <div><span>52K Lock Rule</span><strong id="opsLockRule">--</strong></div>
+                                <div><span>Breach Room</span><strong id="opsBreachRoom">--</strong></div>
+                                <div><span>Prop Auto Mode</span><strong id="opsPropMode">--</strong></div>
+                                <div><span>Prop Risk Mult</span><strong id="opsPropRiskMult">--</strong></div>
+                                <div><span>Prop Reasons</span><strong id="opsPropReasons">--</strong></div>
+                                <div><span>Prop Override</span><strong id="opsPropOverride">--</strong></div>
+                                <div><span>Override Expires</span><strong id="opsPropOverrideExpiry">--</strong></div>
+                            </div>
+                        </div>
+
+                        <div class="ops-group">
+                            <h4>Execution &amp; Feed</h4>
+                            <div class="row-list">
+                                <div><span>Playwright Connected</span><strong id="opsPlaywrightConnected">--</strong></div>
+                                <div><span>Browser Heartbeat</span><strong id="opsBrowserHeartbeat">--</strong></div>
+                                <div><span>Last Execution TS</span><strong id="opsLastExecutionTs">--</strong></div>
+                                <div><span>Feed</span><strong id="opsFeedStatus">--</strong></div>
+                                <div><span>Feed Reason</span><strong id="opsFeedReason">--</strong></div>
+                                <div><span>Feed Last Error</span><strong id="opsFeedError">--</strong></div>
+                                <div><span>Probe Candles</span><strong id="opsFeedCandles">--</strong></div>
+                                <div><span>Probe Snapshot</span><strong id="opsProbeSnapshot">--</strong></div>
+                                <div><span>Selector Profile</span><strong id="opsSelectorProfile">--</strong></div>
+                                <div><span>Selector Updated</span><strong id="opsSelectorUpdated">--</strong></div>
+                                <div><span>Execution</span><strong id="opsExecutionStatus">--</strong></div>
+                                <div><span>Risk Violations</span><strong id="opsRiskViolations">--</strong></div>
+                            </div>
+                        </div>
+
+                        <div class="ops-group">
+                            <h4>Config &amp; Safeguards</h4>
+                            <div class="row-list">
+                                <div><span>Cfg Spread Max</span><strong id="opsCfgSpreadMax">--</strong></div>
+                                <div><span>Cfg Cooldown</span><strong id="opsCfgCooldown">--</strong></div>
+                                <div><span>Cfg Max Trades/Day</span><strong id="opsCfgMaxTrades">--</strong></div>
+                                <div><span>Cfg Max Risk/Trade</span><strong id="opsCfgMaxRisk">--</strong></div>
+                                <div><span>Cfg Engine Flags</span><strong id="opsCfgEngineFlags">--</strong></div>
+                                <div><span>Cfg Last Sync</span><strong id="opsCfgLastSync">--</strong></div>
+                                <div><span>Reconciliation</span><strong id="opsReconciliationStatus">--</strong></div>
+                                <div><span>Equity Verification</span><strong id="opsEquityStatus">--</strong></div>
+                            </div>
+                        </div>
+
+                        <div class="ops-group">
+                            <h4>Scenario Monitor</h4>
+                            <div class="row-list">
+                                <div><span>Scenario Mode</span><strong id="opsSimMode">--</strong></div>
+                                <div><span>Scenario Risk</span><strong id="opsSimRisk">--</strong></div>
+                                <div><span>Scenario Block</span><strong id="opsSimBlock">--</strong></div>
+                                <div><span>Scenario Reasons</span><strong id="opsSimReasons">--</strong></div>
+                            </div>
+                        </div>
+
+                        <div class="ops-group">
+                            <h4>Basis &amp; Resolver</h4>
+                            <div class="row-list">
+                                <div><span>Basis Symbol</span><strong id="basisSymbol">--</strong></div>
+                                <div><span>Basis Status</span><strong id="basisStatus">--</strong></div>
+                                <div><span>Basis Bps</span><strong id="basisBps">--</strong></div>
+                                <div><span>Basis Z</span><strong id="basisZ">--</strong></div>
+                                <div><span>Basis Guard</span><strong id="basisGuard">--</strong></div>
+                                <div><span>Policy Block</span><strong id="basisPolicyBlock">--</strong></div>
+                                <div><span>Policy Risk</span><strong id="basisPolicyRisk">--</strong></div>
+                                <div><span>Policy Reasons</span><strong id="basisPolicyReasons">--</strong></div>
+                                <div><span>Active Contract</span><strong id="resolverActive">--</strong></div>
+                                <div><span>Resolver Status</span><strong id="resolverStatus">--</strong></div>
+                                <div><span>Resolver Failures</span><strong id="resolverFailures">--</strong></div>
+                                <div><span>Resolver Attempts</span><strong id="resolverAttempts">--</strong></div>
+                                <div><span>Resolver TTL</span><strong id="resolverTtl">--</strong></div>
+                                <div><span>Watch-Only</span><strong id="resolverWatchOnly">--</strong></div>
+                                <div><span>Watch Reason</span><strong id="resolverWatchReason">--</strong></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ops-actions">
+                    <div class="row">
+                        <button id="opsDefensiveBtn">Force Defensive</button>
+                        <button id="opsHaltBtn">Force Halt</button>
+                        <button id="opsClearOverrideBtn">Clear Override</button>
+                    </div>
+                    <div class="row">
+                        <button id="opsProbeBtn">Run Feed Probe</button>
+                        <button id="opsReconnectBtn">Reconnect Browser</button>
+                        <button id="opsKillSwitchBtn">Kill Switch</button>
+                        <button id="opsRestartExecBtn">Restart Execution</button>
+                        <button id="opsDisableAutoBtn">Disable Auto</button>
+                        <button id="basisWarmupBtn">Warmup Contracts</button>
+                    </div>
+                    <div class="row">
+                        <select id="opsSimPhase"><option value="PHASE1">PHASE1</option><option value="PHASE2">PHASE2</option><option value="FUNDED">FUNDED</option></select>
+                        <select id="opsSimVolatility"><option value="NORMAL">NORMAL</option><option value="HIGH">HIGH</option><option value="EXTREME">EXTREME</option></select>
+                        <select id="opsSimNews"><option value="NORMAL">NEWS NORMAL</option><option value="BREAKOUT_ONLY">NEWS BREAKOUT_ONLY</option><option value="HALT">NEWS HALT</option></select>
+                        <input id="opsSimDailyLoss" type="number" step="0.01" placeholder="Daily Loss" />
+                        <input id="opsSimDrawdown" type="number" step="0.01" placeholder="Drawdown" />
+                        <button id="opsSimRunBtn">Run Scenario</button>
+                    </div>
+                    </div>
                 </div>
-            </div>
-            <div class="admin-section"><b>Phase Control</b><br>
-                <button onclick="setPhase('PHASE_1')">Phase 1</button>
-                <button onclick="setPhase('PHASE_2')">Phase 2</button>
-                <button onclick="setPhase('FUNDED')">Funded</button>
-            </div>
-            <div class="admin-section"><b>Withdraw Rule</b><br>
-                <div id="withdrawDisplay">Lock: 52,000 USD</div>
-                <div id="withdrawCycle">Cycle: 14 Days</div>
-            </div>
-            <div class="admin-section"><b>Execution</b><br>
-                <div id="playwrightStatus" class="status-red">Browser: Disconnected</div>
-            </div>
-            <div class="admin-section"><b>Telegram</b><br>
-                <div id="telegramStatus" class="status-red">Bot: Offline</div>
-            </div>
-            <div class="admin-section"><b>Clawbot</b><br>
-                <div id="clawStatus" class="status-red">Inactive</div>
-            </div>
-            <div class="admin-section"><b>Engine Health</b><br>
-                <div id="engineHealth">CPU: -- | RAM: -- | Data: --</div>
-            </div>
-            <div class="admin-section"><b>Rollover Watch</b><br>
-                <div id="rolloverStatus" class="status-green">Status: --</div>
-            </div>
-            <div class="admin-section"><b>Broker Feed</b><br>
-                <div id="brokerFeedStatus" class="status-red">Feed: --</div>
-                <div id="brokerPriceStatus">Bid/Ask: --</div>
-            </div>
-            <div class="admin-section"><b>Broker Brain</b><br>
-                <div id="brokerBrainStatus" class="status-red">Adaptation: --</div>
             </div>
         </div>
     </div>
-    <div id="brokerKillBanner" class="kill-banner" style="display:none;">BROKER KILL SWITCH ACTIVE</div>
 
-    <div id="layout">
-        <!-- ================= AI MENTOR DRAWER ================= -->
-        <div class="mentor-drawer" id="mentorDrawer">
+    <aside id="mentorDrawer" class="mentor-drawer" aria-label="AI Mentor Drawer">
+        <div id="mentorResizer" class="mentor-resizer"></div>
+        <div class="mentor-body">
             <div class="mentor-header">
-                <h3>AI Institutional Mentor</h3>
-                <button id="mentorToggleBtn" onclick="toggleMentor()">Open</button>
-            </div>
-
-            <div id="mentorMeta" class="mentor-meta">Awaiting live narrative...</div>
-
-            <div id="mentorContent"></div>
-        </div>
-
-        <div class="chart-panel-main">
-            <div class="chart-controls">
-                <div class="chart-primary-controls">
-                    <div class="tf-btns">
-                        <button onclick="changeTF('1m')">M1</button>
-                        <button onclick="changeTF('5m')">M5</button>
-                        <button onclick="changeTF('15m')">M15</button>
-                        <button onclick="changeTF('1h')">H1</button>
-                        <button onclick="changeTF('4h')">H4</button>
-                    </div>
-                    <div class="tool-btns">
-                        <button onclick="reloadChartData()">Reload</button>
-                        <button onclick="zoomInChart()">Zoom In</button>
-                        <button onclick="zoomOutChart()">Zoom Out</button>
-                        <button onclick="resetChartView()">Reset View</button>
-                        <button id="scrollZoomToggle" onclick="toggleScrollZoom()">Scroll Zoom: ON</button>
-                        <button id="volumeToggleBtn" onclick="toggleVolumePanel()">Volume: OFF</button>
-                    </div>
-                    <div class="chart-symbol-tools">
-                        <span class="control-title">Symbols</span>
-                        <select id="symbolMultiSelect" multiple size="4" title="Select multiple symbols for chart loading"></select>
-                    </div>
-                </div>
-                <div class="chart-indicators">
-                    <span class="control-title">Indicators</span>
-                    <div class="overlay-btns">
-                        <button onclick="toggleOverlay('gann')">Gann</button>
-                        <button onclick="toggleOverlay('cycle')">Cycle</button>
-                        <button onclick="toggleOverlay('astro')">Astro</button>
-                        <button onclick="toggleOverlay('liquidity')">Liquidity</button>
-                        <button onclick="toggleOverlay('iceberg')">Iceberg</button>
-                        <button onclick="toggleOverlay('news')">News</button>
-                    </div>
-                    <div class="mentor-side-inline" id="chartMentorSide">
-                        <span class="control-title">Mentor Side</span>
-                        <span class="mentor-side-badge is-wait" id="chartMentorSideBadge">WAIT</span>
-                    </div>
-                    <div class="chart-data-quality" id="chartDataQuality">
-                        <span class="control-title">Data</span>
-                        <span class="data-quality-badge is-unknown" id="chartDataQualityBadge">--</span>
-                    </div>
-                    <div class="chart-live-price" id="chartLivePrice">
-                        <span class="control-title">Live</span>
-                        <span class="live-price-badge" id="chartLivePriceBadge">--</span>
-                    </div>
-                    <div class="chart-stream-status" id="chartStreamStatus">
-                        <span class="control-title">Stream</span>
-                        <span class="stream-status-badge is-unknown" id="chartStreamStatusBadge">--</span>
-                    </div>
+                <strong>AI Mentor</strong>
+                <div class="row" style="margin:0;">
+                    <button id="mentorRefreshBtn">Refresh</button>
+                    <button onclick="toggleMentor(false)">Close</button>
                 </div>
             </div>
-            <div id="chart"></div>
-        </div>
-    </div>
-
-    <div id="enginePanel" class="floating-panel" style="display:none;">
-        <div class="floating-header">
-            <span>🚦 Live Engines</span>
-            <div class="floating-controls">
-                <button class="floating-minimize" data-panel="enginePanel">—</button>
-                <button id="enginePanelClose" class="floating-close">✕</button>
+            <div id="mentorMeta" class="mentor-meta">--</div>
+            <div class="mentor-content-wrap">
+                <div id="mentorContent" class="mentor-content"></div>
             </div>
         </div>
-        <div class="panel-body">
-            <table id="engineTable" class="styled-table">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Symbol</th>
-                        <th>Status</th>
-                        <th>Model</th>
-                        <th>Confidence</th>
-                        <th>Top Signals</th>
-                        <th>AI Score</th>
-                        <th>Chosen</th>
-                        <th>Blocked Reason</th>
-                        <th>Active Model</th>
-                        <th>Score Gap</th>
-                        <th>Slots</th>
-                        <th>Data</th>
-                        <th>Rollover</th>
-                        <th>Contract</th>
-                        <th>Spread</th>
-                        <th>PnL%</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
+    </aside>
 
-    <div id="journalTablePanel" class="floating-panel" style="display:none;">
-        <div class="floating-header">
-            <span>📓 Trade Journal</span>
-            <div class="floating-controls">
-                <button class="floating-minimize" data-panel="journalTablePanel">—</button>
-                <button id="journalTableClose" class="floating-close">✕</button>
-            </div>
-        </div>
-        <div class="panel-body">
-            <table id="journalTable" class="styled-table">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Symbol</th>
-                        <th>Model</th>
-                        <th>Direction</th>
-                        <th>Entry</th>
-                        <th>SL</th>
-                        <th>TP</th>
-                        <th>Confidence</th>
-                        <th>Result</th>
-                        <th>Slippage</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <script>
+        (function () {
+            const existingBase = String(window.AQ_API_BASE || "").trim();
+            window.AQ_API_BASE = existingBase || "http://127.0.0.1:8000";
+            const prefixes = ["", "/frontend"];
+            const scripts = ["api.js", "chart.js", "mentor.js"];
+            const scriptVersion = "aq-v20260503";
 
-    <div id="icebergPanel" class="floating-panel" style="display:none;">
-        <div class="floating-header">
-            <span>🧊 Iceberg Table</span>
-            <div class="floating-controls">
-                <button class="floating-minimize" data-panel="icebergPanel">—</button>
-                <button id="icebergPanelClose" class="floating-close">✕</button>
-            </div>
-        </div>
-        <div class="panel-body">
-            <table id="icebergTable" class="styled-table">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Price</th>
-                        <th>Buy Vol</th>
-                        <th>Sell Vol</th>
-                        <th>Bias</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
+            const loadScriptWithFallback = (name, done) => {
+                let attempt = 0;
+                const tryNext = () => {
+                    if (attempt >= prefixes.length) {
+                        console.error(`Failed to load script: ${name}`);
+                        done();
+                        return;
+                    }
+                    const prefix = prefixes[attempt++];
+                    const script = document.createElement("script");
+                    script.src = `${prefix ? `${prefix}/` : ""}${name}?v=${scriptVersion}`;
+                    script.onload = () => done();
+                    script.onerror = () => tryNext();
+                    document.body.appendChild(script);
+                };
+                tryNext();
+            };
 
-    <div id="orderflowPanel" class="floating-panel" style="display:none;">
-        <div class="floating-header">
-            <span>🌊 Order Flow Table</span>
-            <div class="floating-controls">
-                <button class="floating-minimize" data-panel="orderflowPanel">—</button>
-                <button id="orderflowPanelClose" class="floating-close">✕</button>
-            </div>
-        </div>
-        <div class="panel-body">
-            <table id="orderflowTable" class="styled-table">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Delta</th>
-                        <th>Volume</th>
-                        <th>Imbalance</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
+            const load = (index) => {
+                if (index >= scripts.length) return;
+                loadScriptWithFallback(scripts[index], () => load(index + 1));
+            };
 
-    <div id="ladderPanel" class="floating-panel" style="display:none;">
-        <div class="floating-header">
-            <span>🪜 DOM Ladder</span>
-            <div class="floating-controls">
-                <button class="floating-minimize" data-panel="ladderPanel">—</button>
-                <button id="ladderPanelClose" class="floating-close">✕</button>
-            </div>
-        </div>
-        <div class="panel-body">
-            <table id="ladderTable" class="styled-table">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Bid Size</th>
-                        <th>Price</th>
-                        <th>Ask Size</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
-
-    <div id="timeSalesPanel" class="floating-panel" style="display:none;">
-        <div class="floating-header">
-            <span>⏱️ Time & Sales</span>
-            <div class="floating-controls">
-                <button class="floating-minimize" data-panel="timeSalesPanel">—</button>
-                <button id="timeSalesPanelClose" class="floating-close">✕</button>
-            </div>
-        </div>
-        <div class="panel-body">
-            <table id="timeSalesTable" class="styled-table">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Price</th>
-                        <th>Size</th>
-                        <th>Side</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
-
-    <div id="cyclePanel" class="floating-panel" style="display:none;">
-        <div class="floating-header">
-            <span>🔁 Cycle Engine</span>
-            <div class="floating-controls">
-                <button class="floating-minimize" data-panel="cyclePanel">—</button>
-                <button id="cyclePanelClose" class="floating-close">✕</button>
-            </div>
-        </div>
-        <div class="panel-body">
-            <table id="cycleTable" class="styled-table">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Bar Count</th>
-                        <th>Phase</th>
-                        <th>Is Cycle</th>
-                        <th>Active Cycles</th>
-                        <th>Next Cycle</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
-
-    <div id="liquidityPanel" class="floating-panel" style="display:none;">
-        <div class="floating-header">
-            <span>💧 Liquidity Engine</span>
-            <div class="floating-controls">
-                <button class="floating-minimize" data-panel="liquidityPanel">—</button>
-                <button id="liquidityPanelClose" class="floating-close">✕</button>
-            </div>
-        </div>
-        <div class="panel-body">
-            <table id="liquidityTable" class="styled-table">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Zone</th>
-                        <th>Bias</th>
-                        <th>Range Low</th>
-                        <th>Range High</th>
-                        <th>Equilibrium</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
-        </div>
-    </div>
-
-    <script src="js/app.js"></script>
-    <script src="js/chart.js"></script>
-    <script src="js/mentor.js"></script>
-    <script src="js/journal.js"></script>
-    <script src="js/admin.js"></script>
-    <script src="js/orderflow.js"></script>
-    <script src="js/panels.js"></script>
+            load(0);
+        })();
+    </script>
 </body>
 </html>

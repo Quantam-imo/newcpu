@@ -2,10 +2,13 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_DIR="$(cd "${ROOT_DIR}/.." && pwd)"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-5500}"
 BACKEND_LOG="${BACKEND_LOG:-/tmp/aq_backend.log}"
 FRONTEND_LOG="${FRONTEND_LOG:-/tmp/aq_frontend.log}"
+BACKEND_ROOT="${BACKEND_ROOT:-${WORKSPACE_DIR}/astroquant}"
+BACKEND_APP="${BACKEND_APP:-backend.main:app}"
 
 kill_port_listener() {
   local port="$1"
@@ -37,15 +40,16 @@ wait_http() {
 
 echo "[restart] stopping stale services"
 pkill -f "uvicorn backend.main:app" >/dev/null 2>&1 || true
+pkill -f "uvicorn astroquant.backend.main:app" >/dev/null 2>&1 || true
 pkill -f "python3 -m http.server ${FRONTEND_PORT}" >/dev/null 2>&1 || true
 kill_port_listener "${BACKEND_PORT}"
 kill_port_listener "${FRONTEND_PORT}"
 sleep 1
 
-echo "[restart] starting backend on :${BACKEND_PORT}"
+echo "[restart] starting backend (${BACKEND_APP}) from ${BACKEND_ROOT} on :${BACKEND_PORT}"
 (
-  cd "${ROOT_DIR}"
-  nohup python3 -m uvicorn backend.main:app --host 0.0.0.0 --port "${BACKEND_PORT}" >"${BACKEND_LOG}" 2>&1 &
+  cd "${BACKEND_ROOT}"
+  nohup python3 -m uvicorn "${BACKEND_APP}" --host 0.0.0.0 --port "${BACKEND_PORT}" >"${BACKEND_LOG}" 2>&1 &
 )
 
 echo "[restart] starting frontend on :${FRONTEND_PORT}"

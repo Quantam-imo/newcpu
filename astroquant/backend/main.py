@@ -2171,6 +2171,13 @@ def mentor_context(symbol: str = "GC.FUT"):
 
     market_data_raw = _run_with_timeout(1.5, lambda: runner.get_market_data(canonical_symbol) or {}, {})
     candles = list((market_data_raw or {}).get("candles") or [])
+    last_candle = candles[-1] if candles else {}
+    last_open = _float_value((last_candle or {}).get("open"), 0.0)
+    last_high = _float_value((last_candle or {}).get("high"), 0.0)
+    last_low = _float_value((last_candle or {}).get("low"), 0.0)
+    last_close = _float_value((last_candle or {}).get("close"), 0.0)
+    range_points = max(0.0, last_high - last_low)
+    midpoint = (last_high + last_low) / 2.0 if last_high > 0.0 or last_low > 0.0 else 0.0
     htf_bias = mentor_engine.derive_htf_bias(candles)
     ltf_structure = mentor_engine.derive_ltf_structure(candles)
     iceberg = mentor_engine.derive_iceberg(candles)
@@ -2197,6 +2204,16 @@ def mentor_context(symbol: str = "GC.FUT"):
         regime_mode=getattr(prop_engine, "active_mode", "STANDARD"),
         volatility_mode=getattr(prop_engine, "volatility_mode", "NORMAL"),
     )
+    gann_prices = []
+    for line in gann_lines:
+        price = _float_value((line or {}).get("price"), None)
+        if price is not None and price > 0:
+            gann_prices.append(price)
+
+    support_candidates = [p for p in gann_prices if p <= last_close] if last_close > 0 else []
+    resistance_candidates = [p for p in gann_prices if p >= last_close] if last_close > 0 else []
+    nearest_support = max(support_candidates) if support_candidates else None
+    nearest_resistance = min(resistance_candidates) if resistance_candidates else None
 
     market_data = {
         "symbol": symbol,
@@ -2222,6 +2239,16 @@ def mentor_context(symbol: str = "GC.FUT"):
     context["exit"] = exit_data
     context["gann"] = gann_lines
     context["astro"] = astro_markers
+    context["prices"] = {
+        "last": round(last_close, 4) if last_close > 0 else None,
+        "open": round(last_open, 4) if last_open > 0 else None,
+        "high": round(last_high, 4) if last_high > 0 else None,
+        "low": round(last_low, 4) if last_low > 0 else None,
+        "midpoint": round(midpoint, 4) if midpoint > 0 else None,
+        "range_points": round(range_points, 4) if range_points > 0 else None,
+        "nearest_support": round(nearest_support, 4) if nearest_support is not None else None,
+        "nearest_resistance": round(nearest_resistance, 4) if nearest_resistance is not None else None,
+    }
     context["orderflow_summary"] = orderflow_summary
     return context
 
