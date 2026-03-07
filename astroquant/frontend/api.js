@@ -1121,7 +1121,7 @@ async function syncPropEngineControls() {
 
 async function updateOpsStatus() {
 	const symbol = selectedChartSymbol();
-	const [feedRes, execRes, recRes, eqRes, propBehaviorRes, propRes, statusRes] = await Promise.all([
+	const [feedRes, execRes, recRes, eqRes, propBehaviorRes, propRes, statusRes, offsetQualityRes] = await Promise.all([
 		apiFetch("/status/feed"),
 		apiFetch("/status/execution"),
 		apiFetch("/status/reconciliation"),
@@ -1129,8 +1129,9 @@ async function updateOpsStatus() {
 		apiFetch(`/prop/auto_behavior?symbol=${encodeURIComponent(symbol)}`),
 		apiFetch("/prop_status"),
 		apiFetch("/status"),
+		apiFetch(`/market/offset_quality?symbol=${encodeURIComponent(symbol)}`),
 	]);
-	if (!feedRes.ok || !execRes.ok || !recRes.ok || !eqRes.ok || !propBehaviorRes.ok || !propRes.ok || !statusRes.ok) return;
+	if (!feedRes.ok || !execRes.ok || !recRes.ok || !eqRes.ok || !propBehaviorRes.ok || !propRes.ok || !statusRes.ok || !offsetQualityRes.ok) return;
 
 	const feed = await feedRes.json();
 	const exec = await execRes.json();
@@ -1138,6 +1139,7 @@ async function updateOpsStatus() {
 	const eq = await eqRes.json();
 	const prop = await propRes.json();
 	const status = await statusRes.json();
+	const offsetQuality = await offsetQualityRes.json();
 	const propBehaviorData = await propBehaviorRes.json();
 	const behavior = propBehaviorData?.behavior || {};
 	const override = propBehaviorData?.override || {};
@@ -1187,6 +1189,42 @@ async function updateOpsStatus() {
 	setOpsValue("opsGovCanTrade", prop?.trading_enabled ? "YES" : "NO", prop?.trading_enabled ? "good" : "warn");
 	setOpsValue("opsGovNewsHalt", status?.news_halt ? "YES" : "NO", status?.news_halt ? "warn" : "good");
 	setOpsValue("opsGovStrictStartup", status?.strict_startup ? "ON" : "OFF", status?.strict_startup ? "good" : "neutral");
+
+	const oqBasisStatus = String(offsetQuality?.basis?.status || "--").toUpperCase();
+	const oqOffsetStatus = String(offsetQuality?.offset_guard?.status || "--").toUpperCase();
+	const oqHardBlock = Boolean(offsetQuality?.trade_quality?.hard_block);
+	const oqScore = Number(offsetQuality?.trade_quality?.score);
+	const oqSignals = Number(offsetQuality?.signal_detection?.count || 0);
+
+	setText("opsOqSymbol", offsetQuality?.symbol || "--");
+	setText("opsOqFuturesSource", offsetQuality?.sources?.futures_source || "--");
+	setText("opsOqBrokerSymbol", offsetQuality?.sources?.broker_symbol || "--");
+	setOpsValue("opsOqBasisStatus", oqBasisStatus, oqBasisStatus === "LIVE" ? "good" : (oqBasisStatus === "STALE" ? "warn" : "bad"));
+	setOpsValue("opsOqOffsetStatus", oqOffsetStatus, oqOffsetStatus === "OK" ? "good" : (oqOffsetStatus === "HALT" ? "warn" : "bad"));
+	setText(
+		"opsOqOffsetDeviation",
+		offsetQuality?.offset_guard?.deviation == null
+			? "--"
+			: `${Number(offsetQuality.offset_guard.deviation).toFixed(3)} pts`,
+	);
+	setOpsValue(
+		"opsOqQualityScore",
+		Number.isFinite(oqScore) ? oqScore.toFixed(2) : "--",
+		Number.isFinite(oqScore) ? (oqScore >= 80 ? "good" : oqScore >= 60 ? "warn" : "bad") : "neutral",
+	);
+	setOpsValue(
+		"opsOqQualityGrade",
+		offsetQuality?.trade_quality?.grade || "--",
+		oqHardBlock ? "bad" : "good",
+	);
+	setOpsValue("opsOqSignalCount", String(oqSignals), oqSignals > 0 ? "good" : "warn");
+	setOpsValue("opsOqHardBlock", oqHardBlock ? "YES" : "NO", oqHardBlock ? "bad" : "good");
+	setOpsChips(
+		"opsOqReasons",
+		Array.isArray(offsetQuality?.trade_quality?.reasons) && offsetQuality.trade_quality.reasons.length
+			? offsetQuality.trade_quality.reasons.join(" | ")
+			: "NONE",
+	);
 
 	const runtime = String(exec?.execution_status || "UNKNOWN").toUpperCase() === "HALTED" ? "HALTED" : "ACTIVE";
 	setOpsValue("engineRuntimeStatus", runtime, runtime === "HALTED" ? "bad" : "good");
