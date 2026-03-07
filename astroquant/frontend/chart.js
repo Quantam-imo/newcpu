@@ -368,6 +368,9 @@ function restoreChartSettings() {
 			el.checked = false;
 		}
 	}
+	if (typeof settings.drawingMode === "string" && settings.drawingMode.trim()) {
+		drawingMode = settings.drawingMode.trim().toLowerCase();
+	}
 }
 
 function captureToggleSettings() {
@@ -1165,6 +1168,7 @@ function renderDrawings() {
 
 function setDrawingMode(mode) {
 	drawingMode = String(mode || "cursor").toLowerCase();
+	writeChartSettings({ drawingMode });
 	drawingPendingPoint = null;
 	const ids = ["chartToolCrosshair", "chartToolHLine", "chartToolTrend", "chartToolMove"];
 	for (const id of ids) {

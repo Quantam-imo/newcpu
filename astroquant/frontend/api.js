@@ -17,6 +17,7 @@ const apiFetch = async (path, options) => {
 };
 const AQ_ADMIN_TOKEN = window.AQ_ADMIN_TOKEN || localStorage.getItem("AQ_ADMIN_TOKEN") || "dev-admin-token";
 const AQ_ADMIN_ROLE = window.AQ_ADMIN_ROLE || localStorage.getItem("AQ_ADMIN_ROLE") || "ADMIN";
+const AQ_ADMIN_USER = window.AQ_ADMIN_USER || localStorage.getItem("AQ_ADMIN_USER") || "admin";
 const AQ_MICRO_PANEL_STATE_PREFIX = "AQ_MICRO_PANEL_OPEN_";
 const AQ_MICRO_PANEL_POS_PREFIX = "AQ_MICRO_PANEL_POS_";
 const AQ_OPS_PANEL_STATE_KEY = "AQ_OPS_PANEL_OPEN_V1";
@@ -548,6 +549,7 @@ function adminHeaders(extra = {}) {
 		"Content-Type": "application/json",
 		"x-admin-token": AQ_ADMIN_TOKEN,
 		"x-admin-role": AQ_ADMIN_ROLE,
+		"x-admin-user": AQ_ADMIN_USER,
 		...extra,
 	};
 }
@@ -1119,21 +1121,23 @@ async function syncPropEngineControls() {
 
 async function updateOpsStatus() {
 	const symbol = selectedChartSymbol();
-	const [feedRes, execRes, recRes, eqRes, propBehaviorRes, propRes] = await Promise.all([
+	const [feedRes, execRes, recRes, eqRes, propBehaviorRes, propRes, statusRes] = await Promise.all([
 		apiFetch("/status/feed"),
 		apiFetch("/status/execution"),
 		apiFetch("/status/reconciliation"),
 		apiFetch("/status/equity_verification"),
 		apiFetch(`/prop/auto_behavior?symbol=${encodeURIComponent(symbol)}`),
 		apiFetch("/prop_status"),
+		apiFetch("/status"),
 	]);
-	if (!feedRes.ok || !execRes.ok || !recRes.ok || !eqRes.ok || !propBehaviorRes.ok || !propRes.ok) return;
+	if (!feedRes.ok || !execRes.ok || !recRes.ok || !eqRes.ok || !propBehaviorRes.ok || !propRes.ok || !statusRes.ok) return;
 
 	const feed = await feedRes.json();
 	const exec = await execRes.json();
 	const rec = await recRes.json();
 	const eq = await eqRes.json();
 	const prop = await propRes.json();
+	const status = await statusRes.json();
 	const propBehaviorData = await propBehaviorRes.json();
 	const behavior = propBehaviorData?.behavior || {};
 	const override = propBehaviorData?.override || {};
@@ -1180,6 +1184,9 @@ async function updateOpsStatus() {
 	setOpsChips("opsPropReasons", Array.isArray(behavior?.reasons) && behavior.reasons.length ? behavior.reasons.join(" | ") : "--");
 	setOpsValue("opsPropOverride", overrideEnabled ? (override?.mode || "CUSTOM") : "NONE", overrideEnabled ? "warn" : "neutral");
 	setText("opsPropOverrideExpiry", override?.enabled && override?.expires_at ? new Date(Number(override.expires_at) * 1000).toLocaleString() : "--");
+	setOpsValue("opsGovCanTrade", prop?.trading_enabled ? "YES" : "NO", prop?.trading_enabled ? "good" : "warn");
+	setOpsValue("opsGovNewsHalt", status?.news_halt ? "YES" : "NO", status?.news_halt ? "warn" : "good");
+	setOpsValue("opsGovStrictStartup", status?.strict_startup ? "ON" : "OFF", status?.strict_startup ? "good" : "neutral");
 
 	const runtime = String(exec?.execution_status || "UNKNOWN").toUpperCase() === "HALTED" ? "HALTED" : "ACTIVE";
 	setOpsValue("engineRuntimeStatus", runtime, runtime === "HALTED" ? "bad" : "good");
@@ -1206,10 +1213,18 @@ async function updateOpsStatus() {
 			const execCfg = state?.execution_controls || {};
 			const riskCfg = state?.risk_limits || {};
 			const engineCfg = state?.engine_controls || {};
+			const runtime = state?.runtime || {};
 			setText("opsCfgSpreadMax", execCfg?.spread_max_limit != null ? Number(execCfg.spread_max_limit).toFixed(2) : "--");
 			setText("opsCfgCooldown", execCfg?.cooldown_seconds != null ? `${execCfg.cooldown_seconds}s` : "--");
 			setText("opsCfgMaxTrades", execCfg?.max_trades_per_day != null ? String(execCfg.max_trades_per_day) : "--");
 			setText("opsCfgMaxRisk", riskCfg?.max_risk_per_trade != null ? `${Number(riskCfg.max_risk_per_trade).toFixed(2)}%` : "--");
+			setOpsValue("opsRuntimeAutoTrading", runtime?.auto_trading_enabled ? "ON" : "OFF", runtime?.auto_trading_enabled ? "good" : "warn");
+			setOpsChips(
+				"opsRuntimeDisabledSymbols",
+				Array.isArray(runtime?.disabled_symbols) && runtime.disabled_symbols.length
+					? runtime.disabled_symbols.join(" | ")
+					: "NONE",
+			);
 			const flags = [
 				engineCfg?.ict_enabled ? "ICT" : null,
 				engineCfg?.iceberg_enabled ? "ICEBERG" : null,
@@ -1223,6 +1238,8 @@ async function updateOpsStatus() {
 		setText("opsCfgCooldown", "--");
 		setText("opsCfgMaxTrades", "--");
 		setText("opsCfgMaxRisk", "--");
+		setOpsValue("opsRuntimeAutoTrading", "--", "neutral");
+		setOpsValue("opsRuntimeDisabledSymbols", "--", "neutral");
 		setOpsValue("opsCfgEngineFlags", "--", "neutral");
 		setText("opsCfgLastSync", "--");
 	}
