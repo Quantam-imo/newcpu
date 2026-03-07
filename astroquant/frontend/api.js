@@ -1165,6 +1165,14 @@ async function updateOpsStatus() {
 	setOpsValue("opsSelectorProfile", selectorProfile?.calibrated ? "CALIBRATED" : "NOT_CALIBRATED", selectorProfile?.calibrated ? "good" : "warn");
 	setText("opsSelectorUpdated", selectorProfile?.updated_at ? new Date(selectorProfile.updated_at).toLocaleString() : "--");
 	setOpsValue("opsExecutionStatus", exec?.execution_status || "--", execStatus === "HALTED" ? "bad" : "good");
+	const panel = exec?.order_panel || {};
+	setOpsValue("opsOrderPanelReady", panel?.ready ? "READY" : "MISSING", panel?.ready ? "good" : "warn");
+	setText("opsOrderPanelReason", panel?.reason || "--");
+	setOpsValue("opsVolumeControl", panel?.volume_control ? "YES" : "NO", panel?.volume_control ? "good" : "warn");
+	const buyPriceVal = panel?.buy_price;
+	const sellPriceVal = panel?.sell_price;
+	setText("opsBuyButtonPrice", buyPriceVal == null || buyPriceVal === "" || Number.isNaN(Number(buyPriceVal)) ? "--" : Number(buyPriceVal).toFixed(2));
+	setText("opsSellButtonPrice", sellPriceVal == null || sellPriceVal === "" || Number.isNaN(Number(sellPriceVal)) ? "--" : Number(sellPriceVal).toFixed(2));
 	setOpsValue("opsReconciliationStatus", rec?.status || "--", recStatus.includes("HALT") || recStatus.includes("FAIL") ? "bad" : recStatus.includes("WARN") ? "warn" : "good");
 	setOpsValue("opsEquityStatus", eq?.status || "--", eqStatus.includes("HALT") || eqStatus.includes("FAIL") ? "bad" : eqStatus.includes("WARN") ? "warn" : "good");
 	setText("opsPropMode", behavior?.mode || "--");
@@ -1369,12 +1377,25 @@ async function engineAction(action) {
 }
 
 async function reconnectExecutionBrowser() {
-	await apiFetch("/execution/reconnect?async_mode=true&force=false", { method: "POST" });
+	setText("opsProbeSnapshot", "Reconnect requested...");
+	await apiFetch("/execution/reconnect?async_mode=false&force=true", { method: "POST" });
+	setText("opsProbeSnapshot", "Reconnecting browser session...");
+	await new Promise(resolve => setTimeout(resolve, 500));
+	setText("opsProbeSnapshot", "Validating selectors...");
+	await apiFetch("/execution/recover?force_reconnect=true", { method: "POST" });
 	await updateOpsStatus();
 	setTimeout(() => updateOpsStatus().catch(() => {}), 1200);
 	setTimeout(() => updateOpsStatus().catch(() => {}), 2600);
+	setText("opsProbeSnapshot", "Reconnect completed");
 }
 
+
+
+window.reconnectExecutionBrowserSafe = function reconnectExecutionBrowserSafe() {
+	reconnectExecutionBrowser().catch((err) => {
+		setText("opsProbeSnapshot", `Reconnect failed: ${String(err || "unknown error")}`);
+	});
+};
 async function adminEmergency(action, enabled = null) {
 	const endpointMap = {
 		kill: "/admin/control/emergency/kill",
@@ -1456,7 +1477,7 @@ const opsProbeBtn = document.getElementById("opsProbeBtn");
 if (opsProbeBtn) opsProbeBtn.addEventListener("click", () => runFeedProbe().catch(() => {}));
 
 const opsReconnectBtn = document.getElementById("opsReconnectBtn");
-if (opsReconnectBtn) opsReconnectBtn.addEventListener("click", () => reconnectExecutionBrowser().catch(() => {}));
+if (opsReconnectBtn) opsReconnectBtn.addEventListener("click", () => window.reconnectExecutionBrowserSafe());
 
 const opsKillSwitchBtn = document.getElementById("opsKillSwitchBtn");
 if (opsKillSwitchBtn) opsKillSwitchBtn.addEventListener("click", () => adminEmergency("kill").catch(() => {}));

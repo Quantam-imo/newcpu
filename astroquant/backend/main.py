@@ -21,6 +21,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from backend.ai.mentor_engine import MentorEngine
+from backend.admin_control_store import AdminControlStore
 from backend.config import (
     ADMIN_API_TOKEN,
     ADMIN_DEFAULT_ROLE,
@@ -42,6 +43,7 @@ from backend.reports.monthly_report import generate_monthly_report
 from backend.router_admin import build_admin_router
 from core.prop_profiles import profile_risk_pct, supported_account_keys, supported_modes
 from engine.multi_symbol_runner import MultiSymbolRunner
+from engine.mentor_engine_v3 import AIMentorV3
 from engine.delta_engine import DeltaEngine
 from engine.dom_engine import DomEngine
 from engine.orderflow_summary_engine import OrderflowSummaryEngine
@@ -60,6 +62,7 @@ dom_engine = DomEngine()
 orderflow_summary_engine = OrderflowSummaryEngine()
 dynamic_prop_engine = DynamicPropEngine()
 mentor_engine = MentorEngine()
+mentor_v3_engine = AIMentorV3()
 runner_thread = None
 
 SELECTOR_PROFILE_PATH = Path("data/matchtrader_selectors.json")
@@ -76,12 +79,109 @@ EXECUTION_RECONNECT_STATE = {
     "finished_at": None,
     "last_result": None,
 }
+EXECUTION_CONTROL_LOCK = threading.Lock()
+EXECUTION_CONTROL_STATE = {
+    "paused": False,
+    "reason": None,
+    "updated_at": None,
+}
+SYMBOL_LOT_CAPS = {
+    "XAUUSD": 0.50,
+    "EURUSD": 1.00,
+    "NQ": 1.00,
+    "US30": 1.00,
+    "BTC": 0.05,
+    "BTCUSD": 0.05,
+}
+ADMIN_CONTROL_STORE = AdminControlStore("data/admin_control.db")
 APP_STARTED_AT = time.time()
 JOURNAL_EXPORT_DIR = BASE_DIR / "reports" / "journal_dayend"
 JOURNAL_EXPORT_EVENT = threading.Event()
 JOURNAL_EXPORT_THREAD = None
 LAST_PHASE_EVENT = None
 TIMEOUT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=12, thread_name_prefix="aq-timeout")
+PLAYWRIGHT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="aq-playwright")
+
+
+def _run_playwright_task(func, fallback=None, timeout_seconds: float = 12.0):
+    timeout_s = max(0.1, float(timeout_seconds or 0.1))
+    future = PLAYWRIGHT_EXECUTOR.submit(func)
+    try:
+        return future.result(timeout=timeout_s)
+    except concurrent.futures.TimeoutError:
+        try:
+            future.cancel()
+        except Exception:
+            pass
+        return fallback
+    except Exception:
+        return fallback
+
+
+def _execution_control_snapshot() -> dict:
+    with EXECUTION_CONTROL_LOCK:
+        return dict(EXECUTION_CONTROL_STATE)
+
+
+def _set_execution_paused(paused: bool, reason: str | None = None) -> dict:
+    now_ts = int(time.time())
+    with EXECUTION_CONTROL_LOCK:
+        EXECUTION_CONTROL_STATE["paused"] = bool(paused)
+        EXECUTION_CONTROL_STATE["reason"] = (str(reason).strip() if reason else None)
+        EXECUTION_CONTROL_STATE["updated_at"] = now_ts
+        snapshot = dict(EXECUTION_CONTROL_STATE)
+    runner.auto_trading_enabled = not bool(paused)
+    return snapshot
+
+
+def _symbol_lot_cap(symbol: str | None) -> tuple[str, float]:
+    raw = str(symbol or "XAUUSD").strip().upper()
+    canonical = str(_canonical_symbol(raw) or raw).upper()
+    if canonical == "BTCUSD":
+        canonical = "BTC"
+
+    # Base symbol caps are calibrated for a 50K account and scaled by account size.
+    base_cap = float(SYMBOL_LOT_CAPS.get(canonical, SYMBOL_LOT_CAPS.get(raw, 0.50)))
+    account_size = max(1000.0, float(getattr(getattr(prop_engine, "config", None), "account_size", 50000.0) or 50000.0))
+    scaling = max(0.10, min(2.50, account_size / 50000.0))
+    account_scaled_cap = max(0.01, base_cap * scaling)
+
+    # Admin risk limit acts as an approved hard ceiling for execution lot sizing.
+    admin_max_cap = None
+    try:
+        risk_cfg = ADMIN_CONTROL_STORE.get_risk_limits() or {}
+        admin_max_cap = float(risk_cfg.get("max_lot_size")) if risk_cfg.get("max_lot_size") is not None else None
+    except Exception:
+        admin_max_cap = None
+
+    final_cap = min(account_scaled_cap, max(0.01, float(admin_max_cap))) if admin_max_cap is not None else account_scaled_cap
+    return canonical, max(0.01, final_cap)
+
+
+def _enforce_symbol_lot_cap(symbol: str | None, requested_lot: float) -> dict:
+    canonical_symbol, cap = _symbol_lot_cap(symbol)
+    req = max(0.01, round(float(requested_lot or 0.01), 4))
+    effective = min(req, cap)
+
+    account_size = max(1000.0, float(getattr(getattr(prop_engine, "config", None), "account_size", 50000.0) or 50000.0))
+    account_key = f"{int(round(account_size / 1000.0))}K"
+    admin_max_cap = None
+    try:
+        risk_cfg = ADMIN_CONTROL_STORE.get_risk_limits() or {}
+        admin_max_cap = float(risk_cfg.get("max_lot_size")) if risk_cfg.get("max_lot_size") is not None else None
+    except Exception:
+        admin_max_cap = None
+
+    return {
+        "symbol": canonical_symbol,
+        "requested_lot": req,
+        "effective_lot": round(effective, 4),
+        "lot_cap": round(cap, 4),
+        "capped": (effective < req),
+        "account_size": round(account_size, 2),
+        "account_key": account_key,
+        "admin_max_lot_approved": round(float(admin_max_cap), 4) if admin_max_cap is not None else None,
+    }
 
 
 def _phase_base_confidence_threshold(phase: str) -> float:
@@ -425,9 +525,10 @@ def _connect_execution_browser(force: bool = False):
             if page is None:
                 return {"status": "error", "connected": False, "reason": "Playwright returned no page", "page": None}
 
-            if EXECUTION_BROWSER_URL and not EXECUTION_BROWSER_CDP_URL:
+            target_url = str(EXECUTION_BROWSER_URL or "https://manager.maven.markets/app/trade").strip()
+            if target_url and not EXECUTION_BROWSER_CDP_URL:
                 try:
-                    runtime_browser_engine.goto(EXECUTION_BROWSER_URL)
+                    runtime_browser_engine.goto(target_url)
                 except Exception:
                     pass
 
@@ -452,7 +553,7 @@ def _connect_execution_browser(force: bool = False):
 
 
 def _execution_reconnect_handler():
-    result = _connect_execution_browser(force=True)
+    result = _run_playwright_task(lambda: _connect_execution_browser(force=True), fallback={"status": "error", "connected": False}) or {}
     return result.get("page")
 
 
@@ -471,7 +572,7 @@ def _trigger_execution_reconnect(force: bool = True):
         EXECUTION_RECONNECT_STATE["last_result"] = None
 
     def worker():
-        result = _connect_execution_browser(force=force)
+        result = _run_playwright_task(lambda: _connect_execution_browser(force=force), fallback={"status": "error", "connected": False}) or {}
         payload = {
             "status": result.get("status"),
             "connected": bool(result.get("connected")),
@@ -691,6 +792,7 @@ def _chart_overlays(candles: list[dict]):
 def _chart_meta(symbol: str):
     market_ctx = market_context(symbol)
     execution_health = runner.execution.execution_health()
+    execution_control = _execution_control_snapshot()
     paused_reasons = []
     if str(execution_health.get("execution_status", "OK")).upper() == "HALTED":
         paused_reasons.append("Execution halted")
@@ -698,15 +800,23 @@ def _chart_meta(symbol: str):
         paused_reasons.append("Prop governance lock")
     if bool(runner.state.news_halt):
         paused_reasons.append("News halt")
+    if bool(execution_control.get("paused")):
+        paused_reasons.append(str(execution_control.get("reason") or "Operator pause"))
+    auto_allowed = (
+        prop_engine.can_trade()
+        and str(execution_health.get("execution_status", "OK")).upper() != "HALTED"
+        and not bool(execution_control.get("paused"))
+    )
     return {
         "confidence": round(_float_value(market_ctx.get("confidence"), 0.0), 2),
         "phase": prop_engine.phase,
         "risk_percent": round(_float_value(market_ctx.get("risk_percent"), prop_engine.get_phase_risk()) * 100.0, 3),
         "volatility_state": prop_engine.volatility_mode,
-        "auto_mode": "AUTO" if (prop_engine.can_trade() and str(execution_health.get("execution_status", "OK")).upper() != "HALTED") else "PAUSED",
+        "auto_mode": "AUTO" if auto_allowed else "PAUSED",
         "news": "HALT" if runner.state.news_halt else "NONE",
         "system_paused": len(paused_reasons) > 0,
         "pause_reason": " | ".join(paused_reasons) if paused_reasons else None,
+        "execution_pause": execution_control,
         "position": market_ctx.get("position"),
         "data_source": "LIVE",
     }
@@ -1110,7 +1220,7 @@ async def lifespan(app: FastAPI):
     init_journal()
     runner.execution.set_reconnect_handler(_execution_reconnect_handler)
     if EXECUTION_BROWSER_AUTO_ATTACH:
-        _connect_execution_browser(force=False)
+        _run_playwright_task(lambda: _connect_execution_browser(force=False), fallback=None, timeout_seconds=8.0)
     _start_journal_dayend_worker()
     _run_with_timeout(2.0, lambda: runner.warmup_contracts(force_probe=False, max_candidates=1, max_probe_seconds=0.8), {})
     if DATABENTO_STRICT_STARTUP and not feed_health.get("configured"):
@@ -1215,7 +1325,25 @@ def equity_verification_status():
 @app.get("/status/execution")
 def execution_status():
     execution_health = runner.execution.execution_health()
-    broker_quote = runner.execution.broker_quote_snapshot(expected_symbols=["XAUUSD", "XAU/USD"]) or {}
+    broker_quote = _run_playwright_task(
+        lambda: runner.execution.broker_quote_snapshot(expected_symbols=["XAUUSD", "XAU/USD"]),
+        fallback={},
+        timeout_seconds=4.0,
+    ) or {}
+    order_panel = _run_playwright_task(
+        lambda: runner.execution.playwright.order_panel_snapshot(),
+        fallback={
+            "ready": False,
+            "reason": "playwright_unavailable",
+            "panel": False,
+            "buy_button": False,
+            "sell_button": False,
+            "volume_control": False,
+            "buy_price": None,
+            "sell_price": None,
+        },
+        timeout_seconds=4.0,
+    )
     selector_profile = selector_profile_status()
     connection_status = execution_connection_status()
     configured = bool(connection_status.get("cdp_configured") or connection_status.get("user_data_dir_configured"))
@@ -1237,6 +1365,26 @@ def execution_status():
     heartbeat = int(execution_health.get("last_browser_heartbeat") or 0)
     now_ts = int(datetime.now(timezone.utc).timestamp())
     heartbeat_age = (now_ts - heartbeat) if heartbeat > 0 else None
+    browser_meta = _run_playwright_task(
+        lambda: {
+            "url": str(getattr(runner.execution.playwright.page, "url", "") or ""),
+            "title": str(runner.execution.playwright.page.title() or "") if runner.execution.playwright.page else "",
+        },
+        fallback={"url": "", "title": ""},
+        timeout_seconds=4.0,
+    ) or {"url": "", "title": ""}
+    current_url = str(browser_meta.get("url") or "")
+    page_title = str(browser_meta.get("title") or "")
+    check_url = current_url.lower()
+    check_title = page_title.lower()
+    cf_challenge = (
+        ("__cf_chl_rt_tk=" in check_url)
+        or ("/cdn-cgi/challenge-platform" in check_url)
+        or ("just a moment" in check_title)
+        or ("checking your browser" in check_title)
+    )
+    execution_control = _execution_control_snapshot()
+
     return {
         "connected": connected,
         "order_in_progress": runner.execution.playwright.order_in_progress,
@@ -1257,7 +1405,12 @@ def execution_status():
         "browser_heartbeat": heartbeat,
         "browser_heartbeat_status": "STALE" if (heartbeat_age is not None and heartbeat_age > 20) else ("OK" if heartbeat else "UNKNOWN"),
         "browser_heartbeat_age_seconds": heartbeat_age,
+        "browser_url": current_url or None,
+        "browser_title": page_title or None,
+        "browser_challenge_detected": cf_challenge,
+        "execution_pause": execution_control,
         "broker_quote": broker_quote,
+        "order_panel": order_panel,
         "selector_profile": selector_profile,
         "connection": connection_status,
         "reconnect": _execution_reconnect_snapshot(),
@@ -1266,7 +1419,7 @@ def execution_status():
 
 @app.post("/execution/reconnect")
 def execution_reconnect(
-    async_mode: bool = Query(default=True),
+    async_mode: bool = Query(default=False),
     force: bool = Query(default=False),
 ):
     if async_mode:
@@ -1286,7 +1439,11 @@ def execution_reconnect(
             "reconnect": snapshot,
         }
 
-    result = _connect_execution_browser(force=force)
+    result = _run_playwright_task(
+        lambda: _connect_execution_browser(force=force),
+        fallback={"status": "error", "connected": False, "reason": "playwright_executor_timeout"},
+        timeout_seconds=12.0,
+    ) or {}
     return {
         "status": result.get("status"),
         "connected": bool(result.get("connected")),
@@ -1299,13 +1456,395 @@ def execution_reconnect(
 
 @app.post("/execution/recover")
 def execution_recover(force_reconnect: bool = Query(default=False)):
-    recovery = runner.execution.playwright.recover_from_selector_failure(force_reconnect=force_reconnect)
+    recovery = _run_playwright_task(
+        lambda: runner.execution.playwright.recover_from_selector_failure(force_reconnect=force_reconnect),
+        fallback={"ok": False, "reason": "playwright_executor_timeout"},
+        timeout_seconds=12.0,
+    ) or {"ok": False, "reason": "playwright_executor_timeout"}
     return {
         "status": "ok" if recovery.get("ok") else "failed",
         "recovery": recovery,
         "execution": runner.execution.execution_health(),
         "connection": execution_connection_status(),
     }
+
+
+@app.post("/execution/test_order")
+def execution_test_order(
+    direction: str = Query(default="BUY"),
+    lot_size: float = Query(default=0.01),
+    symbol: str = Query(default="XAUUSD"),
+    sl: float | None = Query(default=None),
+    tp: float | None = Query(default=None),
+    execute: bool = Query(default=False),
+    confirm: str | None = Query(default=None),
+):
+    execution_control = _execution_control_snapshot()
+    if bool(execution_control.get("paused")):
+        return {
+            "status": "blocked",
+            "reason": "execution_paused",
+            "pause": execution_control,
+        }
+
+    side = str(direction or "BUY").strip().upper()
+    if side not in {"BUY", "SELL"}:
+        return {"status": "error", "reason": "direction_must_be_buy_or_sell"}
+
+    lot_meta = _enforce_symbol_lot_cap(symbol, float(lot_size or 0.01))
+    lot = float(lot_meta.get("effective_lot") or 0.01)
+
+    panel = _run_playwright_task(
+        lambda: runner.execution.playwright.order_panel_snapshot(),
+        fallback={"ready": False, "reason": "playwright_unavailable"},
+        timeout_seconds=6.0,
+    ) or {"ready": False, "reason": "playwright_unavailable"}
+
+    if not panel.get("ready") and str(panel.get("reason") or "") in {"page_unavailable", "playwright_unavailable"}:
+        _run_playwright_task(
+            lambda: _connect_execution_browser(force=False),
+            fallback=None,
+            timeout_seconds=10.0,
+        )
+        panel = _run_playwright_task(
+            lambda: runner.execution.playwright.order_panel_snapshot(),
+            fallback={"ready": False, "reason": "playwright_unavailable"},
+            timeout_seconds=6.0,
+        ) or {"ready": False, "reason": "playwright_unavailable"}
+
+    if not panel.get("ready"):
+        return {
+            "status": "failed",
+            "reason": "order_panel_not_ready",
+            "order_panel": panel,
+        }
+
+    expected_entry = panel.get("buy_price") if side == "BUY" else panel.get("sell_price")
+    sl_value = float(sl) if sl is not None else None
+    tp_value = float(tp) if tp is not None else None
+    if execute and expected_entry is not None and (sl_value is None or tp_value is None):
+        # Provide conservative defaults for explicit manual live tests.
+        default_offset = max(0.0005, float(expected_entry) * 0.001)
+        if side == "BUY":
+            sl_value = sl_value if sl_value is not None else float(expected_entry) - default_offset
+            tp_value = tp_value if tp_value is not None else float(expected_entry) + (default_offset * 1.5)
+        else:
+            sl_value = sl_value if sl_value is not None else float(expected_entry) + default_offset
+            tp_value = tp_value if tp_value is not None else float(expected_entry) - (default_offset * 1.5)
+
+    signal = {
+        "model": "MANUAL_TEST",
+        "direction": side,
+        "symbol": str(symbol or "XAUUSD").strip().upper(),
+        "entry_price": expected_entry,
+        "sl": sl_value,
+        "tp": tp_value,
+    }
+
+    if not execute:
+        return {
+            "status": "dry_run_ok",
+            "message": "Validation passed; no live order submitted",
+            "order_panel": panel,
+            "signal": signal,
+            "lot_size": lot,
+            "lot_meta": lot_meta,
+            "live_submit_armed": False,
+        }
+
+    if str(confirm or "").strip().upper() != "CONFIRM_LIVE_ORDER":
+        return {
+            "status": "blocked",
+            "reason": "missing_confirm_token",
+            "required_confirm": "CONFIRM_LIVE_ORDER",
+            "order_panel": panel,
+        }
+
+    result = _run_playwright_task(
+        lambda: runner.execution.execute(signal, lot),
+        fallback={"status": "Rejected", "reason": "playwright_executor_timeout"},
+        timeout_seconds=45.0,
+    ) or {"status": "Rejected", "reason": "playwright_executor_timeout"}
+
+    result_status = str(result.get("status") or "").upper()
+    submitted = result_status in {"EXECUTED", "SUBMITTED_NO_CONFIRM"}
+
+    return {
+        "status": "submitted" if submitted else "failed",
+        "result": result,
+        "signal": signal,
+        "lot_size": lot,
+        "lot_meta": lot_meta,
+        "order_panel": panel,
+        "live_submit_armed": True,
+    }
+
+
+@app.post("/execution/pause")
+def execution_pause(reason: str = Query(default="operator_manual_pause")):
+    snapshot = _set_execution_paused(True, reason=reason)
+    return {
+        "status": "ok",
+        "pause": snapshot,
+        "auto_trading_enabled": bool(runner.auto_trading_enabled),
+    }
+
+
+@app.post("/execution/resume")
+def execution_resume():
+    snapshot = _set_execution_paused(False, reason=None)
+    return {
+        "status": "ok",
+        "pause": snapshot,
+        "auto_trading_enabled": bool(runner.auto_trading_enabled),
+    }
+
+
+@app.get("/execution/pause")
+def execution_pause_state():
+    return {
+        "status": "ok",
+        "pause": _execution_control_snapshot(),
+        "auto_trading_enabled": bool(runner.auto_trading_enabled),
+    }
+
+
+@app.get("/execution/lot_policy")
+def execution_lot_policy(symbol: str = Query(default="XAUUSD"), requested_lot: float = Query(default=0.01)):
+    return {
+        "status": "ok",
+        "policy": _enforce_symbol_lot_cap(symbol=symbol, requested_lot=float(requested_lot or 0.01)),
+        "supported_account_sizes": supported_account_keys(),
+    }
+
+
+def _execution_debug_selectors_impl():
+    page = runner.execution.playwright.page
+    if page is None:
+        return {"status": "error", "reason": "playwright_page_unavailable"}
+
+    candidate_selectors = {
+        "order_panel": [
+            "trade-order-panel[data-testid='mw-order-panel']",
+            "[data-testid='mw-order-panel']",
+            "[data-testid*='order-panel']",
+            "[data-testid*='order'][data-testid*='panel']",
+            "trade-order-panel",
+        ],
+        "buy": [
+            "[data-testid='order-panel-buy-button']",
+            "[data-testid*='buy-button']",
+            "button:has-text('Buy')",
+            "button:has-text('BUY')",
+        ],
+        "sell": [
+            "[data-testid='order-panel-sell-button']",
+            "[data-testid*='sell-button']",
+            "button:has-text('Sell')",
+            "button:has-text('SELL')",
+        ],
+        "volume": [
+            "[data-testid='input-stepper-input']",
+            "[data-testid*='lot']",
+            "[data-testid*='volume']",
+            "input[type='number']",
+        ],
+    }
+
+    matches: dict[str, dict[str, dict[str, int | str | None]]] = {}
+    for key, selectors in candidate_selectors.items():
+        selector_counts: dict[str, dict[str, int | str | None]] = {}
+        for selector in selectors:
+            try:
+                selector_counts[selector] = {"count": int(page.locator(selector).count()), "error": None}
+            except Exception as exc:
+                selector_counts[selector] = {"count": None, "error": str(exc)}
+        matches[key] = selector_counts
+
+    page_title = None
+    frame_count = 0
+    testids_sample = []
+    try:
+        page_title = page.title()
+    except Exception:
+        page_title = None
+
+    try:
+        frame_count = len(page.frames)
+    except Exception:
+        frame_count = 0
+
+    try:
+        testids_sample = page.evaluate(
+            """
+            () => Array.from(document.querySelectorAll('[data-testid]'))
+                .map(el => el.getAttribute('data-testid'))
+                .filter(Boolean)
+                .slice(0, 500)
+            """
+        )
+    except Exception:
+        testids_sample = []
+
+    interesting_testids = [
+        tid for tid in testids_sample
+        if any(key in str(tid).lower() for key in ["position", "order", "open", "close", "confirm", "profit", "loss", "trade"])
+    ]
+
+    return {
+        "status": "ok",
+        "url": str(getattr(page, "url", "") or ""),
+        "title": page_title,
+        "frame_count": frame_count,
+        "selector_matches": matches,
+        "testids_sample": testids_sample,
+        "testids_interesting": interesting_testids,
+    }
+
+
+@app.get("/execution/debug_selectors")
+def execution_debug_selectors():
+    return _run_playwright_task(
+        _execution_debug_selectors_impl,
+        fallback={"status": "error", "reason": "playwright_executor_timeout"},
+        timeout_seconds=12.0,
+    )
+
+
+@app.post("/execution/calibrate_selectors")
+def execution_calibrate_selectors(save: bool = Query(default=True)):
+    def _impl():
+        calibrator = getattr(runner.execution, "calibrate_selectors", None)
+        if not callable(calibrator):
+            calibrator = getattr(getattr(runner.execution, "playwright", None), "calibrate_selectors", None)
+        if not callable(calibrator):
+            return {"status": "error", "reason": "calibration_not_supported"}
+
+        result = calibrator(save=bool(save)) or {}
+        return {
+            "status": "ok" if bool(result.get("ok")) else "error",
+            "save": bool(save),
+            "result": result,
+            "selector_profile": selector_profile_status(),
+        }
+
+    return _run_playwright_task(
+        _impl,
+        fallback={"status": "error", "reason": "playwright_executor_timeout"},
+        timeout_seconds=20.0,
+    )
+
+
+@app.post("/execution/close_position")
+def execution_close_position(symbol: str | None = Query(default=None)):
+    def _impl():
+        page = runner.execution.playwright.page
+        if page is None:
+            return {"status": "error", "reason": "playwright_page_unavailable"}
+
+        closed = bool(runner.execution.playwright.close_position_immediately(page, symbol=symbol))
+        return {
+            "status": "ok" if closed else "no_action",
+            "closed": closed,
+            "symbol": str(symbol).upper() if symbol else None,
+        }
+
+    return _run_playwright_task(
+        _impl,
+        fallback={"status": "error", "reason": "playwright_executor_timeout"},
+        timeout_seconds=12.0,
+    )
+
+
+@app.post("/execution/panic_close_all")
+def execution_panic_close_all(symbols_csv: str | None = Query(default=None)):
+    # Enter operator pause first so auto-loop cannot re-open while panic close is running.
+    pause_snapshot = _set_execution_paused(True, reason="panic_close_all")
+
+    targets = []
+    if symbols_csv:
+        targets = [str(item).strip().upper() for item in str(symbols_csv).split(",") if str(item).strip()]
+    if not targets:
+        targets = ["XAUUSD", "EURUSD", "NQ", "US30", "BTCUSD", "BTC"]
+
+    def _impl():
+        page = runner.execution.playwright.page
+        if page is None:
+            return {"status": "error", "reason": "playwright_page_unavailable", "results": []}
+
+        seen = set()
+        results = []
+        for symbol in targets:
+            key = str(symbol).upper()
+            if key in seen:
+                continue
+            seen.add(key)
+            try:
+                closed = bool(runner.execution.playwright.close_position_immediately(page, symbol=key))
+                results.append({"symbol": key, "closed": closed})
+            except Exception as exc:
+                results.append({"symbol": key, "closed": False, "error": str(exc)})
+
+        any_closed = any(bool(item.get("closed")) for item in results)
+        return {
+            "status": "ok" if any_closed else "no_action",
+            "closed": any_closed,
+            "results": results,
+        }
+
+    result = _run_playwright_task(
+        _impl,
+        fallback={"status": "error", "reason": "playwright_executor_timeout", "results": []},
+        timeout_seconds=20.0,
+    ) or {"status": "error", "reason": "playwright_executor_timeout", "results": []}
+
+    return {
+        "status": result.get("status"),
+        "closed": bool(result.get("closed")),
+        "results": result.get("results", []),
+        "pause": pause_snapshot,
+        "auto_trading_enabled": bool(runner.auto_trading_enabled),
+    }
+
+
+@app.post("/execution/navigate_trade")
+def execution_navigate_trade(
+    url: str | None = Query(default=None),
+    wait_ms: int = Query(default=8000),
+):
+    def _impl():
+        target = str(url or EXECUTION_BROWSER_URL or "https://manager.maven.markets/app/trade").strip()
+        if not target:
+            return {"status": "error", "reason": "target_url_missing"}
+
+        page = runner.execution.playwright.page
+        if page is None:
+            connect = _connect_execution_browser(force=False)
+            page = connect.get("page")
+
+        if page is None:
+            return {"status": "error", "reason": "playwright_page_unavailable"}
+
+        try:
+            page.goto(target, wait_until="domcontentloaded", timeout=max(1500, int(wait_ms)))
+        except Exception:
+            try:
+                page.goto(target)
+            except Exception as exc:
+                return {"status": "error", "reason": f"navigation_failed: {exc}", "target": target}
+
+        return {
+            "status": "ok",
+            "target": target,
+            "current_url": str(getattr(page, "url", "") or ""),
+            "connection": execution_connection_status(),
+        }
+
+    return _run_playwright_task(
+        _impl,
+        fallback={"status": "error", "reason": "playwright_executor_timeout"},
+        timeout_seconds=15.0,
+    )
 
 
 @app.get("/prop_status")
@@ -1432,6 +1971,7 @@ def system_health():
     execution_ok = execution_status != "HALTED"
     equity_halt = bool(equity_verification.get("hard_halt"))
     reconciliation_halt = bool(reconciliation.get("hard_halt"))
+    execution_paused = bool(_execution_control_snapshot().get("paused"))
 
     cpu_cores = int(os.cpu_count() or 0)
     cpu_load_1m = None
@@ -1478,6 +2018,8 @@ def system_health():
         issues.append("EQUITY_HALT")
     if reconciliation_halt:
         issues.append("RECONCILIATION_HALT")
+    if execution_paused:
+        issues.append("EXECUTION_PAUSED")
     if cpu_load_1m is not None and cpu_cores > 0 and cpu_load_1m > cpu_cores * 1.15:
         issues.append("CPU_LOAD_HIGH")
     if memory_used_pct is not None and memory_used_pct >= 90.0:
@@ -1492,6 +2034,7 @@ def system_health():
     score -= 20 if not execution_ok else 0
     score -= 15 if equity_halt else 0
     score -= 10 if reconciliation_halt else 0
+    score -= 5 if execution_paused else 0
     score -= 8 if (cpu_load_1m is not None and cpu_cores > 0 and cpu_load_1m > cpu_cores * 1.15) else 0
     score -= 8 if (memory_used_pct is not None and memory_used_pct >= 90.0) else 0
     score -= 8 if (disk_used_pct is not None and disk_used_pct >= 90.0) else 0
@@ -1514,6 +2057,7 @@ def system_health():
         "equity_verification_halt": equity_halt,
         "reconciliation_status": reconciliation.get("status", "UNINITIALIZED"),
         "reconciliation_halt": reconciliation_halt,
+        "execution_paused": execution_paused,
         "cpu_cores": cpu_cores,
         "cpu_load_1m": cpu_load_1m,
         "memory_used_pct": memory_used_pct,
@@ -2250,7 +2794,71 @@ def mentor_context(symbol: str = "GC.FUT"):
         "nearest_resistance": round(nearest_resistance, 4) if nearest_resistance is not None else None,
     }
     context["orderflow_summary"] = orderflow_summary
+
+    prev_low = _float_value(candles[-2].get("low") if len(candles) >= 2 else last_low, last_low)
+    prev_high = _float_value(candles[-2].get("high") if len(candles) >= 2 else last_high, last_high)
+    iceberg_buy = _float_value((iceberg or {}).get("strength"), 0.0) if str((iceberg or {}).get("bias") or "").upper().startswith("BUY") else 0.0
+    iceberg_sell = _float_value((iceberg or {}).get("strength"), 0.0) if str((iceberg or {}).get("bias") or "").upper().startswith("SELL") else 0.0
+    delta_value = _float_value((orderflow_summary or {}).get("delta"), 0.0)
+    sweep_state = "none"
+    if last_close > 0 and prev_high > 0 and last_close > prev_high:
+        sweep_state = "buy_side_sweep"
+    elif last_close > 0 and prev_low > 0 and last_close < prev_low:
+        sweep_state = "sell_side_sweep"
+
+    session_name = str(prop_engine.get_session() or "Transition")
+    if session_name == "US":
+        session_name = "NewYork"
+    elif session_name == "Europe":
+        session_name = "London"
+
+    market_snapshot = {
+        "symbol": canonical_symbol,
+        "price": last_close,
+        "prev_low": prev_low,
+        "prev_high": prev_high,
+        "fvg": "ON" if bool((overlays or {}).get("fvg")) else "OFF",
+        "ob": "ON" if bool((overlays or {}).get("order_blocks")) else "OFF",
+        "sweep": sweep_state,
+        "range": range_points,
+        "low": last_low,
+        "bar_count": len(candles),
+        "session": session_name,
+        "kill_zone": session_name,
+        "htf_bias": htf_bias,
+        "ltf_structure": ltf_structure,
+        "volatility": str(prop_engine.volatility_mode or "NORMAL"),
+        "iceberg_buy": iceberg_buy,
+        "iceberg_sell": iceberg_sell,
+        "delta": delta_value,
+        "poc": _float_value((orderflow_summary or {}).get("dom_spread"), midpoint),
+        "external_high": nearest_resistance if nearest_resistance is not None else prev_high,
+        "external_low": nearest_support if nearest_support is not None else prev_low,
+        "liquidity_target": "external_high" if delta_value >= 0 else "external_low",
+        "news_event": "US CPI" if bool(runner.state.news_halt) else "None",
+        "news_impact": "High" if bool(runner.state.news_halt) else "Low",
+        "news_time": "--",
+        "astro_marker": (astro_markers[0] or {}).get("label") if astro_markers else "Mars Square Saturn",
+        "astro_window_active": bool(astro_markers),
+        "astro_bias": "Volatility" if bool(astro_markers) else "Neutral",
+    }
+    v3_payload = mentor_v3_engine.generate(market_snapshot)
+    context["v3"] = v3_payload
+    context["story"] = v3_payload.get("story")
+    context["probability"] = v3_payload.get("probability", {})
     return context
+
+
+@app.get("/mentor")
+def mentor_v3(symbol: str = "GC.FUT"):
+    context = mentor_context(symbol=symbol)
+    v3_payload = dict(context.get("v3") or {})
+    if not v3_payload:
+        return {"status": "error", "message": "mentor v3 unavailable"}
+    v3_payload["prices"] = context.get("prices", {})
+    v3_payload["updated_at"] = context.get("updated_at")
+    v3_payload["symbol"] = symbol
+    return v3_payload
 
 
 @app.post("/mentor/action")

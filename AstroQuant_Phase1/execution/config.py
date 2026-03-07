@@ -34,8 +34,15 @@ def _parse_spread_limits(raw_value):
 	return parsed
 
 
+def _parse_bool(raw_value, default=False):
+	if raw_value is None:
+		return default
+	return str(raw_value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 SYMBOL = os.getenv("EXEC_DEFAULT_SYMBOL", "XAUUSD").strip().upper() or "XAUUSD"
 LOT_SIZE = os.getenv("EXEC_LOT_SIZE", "1")
+EXEC_HEADLESS = _parse_bool(os.getenv("EXEC_HEADLESS"), default=os.getenv("DISPLAY") is None)
 
 STOP_LOSS_POINTS = int(float(os.getenv("EXEC_STOP_LOSS_POINTS", "150")))
 TAKE_PROFIT_POINTS = int(float(os.getenv("EXEC_TAKE_PROFIT_POINTS", "300")))

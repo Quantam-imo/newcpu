@@ -1,6 +1,6 @@
 from playwright.sync_api import sync_playwright
 import time
-from execution.config import SYMBOL, LOT_SIZE
+from execution.config import SYMBOL, LOT_SIZE, EXEC_HEADLESS
 from execution.execution_verifier import ExecutionVerifier
 from execution.broker_feed_engine import BrokerFeedEngine
 
@@ -15,15 +15,15 @@ class PlaywrightEngine:
         playwright = sync_playwright().start()
         self.browser = playwright.chromium.launch_persistent_context(
             user_data_dir="browser_session",
-            headless=False
+            headless=EXEC_HEADLESS
         )
         self.page = self.browser.new_page()
 
         print("Browser started. Login manually.")
 
-    def wait_for_login(self):
+    def wait_for_login(self, timeout_ms=0):
         print("Waiting for manual login...")
-        self.page.wait_for_selector("[data-testid='instrument-symbol-name-wrapper']", timeout=0)
+        self.page.wait_for_selector("[data-testid='instrument-symbol-name-wrapper']", timeout=timeout_ms)
         print("Login detected.")
 
 
@@ -69,4 +69,5 @@ class PlaywrightEngine:
         return self.broker_feed.get_state()
 
     def close(self):
-        self.browser.close()
+        if self.browser:
+            self.browser.close()

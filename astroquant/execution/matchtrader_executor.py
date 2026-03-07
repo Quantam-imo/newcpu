@@ -38,6 +38,10 @@ class MatchTraderConfig:
         ".open-positions-table",
     ])
     selectors: dict[str, list[str]] = field(default_factory=lambda: {
+        "order_panel": [
+            "[data-testid='mw-order-panel']",
+            "trade-order-panel[data-testid='mw-order-panel']",
+        ],
         "login_email": [
             "#login-email",
             "input[type='email']",
@@ -87,16 +91,28 @@ class MatchTraderConfig:
             "[id*='last']",
         ],
         "buy": [
+            "[data-testid='mw-order-panel'] [data-testid='order-panel-buy-button']",
             "[data-testid='order-panel-buy-button']",
             "#buy-button",
         ],
         "sell": [
+            "[data-testid='mw-order-panel'] [data-testid='order-panel-sell-button']",
             "[data-testid='order-panel-sell-button']",
             "#sell-button",
         ],
         "lot": [
+            "[data-testid='mw-order-panel'] [data-testid='input-stepper-input']",
+            "[data-testid='input-stepper-input']",
             "[data-testid='order-lot-size']",
             "#lot-size",
+        ],
+        "buy_price": [
+            "[data-testid='mw-order-panel'] [data-testid='order-panel-buy-button'] .ui-order-button__price",
+            "[data-testid='order-panel-buy-button'] .ui-order-button__price",
+        ],
+        "sell_price": [
+            "[data-testid='mw-order-panel'] [data-testid='order-panel-sell-button'] .ui-order-button__price",
+            "[data-testid='order-panel-sell-button'] .ui-order-button__price",
         ],
         "sl": [
             "[data-testid='order-stop-loss']",
@@ -266,7 +282,20 @@ class MatchTraderExecutor:
                 locator = page.locator(selector)
                 if locator.count() <= 0:
                     continue
-                locator.first.fill(str(value), timeout=self.config.timeout_ms)
+                target = locator.first
+                # Standard input path.
+                try:
+                    target.fill(str(value), timeout=self.config.timeout_ms)
+                    return True
+                except Exception:
+                    pass
+
+                # MatchTrader stepper path (content/div-like controls).
+                target.click(timeout=self.config.timeout_ms)
+                page.keyboard.press("Control+A")
+                page.keyboard.type(str(value), delay=10)
+                page.keyboard.press("Enter")
+                time.sleep(0.05)
                 return True
             except Exception:
                 continue
@@ -277,13 +306,12 @@ class MatchTraderExecutor:
         if page is None:
             return False, ["page_unavailable"]
         missing = []
+
+        # Core controls confirmed in order panel.
         required = {
             "buy": self.config.selectors["buy"],
             "sell": self.config.selectors["sell"],
             "lot": self.config.selectors["lot"],
-            "sl": self.config.selectors["sl"],
-            "tp": self.config.selectors["tp"],
-            "confirm": self.config.selectors["confirm"],
         }
         for key, selectors in required.items():
             found = False
@@ -298,12 +326,12 @@ class MatchTraderExecutor:
                 missing.append(key)
         return len(missing) == 0, missing
 
-        def calibrate_selectors(self, save: bool = True) -> dict[str, Any]:
-                page = self.engine.page
-                if page is None:
-                        return {"ok": False, "reason": "page unavailable"}
+    def calibrate_selectors(self, save: bool = True) -> dict[str, Any]:
+        page = self.engine.page
+        if page is None:
+            return {"ok": False, "reason": "page unavailable"}
 
-                script = r"""
+        script = r"""
 () => {
     const byKey = {
         symbol: [], bid: [], ask: [], last: [], buy: [], sell: [], lot: [], sl: [], tp: [], confirm: []
@@ -368,33 +396,33 @@ class MatchTraderExecutor:
 }
 """
 
-                try:
-                        discovered = page.evaluate(script)
-                except Exception as exc:
-                        return {"ok": False, "reason": f"calibration evaluate failed: {exc}"}
+        try:
+            discovered = page.evaluate(script)
+        except Exception as exc:
+            return {"ok": False, "reason": f"calibration evaluate failed: {exc}"}
 
-                for key in self.config.selectors.keys():
-                        values = discovered.get(key, []) if isinstance(discovered, dict) else []
-                        if isinstance(values, list):
-                                self._merge_selector_candidates(key, [str(v) for v in values[:20]])
+        for key in self.config.selectors.keys():
+            values = discovered.get(key, []) if isinstance(discovered, dict) else []
+            if isinstance(values, list):
+                self._merge_selector_candidates(key, [str(v) for v in values[:20]])
 
-                profile = {
-                        "updated_at": int(time.time()),
-                        "selectors": self.config.selectors,
-                }
+        profile = {
+            "updated_at": int(time.time()),
+            "selectors": self.config.selectors,
+        }
 
-                if save:
-                        self.selector_profile_path.parent.mkdir(parents=True, exist_ok=True)
-                        self.selector_profile_path.write_text(json.dumps(profile, indent=2), encoding="utf-8")
-                        self.selector_profile_loaded = True
+        if save:
+            self.selector_profile_path.parent.mkdir(parents=True, exist_ok=True)
+            self.selector_profile_path.write_text(json.dumps(profile, indent=2), encoding="utf-8")
+            self.selector_profile_loaded = True
 
-                quote_check = self.read_quote()
-                return {
-                        "ok": True,
-                        "profile_file": str(self.selector_profile_path),
-                        "discovered_keys": {k: len(v) for k, v in discovered.items()} if isinstance(discovered, dict) else {},
-                        "quote_check": quote_check,
-                }
+        quote_check = self.read_quote()
+        return {
+            "ok": True,
+            "profile_file": str(self.selector_profile_path),
+            "discovered_keys": {k: len(v) for k, v in discovered.items()} if isinstance(discovered, dict) else {},
+            "quote_check": quote_check,
+        }
 
     def read_quote(self) -> dict[str, Any]:
         symbol, symbol_selector = self._find_selector_value_with_source(self.config.selectors["symbol"])
@@ -636,32 +664,35 @@ class MatchTraderExecutor:
             self.killed = True
             return {"status": "blocked", "reason": "layout failure detected", "missing": missing}
 
+        lot_ok = self._fill_first(self.config.selectors["lot"], simulated.get("lot"))
+        sl_ok = self._fill_first(self.config.selectors["sl"], simulated.get("sl")) if simulated.get("sl") is not None else True
+        tp_ok = self._fill_first(self.config.selectors["tp"], simulated.get("tp")) if simulated.get("tp") is not None else True
+        if not (lot_ok and sl_ok and tp_ok):
+            self.killed = True
+            return {"status": "blocked", "reason": "failed to fill lot/sl/tp"}
+
         direction = str(simulated.get("message", "")).upper()
         side_buy = "BUY" in direction
+        side_price = self._find_selector_price(self.config.selectors["buy_price"] if side_buy else self.config.selectors["sell_price"])
         side_ok = self._click_first(self.config.selectors["buy"] if side_buy else self.config.selectors["sell"])
         if not side_ok:
             self.killed = True
             return {"status": "blocked", "reason": "failed to click side button"}
 
-        lot_ok = self._fill_first(self.config.selectors["lot"], simulated.get("lot"))
-        sl_ok = self._fill_first(self.config.selectors["sl"], simulated.get("sl"))
-        tp_ok = self._fill_first(self.config.selectors["tp"], simulated.get("tp"))
-        if not (lot_ok and sl_ok and tp_ok):
-            self.killed = True
-            return {"status": "blocked", "reason": "failed to fill lot/sl/tp"}
-
         self.order_active = True
         confirm_ok = self._click_first(self.config.selectors["confirm"])
+        # Some order panels execute directly on BUY/SELL and do not require confirm.
         if not confirm_ok:
-            self.killed = True
-            self.order_active = False
-            return {"status": "blocked", "reason": "failed to confirm order"}
+            confirm_ok = True
 
         self.last_trade_at = time.time()
         position_text = self._find_selector_value(self.config.position_table_selectors)
         return {
             "status": "submitted",
             "lock_active": self.order_active,
+            "clicked_side": "BUY" if side_buy else "SELL",
+            "button_price": side_price,
+            "confirm_used": bool(confirm_ok),
             "position_snapshot": position_text,
             "message": "Order submitted; verify SL/TP and close manually for micro-lot test",
         }

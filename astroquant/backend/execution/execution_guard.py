@@ -29,10 +29,12 @@ class ExecutionGuard:
 
         return True, slippage
 
-    def wait_for_fill(self, get_position_callback):
+    def wait_for_fill(self, get_position_callback, timeout_seconds=None):
         start_time = time.time()
+        timeout_s = float(timeout_seconds) if timeout_seconds is not None else float(self.execution_timeout)
+        timeout_s = max(1.0, timeout_s)
 
-        while time.time() - start_time < self.execution_timeout:
+        while time.time() - start_time < timeout_s:
             position = get_position_callback()
             if position:
                 return True, position

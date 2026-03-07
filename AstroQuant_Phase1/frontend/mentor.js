@@ -31,131 +31,31 @@ function selectedMentorSymbol() {
     return select ? select.value : "GC.FUT";
 }
 
-function selectedMentorTimeframe() {
-    const select = document.getElementById("chartTimeframe");
-    return select ? String(select.value || "5m") : "5m";
-}
-
 function setMentorMeta(text) {
     const el = document.getElementById("mentorMeta");
-    if (el) el.innerText = text;
+    if (el) el.innerHTML = text;
 }
 
-function formatMentorValue(value) {
-    if (value === null || value === undefined || value === "") return "--";
-    if (Array.isArray(value)) return value.length ? value.join(", ") : "--";
-    if (typeof value === "object") {
-        try {
-            return JSON.stringify(value);
-        } catch (_) {
-            return "--";
-        }
-    }
-    return String(value);
+function fmt(v) {
+    if (v === null || v === undefined || v === "") return "--";
+    if (typeof v === "number") return Number.isFinite(v) ? String(v) : "--";
+    return String(v);
+}
+
+function fmtPrice(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "--";
+    return n.toFixed(2);
 }
 
 function row(label, value) {
-    return `<div class="mentor-row"><span>${label}</span><strong>${formatMentorValue(value)}</strong></div>`;
-}
-
-function numberOrNull(value) {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : null;
-}
-
-function formatPrice(value, digits = 2) {
-    const n = numberOrNull(value);
-    if (n === null) return "--";
-    return n.toFixed(digits);
-}
-
-function distanceText(a, b) {
-    const x = numberOrNull(a);
-    const y = numberOrNull(b);
-    if (x === null || y === null) return "--";
-    const diff = x - y;
-    const prefix = diff > 0 ? "+" : "";
-    return `${prefix}${diff.toFixed(2)} pts`;
-}
-
-function narrativeBlock(title, narrative, tone = "neutral") {
-    const safeTitle = formatMentorValue(title);
-    const safeNarrative = formatMentorValue(narrative);
-    const safeTone = ["bull", "bear", "warn", "neutral"].includes(tone) ? tone : "neutral";
-    return `
-        <div class="mentor-narrative mentor-tone-${safeTone}">
-            <div class="mentor-narrative-title">${safeTitle}</div>
-            <p>${safeNarrative}</p>
-        </div>
-    `;
-}
-
-function kpi(label, value) {
-    return `
-        <div class="mentor-kpi">
-            <span>${formatMentorValue(label)}</span>
-            <strong>${formatMentorValue(value)}</strong>
-        </div>
-    `;
-}
-
-function kpiGrid(items = []) {
-    return `<div class="mentor-kpi-grid">${items.join("")}</div>`;
-}
-
-function executiveSummaryBlock({ side, confidence, riskPercent, lastPrice, support, resistance, tone }) {
-    const safeTone = ["bull", "bear", "warn", "neutral"].includes(tone) ? tone : "neutral";
-    return `
-        <div class="mentor-exec-summary mentor-tone-${safeTone}">
-            <span class="mentor-exec-item">Side: <strong>${formatMentorValue(side)}</strong></span>
-            <span class="mentor-exec-item">Conf: <strong>${formatMentorValue(confidence)}%</strong></span>
-            <span class="mentor-exec-item">Risk: <strong>${formatMentorValue(riskPercent)}%</strong></span>
-            <span class="mentor-exec-item">Last: <strong>${formatMentorValue(lastPrice)}</strong></span>
-            <span class="mentor-exec-item">S: <strong>${formatMentorValue(support)}</strong></span>
-            <span class="mentor-exec-item">R: <strong>${formatMentorValue(resistance)}</strong></span>
-        </div>
-    `;
-}
-
-function mentorTag(text, cls) {
-    const safeText = formatMentorValue(text);
-    const safeCls = cls ? ` ${cls}` : "";
-    return `<span class="mentor-tag${safeCls}">${safeText}</span>`;
-}
-
-function biasTag(value) {
-    const v = String(value || "").toUpperCase();
-    if (v.includes("BULL") || v === "UP") return mentorTag(value || "BULLISH", "bull");
-    if (v.includes("BEAR") || v === "DOWN") return mentorTag(value || "BEARISH", "bear");
-    return mentorTag(value || "NEUTRAL", "neutral");
-}
-
-function riskTag(value) {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return mentorTag(value || "--", "neutral");
-    if (n <= 0.5) return mentorTag(`${n}%`, "risk-low");
-    if (n <= 1.0) return mentorTag(`${n}%`, "risk-med");
-    return mentorTag(`${n}%`, "risk-high");
-}
-
-function newsTag(value) {
-    const v = String(value || "").toUpperCase();
-    if (v.includes("HALT") || v.includes("HIGH")) return mentorTag(value || "HALT", "bear");
-    if (v.includes("NORMAL") || v.includes("CLEAR")) return mentorTag(value || "NORMAL", "bull");
-    return mentorTag(value || "--", "neutral");
-}
-
-function sessionTag(value) {
-    const v = String(value || "").toUpperCase();
-    if (v.includes("NEWYORK") || v.includes("LONDON") || v.includes("ASIA")) {
-        return mentorTag(value || "--", "neutral");
-    }
-    return mentorTag(value || "--", "neutral");
+    const isPrice = /price|last|open|high|low|support|resistance|target|poc|range/i.test(String(label || ""));
+    return `<div class="mentor-row"><span>${fmt(label)}</span><strong class="${isPrice ? "mentor-live-price" : ""}">${fmt(value)}</strong></div>`;
 }
 
 function section(id, title, body, isOpen = true) {
     return `
-        <details class="mentor-section" data-section-id="${id}" ${isOpen ? "open" : ""}>
+        <details class="mentor-section mentor-section-${id}" data-section-id="${id}" ${isOpen ? "open" : ""}>
             <summary>${title}</summary>
             <div class="mentor-content">${body}</div>
         </details>
@@ -172,33 +72,110 @@ function getCurrentSectionState() {
     return state;
 }
 
-function openMentorSection(sectionId) {
-    if (!sectionId) return;
-    const state = {
-        ...(JSON.parse(localStorage.getItem(MENTOR_SECTIONS_KEY) || "{}") || {}),
-        [sectionId]: true,
-    };
-    localStorage.setItem(MENTOR_SECTIONS_KEY, JSON.stringify(state));
-    const content = document.getElementById("mentorContent");
-    const node = content ? content.querySelector(`details[data-section-id="${sectionId}"]`) : null;
-    if (node) {
-        node.open = true;
-        node.scrollIntoView({ behavior: "smooth", block: "start" });
+function narrative(title, text) {
+    return `<div class="mentor-narrative mentor-tone-neutral"><div class="mentor-narrative-title">${fmt(title)}</div><p>${fmt(text)}</p></div>`;
+}
+
+function actionCall(verdict, detail, tone = "neutral") {
+    const safeTone = ["bull", "bear", "warn", "neutral"].includes(tone) ? tone : "neutral";
+    return `<div class="mentor-action-call mentor-tone-${safeTone}"><strong>${fmt(verdict)}</strong><span>${fmt(detail)}</span></div>`;
+}
+
+function normalizeMentorData(raw, symbol) {
+    const payload = raw || {};
+    if (payload.context && payload.probability) {
+        return payload;
     }
+
+    const market = payload.market || {};
+    const model = payload.model || {};
+    const risk = payload.risk || {};
+    const prices = payload.prices || {};
+    const iceberg = payload.iceberg || {};
+    const summary = payload.orderflow_summary || {};
+    const gannRows = Array.isArray(payload.gann) ? payload.gann : [];
+    const astroRows = Array.isArray(payload.astro) ? payload.astro : [];
+
+    const support = prices.nearest_support ?? null;
+    const resistance = prices.nearest_resistance ?? null;
+    const price = prices.last ?? null;
+    const confidence = Number(model.confidence);
+    const confidenceScore = Number.isFinite(confidence) ? Math.max(0, Math.min(100, confidence)) : 0;
+    const signalStrengthRaw = Number(summary.signal_strength);
+    const signalStrength = Number.isFinite(signalStrengthRaw) ? Math.max(0, Math.min(100, signalStrengthRaw)) : null;
+    const decisionScore = signalStrength ?? confidenceScore;
+
+    let verdict = "Low Probability / Wait";
+    const modelReason = String(model.reason || "").toUpperCase();
+    if (modelReason.includes("BUY") || modelReason.includes("LONG") || String(market.htf_bias || "").toUpperCase().includes("BULL")) {
+        verdict = decisionScore >= 55 ? "Buy Setup" : "Watch Buy";
+    } else if (modelReason.includes("SELL") || modelReason.includes("SHORT") || String(market.htf_bias || "").toUpperCase().includes("BEAR")) {
+        verdict = decisionScore >= 55 ? "Sell Setup" : "Watch Sell";
+    }
+
+    return {
+        symbol: market.symbol || symbol,
+        context: {
+            symbol: market.symbol || symbol,
+            price,
+            prev_low: prices.low ?? support,
+            prev_high: prices.high ?? resistance,
+            htf_bias: market.htf_bias,
+            ltf_structure: market.ltf_structure,
+            kill_zone: market.session,
+            volatility: market.volatility,
+        },
+        liquidity: {
+            external_high: resistance,
+            external_low: support,
+            sweep: summary.absorption_signal || "none",
+            target: summary.direction || "--",
+        },
+        institution: {
+            iceberg_buy: summary.absorption_signal === "BUY_ABSORPTION" ? "YES" : "NO",
+            iceberg_sell: summary.absorption_signal === "SELL_ABSORPTION" ? "YES" : "NO",
+            delta: summary.delta_state || "NEUTRAL",
+            poc: price,
+        },
+        ict: {
+            turtle_soup: "--",
+            fvg_zone: model.entry_logic || "OFF",
+            order_block: model.invalid_if || "OFF",
+            liquidity_sweep: summary.absorption_signal || "none",
+        },
+        gann: {
+            cycle: gannRows.length,
+            target_100: resistance,
+            target_200: support,
+        },
+        astro: {
+            harmonic_window: astroRows.length > 0,
+            planet_event: astroRows[0]?.label || "None",
+            bias: "Neutral",
+        },
+        news: {
+            next_event: market.news_state || "None",
+            impact: market.news_state === "HALT" ? "High" : "Low",
+            time: "--",
+        },
+        session: {
+            session: market.session || "--",
+            phase: market.ltf_structure || "--",
+        },
+        probability: {
+            score: decisionScore,
+            score_source: signalStrength !== null ? "orderflow_signal_strength" : "model_confidence",
+            verdict,
+        },
+        story: summary.narrative || model.reason || "--",
+        updated_at: payload.updated_at || new Date().toISOString(),
+    };
 }
 
 function renderMentorSkeleton(message = "Loading mentor modules...") {
     const content = document.getElementById("mentorContent");
     if (!content) return;
-    content.innerHTML = `
-        ${section("market", "1) Market Context", row("Status", message), true)}
-        ${section("model", "2) Active Model", row("Status", message), true)}
-        ${section("iceberg", "3) Iceberg Narrative", row("Status", message), true)}
-        ${section("gann", "4) Gann Framework", row("Status", message), true)}
-        ${section("astro", "5) Astro Timing", row("Status", message), true)}
-        ${section("risk", "6) Risk Context", row("Status", message), true)}
-        ${section("exit", "7) Exit Reason", row("Status", message), true)}
-    `;
+    content.innerHTML = section("market", "AI Mentor", row("Status", message), true);
 }
 
 function renderMentorContext(data, sectionOverrides = null) {
@@ -206,256 +183,114 @@ function renderMentorContext(data, sectionOverrides = null) {
     if (!content) return;
 
     const savedSections = sectionOverrides || JSON.parse(localStorage.getItem(MENTOR_SECTIONS_KEY) || "{}");
-    const market = data.market || {};
-    const model = data.model || {};
-    const risk = data.risk || {};
-    const iceberg = data.iceberg || null;
-    const exitData = data.exit || {};
-    const audit = data.prop_audit || {};
-    const controls = data.controls || {};
-    const gann = Array.isArray(data.gann) ? data.gann : [];
-    const astro = Array.isArray(data.astro) ? data.astro : [];
-    const prices = data.prices || {};
-
-    const concept = {
-        market: {
-            symbol: market.symbol || selectedMentorSymbol(),
-            canonical_symbol: market.canonical_symbol || "--",
-            pricing_source: market.pricing_source || "--",
-            spot_fidelity: market.spot_fidelity || {},
-            htf_bias: market.htf_bias || "--",
-            ltf_structure: market.ltf_structure || "--",
-            session: market.session || "--",
-            volatility: market.volatility || "--",
-            news_state: market.news_state || "--",
-        },
-        model: {
-            active_model: model.active_model || "--",
-            confidence: model.confidence != null ? model.confidence : "--",
-            reason: model.reason || "--",
-            entry_logic: model.entry_logic || "--",
-            invalid_if: model.invalid_if || "--",
-            rr: model.rr || "--",
-        },
-        risk: {
-            phase: risk.phase || "--",
-            risk_percent: risk.risk_percent != null ? risk.risk_percent : "--",
-            static_floor: risk.static_floor != null ? risk.static_floor : "--",
-            daily_buffer: risk.daily_buffer != null ? risk.daily_buffer : "--",
-            cooldown: risk.cooldown || "--",
-        },
-        exit: {
-            last_result: exitData.last_result || "--",
-            reason: exitData.reason || "--",
-        },
-        audit: {
-            profitable_days_completed: audit.profitable_days_completed != null ? audit.profitable_days_completed : "--",
-            target_left: audit.target_left != null ? audit.target_left : "--",
-            drawdown_remaining: audit.drawdown_remaining != null ? audit.drawdown_remaining : "--",
-        },
-        controls: {
-            aggressive_mode: Boolean(controls.aggressive_mode),
-            disabled_models: Array.isArray(controls.disabled_models) ? controls.disabled_models : [],
-        },
-        prices: {
-            last: prices.last ?? market.last ?? iceberg?.price ?? null,
-            open: prices.open ?? null,
-            high: prices.high ?? null,
-            low: prices.low ?? null,
-            midpoint: prices.midpoint ?? null,
-            range_points: prices.range_points ?? null,
-            nearest_support: prices.nearest_support ?? null,
-            nearest_resistance: prices.nearest_resistance ?? null,
-        },
-    };
-
-    const biasText = String(concept.market.htf_bias || "NEUTRAL").toUpperCase();
-    const marketTone = biasText.includes("BULL") ? "bull" : (biasText.includes("BEAR") ? "bear" : "neutral");
-    const riskPercent = Number(concept.risk.risk_percent);
-    const riskTone = Number.isFinite(riskPercent) && riskPercent >= 1.0 ? "warn" : "neutral";
-    const icebergTone = String(iceberg?.bias || "").toUpperCase().includes("BUY")
-        ? "bull"
-        : (String(iceberg?.bias || "").toUpperCase().includes("SELL") ? "bear" : "neutral");
-
-    const marketNarrative = `Desk read: HTF ${concept.market.htf_bias}, LTF ${concept.market.ltf_structure}, session ${concept.market.session}. Volatility ${concept.market.volatility}; news regime ${concept.market.news_state}.`;
-    const modelNarrative = `Model ${concept.model.active_model} is in control at ${formatMentorValue(concept.model.confidence)}% confidence. Trigger: ${formatMentorValue(concept.model.entry_logic)}. Hard invalidation: ${formatMentorValue(concept.model.invalid_if)}.`;
-    const icebergNarrative = iceberg
-        ? `Absorption confirmed near ${formatPrice(iceberg.price)}. Bias: ${formatMentorValue(iceberg.bias)}. Strength: ${formatMentorValue(iceberg.strength)}.`
-        : "No institutional absorption signal is confirmed in the active window.";
-    const gannNarrative = `Level map: support ${formatPrice(concept.prices.nearest_support)} and resistance ${formatPrice(concept.prices.nearest_resistance)} define the current decision corridor.`;
-    const astroNarrative = astro.length
-        ? `Timing desk has ${astro.length} active astro markers for confluence filtering.`
-        : "Timing desk has no active astro markers in this cycle.";
-    const riskNarrative = `Risk state: phase ${formatMentorValue(concept.risk.phase)}, allocation ${formatMentorValue(concept.risk.risk_percent)}%, cooldown ${formatMentorValue(concept.risk.cooldown)}.`;
-    const exitNarrative = `Last execution closed as ${formatMentorValue(concept.exit.last_result)}. Exit driver: ${formatMentorValue(concept.exit.reason)}.`;
-    const auditNarrative = `Prop audit: ${formatMentorValue(concept.audit.profitable_days_completed)} profitable days logged, ${formatMentorValue(concept.audit.target_left)} target remaining.`;
-    const modelSideRaw = String(model.reason || "").toUpperCase();
-    const inferredSide = modelSideRaw.includes("SELL") || modelSideRaw.includes("SHORT")
-        ? "SELL"
-        : (modelSideRaw.includes("BUY") || modelSideRaw.includes("LONG") ? "BUY" : "WAIT");
-    const summaryTone = inferredSide === "BUY" ? "bull" : (inferredSide === "SELL" ? "bear" : marketTone);
-    const execSummary = executiveSummaryBlock({
-        side: inferredSide,
-        confidence: formatMentorValue(concept.model.confidence),
-        riskPercent: formatMentorValue(concept.risk.risk_percent),
-        lastPrice: formatPrice(concept.prices.last),
-        support: formatPrice(concept.prices.nearest_support),
-        resistance: formatPrice(concept.prices.nearest_resistance),
-        tone: summaryTone,
-    });
+    const context = data.context || {};
+    const liquidity = data.liquidity || {};
+    const institution = data.institution || {};
+    const ict = data.ict || {};
+    const gann = data.gann || {};
+    const astro = data.astro || {};
+    const news = data.news || {};
+    const session = data.session || {};
+    const probability = data.probability || {};
 
     const marketBody = [
-        narrativeBlock("Context Narrative", marketNarrative, marketTone),
-        kpiGrid([
-            kpi("Last", formatPrice(concept.prices.last)),
-            kpi("Open", formatPrice(concept.prices.open)),
-            kpi("High", formatPrice(concept.prices.high)),
-            kpi("Low", formatPrice(concept.prices.low)),
-        ]),
-        row("Selected Symbol", concept.market.symbol),
-        row("Canonical Symbol", concept.market.canonical_symbol),
-        row("Pricing Source", concept.market.pricing_source),
-        row("Spot Fidelity", (concept.market.spot_fidelity && concept.market.spot_fidelity.spot_primary) ? ((concept.market.spot_fidelity.strict ? "STRICT" : "ON") + (concept.market.spot_fidelity.spot_data_available ? " | SPOT LIVE" : " | SPOT MISSING")) : "OFF"),
-        row("Midpoint", formatPrice(concept.prices.midpoint)),
-        row("Range (Pts)", formatPrice(concept.prices.range_points)),
-        row("HTF Bias", biasTag(concept.market.htf_bias)),
-        row("LTF Structure", biasTag(concept.market.ltf_structure)),
-        row("Session", sessionTag(concept.market.session)),
-        row("Volatility", concept.market.volatility),
-        row("News State", newsTag(concept.market.news_state)),
+        narrative("HTF → LTF Narrative", `HTF ${fmt(context.htf_bias)}, LTF ${fmt(context.ltf_structure)}, session ${fmt(session.session)} (${fmt(session.phase)}).`),
+        row("Symbol", context.symbol || data.symbol || selectedMentorSymbol()),
+        row("Price", fmtPrice(context.price)),
+        row("Prev Low", fmtPrice(context.prev_low)),
+        row("Prev High", fmtPrice(context.prev_high)),
+        row("Kill Zone", context.kill_zone),
+        row("Volatility", context.volatility),
     ].join("");
 
-    const modelBody = [
-        narrativeBlock("Model Narrative", modelNarrative, marketTone),
-        kpiGrid([
-            kpi("Support", formatPrice(concept.prices.nearest_support)),
-            kpi("Resistance", formatPrice(concept.prices.nearest_resistance)),
-            kpi("R:R", formatMentorValue(concept.model.rr)),
-            kpi("Confidence", `${formatMentorValue(concept.model.confidence)}%`),
-        ]),
-        row("Active Model", concept.model.active_model),
-        row("Confidence %", concept.model.confidence),
-        row("Reason", concept.model.reason),
-        row("Entry Logic", concept.model.entry_logic),
-        row("Invalid If", concept.model.invalid_if),
-        row("Last vs Support", distanceText(concept.prices.last, concept.prices.nearest_support)),
-        row("Resistance Gap", distanceText(concept.prices.nearest_resistance, concept.prices.last)),
-        row("R:R Planned", concept.model.rr),
+    const liquidityBody = [
+        narrative("Liquidity Sweep Detection", `Sweep: ${fmt(liquidity.sweep)} | Target: ${fmt(liquidity.target)}`),
+        row("External High", fmtPrice(liquidity.external_high)),
+        row("External Low", fmtPrice(liquidity.external_low)),
+        row("Sweep", liquidity.sweep),
     ].join("");
 
-    const riskBody = [
-        narrativeBlock("Risk Narrative", riskNarrative, riskTone),
-        kpiGrid([
-            kpi("Risk %", formatMentorValue(concept.risk.risk_percent)),
-            kpi("Daily Buffer", formatMentorValue(concept.risk.daily_buffer)),
-            kpi("Static Floor", formatMentorValue(concept.risk.static_floor)),
-            kpi("Phase", formatMentorValue(concept.risk.phase)),
-        ]),
-        row("Phase", concept.risk.phase),
-        row("Risk %", riskTag(concept.risk.risk_percent)),
-        row("Static Floor", concept.risk.static_floor),
-        row("Daily Buffer Left", concept.risk.daily_buffer),
-        row("Cooldown", concept.risk.cooldown),
-        row("Last Price", formatPrice(concept.prices.last)),
+    const institutionBody = [
+        narrative("Institutional Orderflow", `Delta ${fmt(institution.delta)} | Iceberg buy ${fmt(institution.iceberg_buy)} vs sell ${fmt(institution.iceberg_sell)}.`),
+        row("Delta", institution.delta),
+        row("Iceberg Buy", institution.iceberg_buy),
+        row("Iceberg Sell", institution.iceberg_sell),
+        row("POC", fmtPrice(institution.poc)),
     ].join("");
 
-    const gannBody = gann.length
-        ? [
-            narrativeBlock("Price Ladder Narrative", gannNarrative, "neutral"),
-            kpiGrid([
-                kpi("Support", formatPrice(concept.prices.nearest_support)),
-                kpi("Resistance", formatPrice(concept.prices.nearest_resistance)),
-                kpi("Range", formatPrice(concept.prices.range_points)),
-                kpi("Last", formatPrice(concept.prices.last)),
-            ]),
-            gann.slice(0, 8).map((line, idx) => {
-            return row(line.label || `Level ${idx + 1}`, line.price != null ? Number(line.price).toFixed(2) : "--");
-            }).join(""),
-        ].join("")
-        : row("Status", "No Gann levels available");
-
-    const astroBody = astro.length
-        ? [
-            narrativeBlock("Timing Narrative", astroNarrative, "neutral"),
-            astro.slice(0, 8).map((marker, idx) => {
-            const t = Number(marker.time || 0);
-            const ts = Number.isFinite(t) && t > 0 ? new Date(t * 1000).toLocaleString() : "--";
-            return row(marker.label || `Event ${idx + 1}`, ts);
-            }).join(""),
-        ].join("")
-        : row("Status", "No Astro markers available");
-
-    const icebergBody = iceberg
-        ? [
-            narrativeBlock("Orderflow Narrative", icebergNarrative, icebergTone),
-            kpiGrid([
-                kpi("Iceberg Px", formatPrice(iceberg.price)),
-                kpi("Strength", formatMentorValue(iceberg.strength)),
-                kpi("Bias", formatMentorValue(iceberg.bias)),
-                kpi("Δ Last", distanceText(concept.prices.last, iceberg.price)),
-            ]),
-            row("Absorption", iceberg.absorption || "YES"),
-            row("Price", iceberg.price),
-            row("Strength", iceberg.strength),
-            row("Institutional Bias", iceberg.bias),
-        ].join("")
-        : [
-            narrativeBlock("Orderflow Narrative", icebergNarrative, "neutral"),
-            row("Status", "No iceberg absorption detected"),
-        ].join("");
-
-    const exitBody = [
-        narrativeBlock("Execution Narrative", exitNarrative, "neutral"),
-        row("Last Result", concept.exit.last_result),
-        row("Exit Reason", concept.exit.reason),
-        row("Last Price", formatPrice(concept.prices.last)),
+    const ictBody = [
+        narrative("ICT Pattern", `Turtle Soup ${fmt(ict.turtle_soup)}, FVG ${fmt(ict.fvg_zone)}, OB ${fmt(ict.order_block)}.`),
+        row("Turtle Soup", ict.turtle_soup),
+        row("FVG", ict.fvg_zone),
+        row("Order Block", ict.order_block),
+        row("Liquidity Sweep", ict.liquidity_sweep),
     ].join("");
 
-    const propBody = [
-        narrativeBlock("Audit Narrative", auditNarrative, "neutral"),
-        row("Profitable Days", concept.audit.profitable_days_completed),
-        row("Target Left", concept.audit.target_left),
-        row("Drawdown Remaining", concept.audit.drawdown_remaining),
+    const gannBody = [
+        narrative("Gann Time + Price", `Cycle ${fmt(gann.cycle)} bars | Targets ${fmtPrice(gann.target_100)} / ${fmtPrice(gann.target_200)}.`),
+        row("Cycle", gann.cycle),
+        row("Target 100", fmtPrice(gann.target_100)),
+        row("Target 200", fmtPrice(gann.target_200)),
     ].join("");
 
-    const lastTradesRows = (data.last_trades || []).slice(0, 5).map(t => {
-        return `<tr><td>${t.time || "--"}</td><td>${t.model || "--"}</td><td>${t.result || "--"}</td><td>${t.r_multiple ?? "--"}</td><td>${t.pnl ?? "--"}</td></tr>`;
-    }).join("") || `<tr><td colspan="5">No recent trades</td></tr>`;
+    const astroBody = [
+        narrative("Astro Timing", `${astro.harmonic_window ? "Window Active" : "Window Inactive"} | ${fmt(astro.planet_event)}`),
+        row("Harmonic Window", astro.harmonic_window ? "ACTIVE" : "INACTIVE"),
+        row("Planet Event", astro.planet_event),
+        row("Astro Bias", astro.bias),
+    ].join("");
 
-    const modelStatsRows = Object.entries(data.model_stats || {}).map(([name, stats]) => {
-        return `<tr><td>${name}</td><td>${stats.wins ?? 0}</td><td>${stats.losses ?? 0}</td></tr>`;
-    }).join("") || `<tr><td colspan="3">No model stats</td></tr>`;
+    const newsBody = [
+        narrative("News Impact", `${fmt(news.next_event)} at ${fmt(news.time)} | Impact ${fmt(news.impact)}`),
+        row("Next Event", news.next_event),
+        row("Impact", news.impact),
+        row("Time", news.time),
+    ].join("");
+
+    const sessionBody = [
+        row("Session", session.session),
+        row("Phase", session.phase),
+    ].join("");
+
+    const probabilityBody = [
+        narrative("Probability Scoring", `${fmt(probability.verdict)} (${fmt(probability.score)}%)`),
+        row("Score", `${fmt(probability.score)}%`),
+        row("Verdict", probability.verdict),
+    ].join("");
+
+    const storyBody = narrative("Institutional Story", data.story || "--");
+
+    const score = Number(probability.score);
+    const verdictRaw = String(probability.verdict || "").toUpperCase();
+    const scoreSource = fmt(probability.score_source || "model_confidence");
+    const side = verdictRaw.includes("SELL") || verdictRaw.includes("SHORT")
+        ? "SELL"
+        : (verdictRaw.includes("BUY") || verdictRaw.includes("LONG") ? "BUY" : "WAIT");
+    const riskText = fmt(context.volatility || "--");
+    let actionVerdict = "WAIT";
+    let actionTone = "neutral";
+    if ((side === "BUY" || side === "SELL") && Number.isFinite(score) && score >= 70) {
+        actionVerdict = `EXECUTE ${side}`;
+        actionTone = side === "BUY" ? "bull" : "bear";
+    } else if ((side === "BUY" || side === "SELL") && Number.isFinite(score) && score >= 55) {
+        actionVerdict = `WATCH ${side}`;
+        actionTone = "warn";
+    }
+    const actionDetail = `Score ${fmt(probability.score)}% (${scoreSource}) | Risk ${riskText} | Last ${fmtPrice(context.price)} | Sweep ${fmt(liquidity.sweep)} | POC ${fmtPrice(institution.poc)}`;
+    const actionBlock = actionCall(actionVerdict, actionDetail, actionTone);
 
     content.innerHTML = `
-        ${execSummary}
+        ${actionBlock}
         ${section("market", "1) Market Context", marketBody, savedSections.market !== false)}
-        ${section("model", "2) Active Model", modelBody, savedSections.model !== false)}
-        ${section("iceberg", "3) Iceberg Narrative", icebergBody, savedSections.iceberg !== false)}
-        ${section("gann", "4) Gann Framework", gannBody, savedSections.gann !== false)}
-        ${section("astro", "5) Astro Timing", astroBody, savedSections.astro !== false)}
-        ${section("risk", "6) Risk Context", riskBody, savedSections.risk !== false)}
-        ${section("exit", "7) Exit Reason", exitBody, savedSections.exit !== false)}
-        ${section("audit", "Prop Audit", propBody, savedSections.audit !== false)}
-        ${section("actions", "Institutional Controls", `
-            ${narrativeBlock("Control Narrative", "Control policy: intervene only when context and risk justify action. Sequence is reduce risk first, aggressive mode last.", "warn")}
-            <div class="mentor-actions">
-                <button id="mentorDisableModelBtn">Disable Model</button>
-                <button id="mentorReduceRiskBtn">Reduce Risk</button>
-                <button id="mentorAggressiveBtn">Aggressive Mode</button>
-                <button id="mentorGannBtn">View Gann</button>
-                <button id="mentorAstroBtn">View Astro</button>
-                <button id="mentorLastTradesBtn">View Last 5 Trades</button>
-                <button id="mentorModelStatsBtn">View Model Stats</button>
-            </div>
-            ${row("Aggressive Mode", concept.controls.aggressive_mode ? "ON" : "OFF")}
-            ${row("Disabled Models", (concept.controls.disabled_models || []).join(", ") || "--")}
-        `, savedSections.actions !== false)}
-        ${section("trades", "Last 5 Trades", `
-            <table><thead><tr><th>Time</th><th>Model</th><th>Result</th><th>R</th><th>PnL</th></tr></thead><tbody>${lastTradesRows}</tbody></table>
-        `, savedSections.trades !== false)}
-        ${section("stats", "Model Stats", `
-            <table><thead><tr><th>Model</th><th>Wins</th><th>Losses</th></tr></thead><tbody>${modelStatsRows}</tbody></table>
-        `, savedSections.stats !== false)}
+        ${section("liquidity", "2) Liquidity", liquidityBody, savedSections.liquidity !== false)}
+        ${section("institution", "3) Institutional Flow", institutionBody, savedSections.institution !== false)}
+        ${section("ict", "4) ICT", ictBody, savedSections.ict !== false)}
+        ${section("gann", "5) Gann", gannBody, savedSections.gann !== false)}
+        ${section("astro", "6) Astro", astroBody, savedSections.astro !== false)}
+        ${section("news", "7) News", newsBody, savedSections.news !== false)}
+        ${section("session", "8) Session", sessionBody, savedSections.session !== false)}
+        ${section("probability", "9) Probability", probabilityBody, savedSections.probability !== false)}
+        ${section("story", "10) Story", storyBody, savedSections.story !== false)}
     `;
 
     for (const details of content.querySelectorAll("details[data-section-id]")) {
@@ -466,82 +301,8 @@ function renderMentorContext(data, sectionOverrides = null) {
         });
     }
 
-    bindMentorActionButtons();
-    setMentorMeta(`Updated: ${new Date(data.updated_at || Date.now()).toLocaleString()} | ${concept.market.symbol || "--"} | Last: ${formatPrice(concept.prices.last)} | Session: ${formatMentorValue(concept.market.session)}`);
-}
-
-async function mentorAction(action, payload = {}) {
-    const res = await mentorFetch("/mentor/action", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, ...payload }),
-    });
-    if (!res.ok) return null;
-    return res.json();
-}
-
-function bindMentorActionButtons() {
-    const disableBtn = document.getElementById("mentorDisableModelBtn");
-    if (disableBtn) {
-        disableBtn.onclick = async () => {
-            const modelName = prompt("Model to disable (e.g. ICT):", "ICT");
-            if (!modelName) return;
-            await mentorAction("disable_model", { model_name: modelName });
-            await loadMentor();
-        };
-    }
-
-    const reduceRiskBtn = document.getElementById("mentorReduceRiskBtn");
-    if (reduceRiskBtn) {
-        reduceRiskBtn.onclick = async () => {
-            await mentorAction("reduce_risk");
-            await loadMentor();
-        };
-    }
-
-    const aggressiveBtn = document.getElementById("mentorAggressiveBtn");
-    if (aggressiveBtn) {
-        aggressiveBtn.onclick = async () => {
-            const password = prompt("Aggressive mode password:", "");
-            if (password == null) return;
-            await mentorAction("aggressive_mode", { enabled: true, password });
-            await loadMentor();
-        };
-    }
-
-    const gannBtn = document.getElementById("mentorGannBtn");
-    if (gannBtn) {
-        gannBtn.onclick = async () => {
-            openMentorSection("gann");
-        };
-    }
-
-    const astroBtn = document.getElementById("mentorAstroBtn");
-    if (astroBtn) {
-        astroBtn.onclick = async () => {
-            openMentorSection("astro");
-        };
-    }
-
-    const tradesBtn = document.getElementById("mentorLastTradesBtn");
-    if (tradesBtn) {
-        tradesBtn.onclick = async () => {
-            openMentorSection("trades");
-            await mentorAction("last_trades", { symbol: selectedMentorSymbol() });
-            await loadMentor();
-            openMentorSection("trades");
-        };
-    }
-
-    const statsBtn = document.getElementById("mentorModelStatsBtn");
-    if (statsBtn) {
-        statsBtn.onclick = async () => {
-            openMentorSection("stats");
-            await mentorAction("model_stats");
-            await loadMentor();
-            openMentorSection("stats");
-        };
-    }
+    const last = fmtPrice(context.price);
+    setMentorMeta(`Updated: ${new Date(data.updated_at || Date.now()).toLocaleString()} | ${fmt(context.symbol || data.symbol || selectedMentorSymbol())} | Last: <span class="mentor-live-price">${last}</span>`);
 }
 
 async function loadMentor() {
@@ -562,9 +323,13 @@ async function loadMentor() {
         }
 
         const symbol = selectedMentorSymbol();
-        const res = await mentorFetch(`/mentor/context?symbol=${encodeURIComponent(symbol)}`);
+        let res = await mentorFetch(`/mentor/context?symbol=${encodeURIComponent(symbol)}`);
+        if (!res.ok) {
+            res = await mentorFetch(`/mentor?symbol=${encodeURIComponent(symbol)}`);
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const raw = await res.json();
+        const data = normalizeMentorData(raw, symbol);
         renderMentorContext(data, mergedState);
         mentorLoadedOnce = true;
 

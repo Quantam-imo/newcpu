@@ -1,0 +1,39 @@
+{
+  "updated_at": 1772817189,
+  "selectors": {
+    "order_panel": [
+      "trade-order-panel[data-testid='mw-order-panel']",
+      "[data-testid='mw-order-panel']"
+    ],
+    "quote": [
+      "[data-testid='quotation']",
+      "[data-testid='quotation-last']",
+      "[data-testid='last-price']",
+      "[data-testid='quotation-bid']",
+      "[data-testid='quotation-ask']"
+    ],
+    "volume": [
+      "[data-testid='mw-order-panel'] [data-testid='input-stepper-input']",
+      "[data-testid='input-stepper-input']",
+      "[data-testid='order-lot-size']"
+    ],
+    "buy": [
+      "[data-testid='mw-order-panel'] [data-testid='order-panel-buy-button']",
+      "[data-testid='order-panel-buy-button']",
+      "button:has-text('Buy')"
+    ],
+    "sell": [
+      "[data-testid='mw-order-panel'] [data-testid='order-panel-sell-button']",
+      "[data-testid='order-panel-sell-button']",
+      "button:has-text('Sell')"
+    ],
+    "buy_price": [
+      "[data-testid='mw-order-panel'] [data-testid='order-panel-buy-button'] .ui-order-button__price",
+      "[data-testid='order-panel-buy-button'] .ui-order-button__price"
+    ],
+    "sell_price": [
+      "[data-testid='mw-order-panel'] [data-testid='order-panel-sell-button'] .ui-order-button__price",
+      "[data-testid='order-panel-sell-button'] .ui-order-button__price"
+    ]
+  }
+}

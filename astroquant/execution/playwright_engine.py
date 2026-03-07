@@ -1,6 +1,8 @@
 import threading
 import time
 import re
+import json
+from pathlib import Path
 from typing import Any
 from backend.execution.execution_guard import ExecutionGuard
 
@@ -197,6 +199,10 @@ class PlaywrightExecutionEngine:
 		self.selector_halted = False
 		self.last_selector_failure_reason = None
 		self.selector_aliases = {
+			"order_panel": [
+				"trade-order-panel[data-testid='mw-order-panel']",
+				"[data-testid='mw-order-panel']",
+			],
 			"quote": [
 				"[data-testid='quotation']",
 				"[data-testid='quotation-last']",
@@ -204,13 +210,44 @@ class PlaywrightExecutionEngine:
 				"[data-testid='quotation-bid']",
 				"[data-testid='quotation-ask']",
 			],
+			"volume": [
+				"[data-testid='mw-order-panel'] [data-testid='input-stepper-input']",
+				"[data-testid='input-stepper-input']",
+				"[data-testid='order-lot-size']",
+			],
 			"buy": [
+				"[data-testid='mw-order-panel'] [data-testid='order-panel-buy-button']",
 				"[data-testid='order-panel-buy-button']",
 				"button:has-text('Buy')",
 			],
 			"sell": [
+				"[data-testid='mw-order-panel'] [data-testid='order-panel-sell-button']",
 				"[data-testid='order-panel-sell-button']",
 				"button:has-text('Sell')",
+			],
+			"buy_price": [
+				"[data-testid='mw-order-panel'] [data-testid='order-panel-buy-button'] .ui-order-button__price",
+				"[data-testid='order-panel-buy-button'] .ui-order-button__price",
+			],
+			"sell_price": [
+				"[data-testid='mw-order-panel'] [data-testid='order-panel-sell-button'] .ui-order-button__price",
+				"[data-testid='order-panel-sell-button'] .ui-order-button__price",
+			],
+			"confirm": [
+				"[data-testid='overlay-confirm-actions-confirm']",
+				"[data-testid='order-panel-confirm-button']",
+				"button:has-text('Confirm')",
+				"button:has-text('Place order')",
+				"button:has-text('Place Order')",
+				"button:has-text('Submit')",
+			],
+			"confirm_cancel": [
+				"[data-testid='overlay-confirm-actions-cancel']",
+				"button:has-text('Cancel')",
+				"div.ui-secondary-button__content:has-text('Cancel')",
+			],
+			"confirm_checkbox": [
+				"[data-testid='checkbox-input']",
 			],
 		}
 		self.max_execution_retries = 2
@@ -317,7 +354,8 @@ class PlaywrightExecutionEngine:
 		page = self.page
 		if page is None:
 			if not self._attempt_reconnect():
-				self._record_selector_failure("broker quote page unavailable")
+				# Quote polling is observational and should not halt execution when
+				# browser attach is temporarily unavailable.
 				return None
 			page = self.page
 
@@ -355,7 +393,8 @@ class PlaywrightExecutionEngine:
 		)
 
 		if bid is None and ask is None and last is None:
-			self._record_selector_failure("quote selectors unavailable")
+			# Quote polling can briefly fail on page transitions/login screens.
+			# Avoid hard-halting here; execution paths still enforce strict selector checks.
 			return None
 
 		self._record_selector_success()
@@ -388,24 +427,194 @@ class PlaywrightExecutionEngine:
 			"captured_at": int(time.time()),
 		}
 
+	def order_panel_snapshot(self):
+		page = self.page
+		if page is None:
+			return {
+				"ready": False,
+				"reason": "page_unavailable",
+				"buy_price": None,
+				"sell_price": None,
+				"volume_control": False,
+			}
+
+		def _exists(selectors):
+			for selector in selectors or []:
+				try:
+					if page.locator(selector).count() > 0:
+						return True
+				except Exception:
+					continue
+			return False
+
+		buy_exists = _exists(self.selector_aliases.get("buy", []))
+		sell_exists = _exists(self.selector_aliases.get("sell", []))
+		volume_exists = _exists(self.selector_aliases.get("volume", []))
+		panel_exists = _exists(self.selector_aliases.get("order_panel", []))
+
+		buy_price = self._first_available_price(page, self.selector_aliases.get("buy_price", []))
+		sell_price = self._first_available_price(page, self.selector_aliases.get("sell_price", []))
+
+		ready = bool(panel_exists and buy_exists and sell_exists and volume_exists)
+		reason = "ok" if ready else "selectors_missing"
+		if not panel_exists:
+			reason = "order_panel_missing"
+
+		return {
+			"ready": ready,
+			"reason": reason,
+			"panel": panel_exists,
+			"buy_button": buy_exists,
+			"sell_button": sell_exists,
+			"volume_control": volume_exists,
+			"buy_price": buy_price,
+			"sell_price": sell_price,
+			"captured_at": int(time.time()),
+		}
+
+	def calibrate_selectors(self, save: bool = True):
+		page = self.page
+		if page is None:
+			return {"ok": False, "reason": "page_unavailable"}
+
+		discovered = {}
+		for key, selectors in self.selector_aliases.items():
+			valid = []
+			for selector in selectors or []:
+				try:
+					if page.locator(selector).count() > 0:
+						valid.append(selector)
+				except Exception:
+					continue
+			discovered[key] = valid
+
+		for key, values in discovered.items():
+			if not values:
+				continue
+			current = list(self.selector_aliases.get(key, []))
+			merged = []
+			seen = set()
+			for selector in [*values, *current]:
+				text = str(selector or "").strip()
+				if not text or text in seen:
+					continue
+				seen.add(text)
+				merged.append(text)
+			self.selector_aliases[key] = merged
+
+		profile = {
+			"updated_at": int(time.time()),
+			"selectors": self.selector_aliases,
+		}
+
+		profile_file = Path("data/matchtrader_selectors.json")
+		if save:
+			profile_file.parent.mkdir(parents=True, exist_ok=True)
+			profile_file.write_text(json.dumps(profile, indent=2), encoding="utf-8")
+
+		return {
+			"ok": True,
+			"profile_file": str(profile_file),
+			"discovered_keys": {k: len(v) for k, v in discovered.items()},
+		}
+
 	def _parse_price(self, text):
 		cleaned = re.sub(r"[^0-9.\-]", "", str(text or "").replace(",", "").strip())
 		return float(cleaned)
 
-	def _dom_stable(self, page):
-		try:
-			buy_visible = any(page.locator(selector).count() > 0 and page.locator(selector).first.is_visible() for selector in self.selector_aliases["buy"])
-			sell_visible = any(page.locator(selector).count() > 0 and page.locator(selector).first.is_visible() for selector in self.selector_aliases["sell"])
-			stable = bool(buy_visible and sell_visible)
-			if stable:
-				self._record_selector_success()
-				self.last_browser_heartbeat = int(time.time())
-			else:
-				self._record_selector_failure("order panel selectors missing")
-			return stable
-		except Exception:
-			self._record_selector_failure("order panel selectors exception")
+	def _normalize_symbol(self, value):
+		text = str(value or "").upper().replace("/", "").strip()
+		return re.sub(r"[^A-Z0-9]", "", text)
+
+	def _active_order_symbol(self, page):
+		raw = self._first_visible_text(page, [
+			"[data-testid='header-symbol']",
+			"[data-testid='quotation-symbol']",
+			"[data-testid='instrument-symbol']",
+			"[data-testid='symbol-name']",
+			"[data-testid='instrument-symbol-name-wrapper']",
+		])
+		return raw, self._normalize_symbol(raw)
+
+	def _try_switch_symbol(self, page, target_symbol):
+		target_norm = self._normalize_symbol(target_symbol)
+		if not target_norm:
 			return False
+
+		# First try direct click on visible symbol labels.
+		try:
+			labels = page.locator("[data-testid='instrument-symbol-name-wrapper']")
+			count = int(labels.count())
+			for i in range(min(count, 120)):
+				label = labels.nth(i)
+				try:
+					text = str(label.inner_text() or "")
+				except Exception:
+					continue
+				norm = self._normalize_symbol(text)
+				if norm != target_norm:
+					continue
+				try:
+					label.click(timeout=1200)
+				except Exception:
+					label.click(timeout=1200, force=True)
+				time.sleep(0.35)
+				return True
+		except Exception:
+			pass
+
+		# Fallback: DOM scan and click closest market row.
+		try:
+			clicked = bool(page.evaluate(
+				"""
+				(target) => {
+				  const normalize = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+				  const all = Array.from(document.querySelectorAll('[data-testid="instrument-symbol-name-wrapper"]'));
+				  for (const el of all) {
+				    if (normalize(el.textContent) !== normalize(target)) continue;
+				    const row = el.closest('[data-testid="list-row"], [data-testid="favorites-list-el"], [data-testid*="row"]') || el;
+				    row.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+				    return true;
+				  }
+				  return false;
+				}
+				""",
+				target_symbol,
+			))
+			if clicked:
+				time.sleep(0.35)
+				return True
+		except Exception:
+			pass
+
+		return False
+
+	def _dom_stable(self, page):
+		def _has_actionable(selectors):
+			for selector in selectors:
+				try:
+					locator = page.locator(selector)
+					if locator.count() <= 0:
+						continue
+					# Detached/animating nodes can intermittently fail visibility checks.
+					try:
+						if locator.first.is_visible():
+							return True
+					except Exception:
+						return True
+				except Exception:
+					continue
+			return False
+
+		buy_visible = _has_actionable(self.selector_aliases.get("buy", []))
+		sell_visible = _has_actionable(self.selector_aliases.get("sell", []))
+		stable = bool(buy_visible and sell_visible)
+		if stable:
+			self._record_selector_success()
+			self.last_browser_heartbeat = int(time.time())
+		else:
+			self._record_selector_failure("order panel selectors missing")
+		return stable
 
 	def confirm_execution(self, page):
 		try:
@@ -414,13 +623,68 @@ class PlaywrightExecutionEngine:
 		except Exception:
 			return False
 
-	def close_position_immediately(self, page):
+	def close_position_immediately(self, page, symbol=None, max_rows=20):
+		target_norm = self._normalize_symbol(symbol)
+
+		def _click_button(btn):
+			try:
+				btn.scroll_into_view_if_needed(timeout=1200)
+			except Exception:
+				pass
+			try:
+				btn.click(timeout=1500)
+			except Exception:
+				try:
+					btn.click(timeout=1500, force=True)
+				except Exception:
+					btn.evaluate("el => el.click()")
+
+		closed_any = False
 		try:
-			if page.locator("[data-testid='position-close-button']").is_visible():
-				page.locator("[data-testid='position-close-button']").click()
-				return True
+			rows = page.locator("[data-testid='open-positions-desktop-list-row']")
+			count = min(int(rows.count()), max(1, int(max_rows)))
+			for i in range(count):
+				row = rows.nth(i)
+				row_symbol = None
+				try:
+					row_symbol = str(row.locator("[data-testid='instrument-symbol-name-wrapper']").first.inner_text() or "").strip()
+				except Exception:
+					row_symbol = None
+				if target_norm and self._normalize_symbol(row_symbol) not in {target_norm}:
+					continue
+				btn = row.locator("[data-testid='close-position-button']")
+				if btn.count() <= 0:
+					btn = row.locator("[data-testid*='close-position']")
+				if btn.count() <= 0:
+					continue
+				try:
+					_click_button(btn.first)
+					self._confirm_order_if_present(page)
+					closed_any = True
+					time.sleep(0.15)
+				except Exception:
+					continue
 		except Exception:
-			return False
+			pass
+
+		if closed_any:
+			return True
+
+		selectors = [
+			"[data-testid='position-close-button']",
+			"[data-testid='close-position-button']",
+			"[data-testid*='close-position']",
+		]
+		for selector in selectors:
+			try:
+				loc = page.locator(selector)
+				if loc.count() <= 0:
+					continue
+				_click_button(loc.first)
+				self._confirm_order_if_present(page)
+				return True
+			except Exception:
+				continue
 		return False
 
 	def _is_partial_fill(self, page, expected_lot_size):
@@ -458,8 +722,173 @@ class PlaywrightExecutionEngine:
 				return value
 		return None
 
+	def _set_volume(self, page, lot_size):
+		value_text = str(lot_size)
+		for selector in self.selector_aliases.get("volume", []):
+			try:
+				locator = page.locator(selector)
+				if locator.count() <= 0:
+					continue
+				field = locator.first
+
+				# Standard edit path via keyboard.
+				try:
+					field.click()
+					page.keyboard.press("Control+A")
+					page.keyboard.type(value_text, delay=8)
+					page.keyboard.press("Enter")
+					time.sleep(0.05)
+					return True
+				except Exception:
+					pass
+
+				# Direct locator fill for input-like controls.
+				try:
+					field.fill(value_text)
+					time.sleep(0.05)
+					return True
+				except Exception:
+					pass
+
+				# JS-driven update for stepper/custom components.
+				try:
+					field.evaluate(
+						"""
+						(el, value) => {
+						  const target = el.matches('input,textarea,[contenteditable="true"]')
+						    ? el
+						    : el.querySelector('input,textarea,[contenteditable="true"]') || el;
+						  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+						    target.focus();
+						    target.value = String(value);
+						    target.dispatchEvent(new Event('input', { bubbles: true }));
+						    target.dispatchEvent(new Event('change', { bubbles: true }));
+						    return true;
+						  }
+						  if (target && target.isContentEditable) {
+						    target.focus();
+						    target.textContent = String(value);
+						    target.dispatchEvent(new Event('input', { bubbles: true }));
+						    target.dispatchEvent(new Event('change', { bubbles: true }));
+						    return true;
+						  }
+						  return false;
+						}
+						""",
+						value_text,
+					)
+					time.sleep(0.05)
+					return True
+				except Exception:
+					continue
+			except Exception:
+				continue
+		return False
+
+	def _dismiss_overlay_backdrop(self, page):
+		dismissed = False
+		try:
+			backdrop = page.locator(".cdk-overlay-backdrop.cdk-overlay-backdrop-showing")
+			if backdrop.count() > 0:
+				try:
+					backdrop.first.click(force=True, timeout=1000)
+				except Exception:
+					pass
+				dismissed = True
+		except Exception:
+			pass
+
+		try:
+			page.keyboard.press("Escape")
+			time.sleep(0.05)
+		except Exception:
+			pass
+		return dismissed
+
+	def _click_order_button(self, page, selectors):
+		last_error = None
+		for selector in selectors:
+			try:
+				locator = page.locator(selector)
+				if locator.count() <= 0:
+					continue
+				target = locator.first
+				try:
+					target.scroll_into_view_if_needed(timeout=1200)
+				except Exception:
+					pass
+				try:
+					target.click(timeout=3000)
+					return True, None
+				except Exception as exc:
+					message = str(exc)
+					last_error = message
+					lowered = message.lower()
+					if "intercepts pointer events" in lowered or "overlay" in lowered:
+						self._dismiss_overlay_backdrop(page)
+						try:
+							target.click(timeout=1500, force=True)
+							return True, None
+						except Exception as force_exc:
+							message = str(force_exc)
+							last_error = message
+					try:
+						target.click(timeout=1200, force=True)
+						return True, None
+					except Exception as force_exc:
+						last_error = str(force_exc)
+					try:
+						target.evaluate("el => { el.click(); return true; }")
+						return True, None
+					except Exception as js_exc:
+						last_error = str(js_exc)
+					continue
+			except Exception:
+				continue
+		return False, f"Order button click failed: {last_error}" if last_error else "Order button click failed"
+
+	def _confirm_order_if_present(self, page):
+		# Handle overlay confirmation dialogs that require checkbox consent first.
+		for checkbox_selector in self.selector_aliases.get("confirm_checkbox", []):
+			try:
+				checkbox = page.locator(checkbox_selector)
+				if checkbox.count() <= 0:
+					continue
+				target = checkbox.first
+				is_checked = False
+				try:
+					is_checked = bool(target.is_checked())
+				except Exception:
+					is_checked = False
+				if not is_checked:
+					try:
+						target.click(timeout=1200)
+					except Exception:
+						target.click(timeout=1200, force=True)
+					time.sleep(0.05)
+			except Exception:
+				continue
+
+		for selector in self.selector_aliases.get("confirm", []):
+			try:
+				locator = page.locator(selector)
+				if locator.count() <= 0:
+					continue
+				try:
+					locator.first.click(timeout=1500)
+				except Exception:
+					self._dismiss_overlay_backdrop(page)
+					locator.first.click(timeout=1500, force=True)
+				time.sleep(0.1)
+				return True, selector
+			except Exception:
+				continue
+		return False, None
+
 	def recover_from_selector_failure(self, force_reconnect=False):
-		if not self.selector_halted and not force_reconnect:
+		health = self.execution_guard.health_snapshot()
+		execution_halted = str(health.get("execution_status") or "").upper() == "HALTED"
+		if not self.selector_halted and not force_reconnect and not execution_halted:
 			return {"ok": True, "reason": "No selector halt active"}
 
 		if force_reconnect:
@@ -482,12 +911,78 @@ class PlaywrightExecutionEngine:
 
 		return {"ok": False, "reason": "Selectors still unavailable", "dom_ok": dom_ok, "quote_ok": quote_ok}
 
-	def _read_position(self, page):
-		entry_price = self._safe_price(page, "[data-testid='position-entry-price']")
-		volume = self._safe_price(page, "[data-testid='position-volume']")
-		sl = self._safe_price(page, "[data-testid='position-sl']")
-		tp = self._safe_price(page, "[data-testid='position-tp']")
-		symbol = self._safe_text(page, "[data-testid='position-symbol']")
+	def _read_position(self, page, target_symbol=None):
+		target_norm = self._normalize_symbol(target_symbol)
+		entry_price = self._first_available_price(page, [
+			"[data-testid='position-entry-price']",
+			"[data-testid*='entry-price']",
+			"[data-testid*='open-price']",
+			"[data-testid*='avg-price']",
+			"[data-testid='open-position-entry-price']",
+		])
+		volume = self._first_available_price(page, [
+			"[data-testid='position-volume']",
+			"[data-testid*='position-volume']",
+			"[data-testid*='open-volume']",
+			"[data-testid*='quantity']",
+			"[data-testid='open-position-volume']",
+		])
+		sl = self._first_available_price(page, [
+			"[data-testid='position-sl']",
+			"[data-testid*='position-sl']",
+			"[data-testid*='stop-loss']",
+		])
+		tp = self._first_available_price(page, [
+			"[data-testid='position-tp']",
+			"[data-testid*='position-tp']",
+			"[data-testid*='take-profit']",
+		])
+		symbol = self._first_visible_text(page, [
+			"[data-testid='position-symbol']",
+			"[data-testid*='position-symbol']",
+			"[data-testid='quotation-symbol']",
+			"[data-testid='instrument-symbol']",
+			"[data-testid='instrument-symbol-name-wrapper']",
+		])
+
+		source = "primary"
+		if entry_price is None:
+			try:
+				row = page.locator("[data-testid='open-positions-desktop-list-row']")
+				if row.count() > 0:
+					selected_row = None
+					selected_symbol = None
+					count = int(row.count())
+					for i in range(min(count, 30)):
+						candidate = row.nth(i)
+						cand_symbol = None
+						try:
+							s_text = candidate.locator("[data-testid='instrument-symbol-name-wrapper']").first.inner_text()
+							cand_symbol = str(s_text or "").strip()
+						except Exception:
+							cand_symbol = None
+						cand_norm = self._normalize_symbol(cand_symbol)
+						if target_norm and cand_norm and cand_norm == target_norm:
+							selected_row = candidate
+							selected_symbol = cand_symbol
+							break
+						if selected_row is None:
+							selected_row = candidate
+							selected_symbol = cand_symbol
+
+					if selected_row is not None:
+						if symbol is None:
+							symbol = selected_symbol or symbol
+						if volume is None:
+							try:
+								v_text = selected_row.locator("[data-testid='open-position-volume']").first.inner_text()
+								volume = self._parse_price(v_text)
+							except Exception:
+								pass
+						entry_price = self._first_available_price(page, self.selector_aliases.get("quote", []))
+						source = "open_positions_row"
+			except Exception:
+				pass
 
 		if entry_price is None:
 			return None
@@ -498,17 +993,98 @@ class PlaywrightExecutionEngine:
 			"sl": sl,
 			"tp": tp,
 			"symbol": symbol,
+			"source": source,
+		}
+
+	def _fill_diagnostics(self, page):
+		def _count(selector):
+			try:
+				return int(page.locator(selector).count())
+			except Exception:
+				return 0
+
+		position_selectors = {
+			"position_row": "[data-testid*='position-row']",
+			"position_entry_price": "[data-testid*='entry-price']",
+			"position_volume": "[data-testid*='position-volume']",
+			"position_symbol": "[data-testid*='position-symbol']",
+			"positions_tab": "[data-testid='open-positions-tab']",
+			"confirm_button": "[data-testid='order-panel-confirm-button']",
+			"overlay_backdrop": ".cdk-overlay-backdrop.cdk-overlay-backdrop-showing",
+		}
+		counts = {key: _count(selector) for key, selector in position_selectors.items()}
+
+		toast_text = None
+		try:
+			toast_text = page.evaluate(
+				"""
+				() => {
+				  const selectors = [
+				    '[data-testid*="toast"]',
+				    '[role="alert"]',
+				    '.toast',
+				    '.notification',
+				  ];
+				  for (const sel of selectors) {
+				    const el = document.querySelector(sel);
+				    if (el && el.textContent) return el.textContent.trim().slice(0, 300);
+				  }
+				  return null;
+				}
+				"""
+			)
+		except Exception:
+			toast_text = None
+
+		return {
+			"position_selector_counts": counts,
+			"toast": toast_text,
 		}
 
 	def _place_order(self, signal, lot_size, page):
-		if not self._dom_stable(page):
-			if self._attempt_reconnect() and self.page is not None and self._dom_stable(self.page):
+		manual_test_mode = str(signal.get("model") or "").upper() == "MANUAL_TEST"
+		require_strict_dom = str(signal.get("model") or "").upper() != "MANUAL_TEST"
+		if require_strict_dom and not self._dom_stable(page):
+			panel_ready = False
+			for _ in range(6):
+				panel = self.order_panel_snapshot()
+				if panel.get("ready"):
+					panel_ready = True
+					break
+				time.sleep(0.3)
+
+			if panel_ready:
+				self._record_selector_success()
+				self.last_browser_heartbeat = int(time.time())
+			elif self._attempt_reconnect() and self.page is not None and self._dom_stable(self.page):
 				page = self.page
 			else:
 				self.emergency_halt("Broker disconnected / DOM unstable")
 				return {"status": "Rejected", "reason": "DOM not stable"}
 
 		expected_entry = signal.get("entry_price")
+		expected_symbol_raw = str(signal.get("symbol") or "").strip()
+		expected_symbol_norm = self._normalize_symbol(expected_symbol_raw)
+		active_symbol_raw, active_symbol_norm = self._active_order_symbol(page)
+		if expected_symbol_norm and active_symbol_norm and expected_symbol_norm != active_symbol_norm:
+			switched = False
+			if manual_test_mode:
+				switched = self._try_switch_symbol(page, expected_symbol_raw)
+				if switched:
+					time.sleep(0.4)
+					active_symbol_raw, active_symbol_norm = self._active_order_symbol(page)
+			if expected_symbol_norm != active_symbol_norm:
+				reason = f"Symbol mismatch (expected={expected_symbol_raw}, active={active_symbol_raw})"
+				if not manual_test_mode:
+					self.emergency_halt(reason)
+				return {
+					"status": "Rejected",
+					"reason": reason,
+					"expected_symbol": expected_symbol_raw,
+					"active_symbol": active_symbol_raw,
+					"symbol_switch_attempted": bool(manual_test_mode),
+					"symbol_switched": bool(switched),
+				}
 		expected_sl = signal.get("sl")
 		expected_tp = signal.get("tp")
 		valid, message = self.execution_guard.validate_sl_tp(expected_sl, expected_tp, expected_entry)
@@ -520,37 +1096,69 @@ class PlaywrightExecutionEngine:
 		if requested_price is None:
 			requested_price = expected_entry
 
+		volume_set = self._set_volume(page, lot_size)
+		if not volume_set and not manual_test_mode:
+			return {"status": "Rejected", "reason": "Volume selector not found"}
+
 		direction = signal.get("direction", "").upper()
+		button_price = None
 		if direction == "BUY":
-			clicked = False
-			for selector in self.selector_aliases["buy"]:
-				if page.locator(selector).count() > 0:
-					page.locator(selector).first.click()
-					clicked = True
-					break
+			button_price = self._first_available_price(page, self.selector_aliases.get("buy_price", []))
+			clicked, click_error = self._click_order_button(page, self.selector_aliases["buy"])
 			if not clicked:
-				return {"status": "Rejected", "reason": "Buy selector not found"}
+				return {"status": "Rejected", "reason": click_error or "Buy selector not found"}
 		elif direction == "SELL":
-			clicked = False
-			for selector in self.selector_aliases["sell"]:
-				if page.locator(selector).count() > 0:
-					page.locator(selector).first.click()
-					clicked = True
-					break
+			button_price = self._first_available_price(page, self.selector_aliases.get("sell_price", []))
+			clicked, click_error = self._click_order_button(page, self.selector_aliases["sell"])
 			if not clicked:
-				return {"status": "Rejected", "reason": "Sell selector not found"}
+				return {"status": "Rejected", "reason": click_error or "Sell selector not found"}
 		else:
 			self.emergency_halt("Invalid direction")
 			return {"status": "Rejected", "reason": "Invalid direction"}
 
+		confirm_clicked, confirm_selector = self._confirm_order_if_present(page)
+
+		fill_timeout = 15.0 if manual_test_mode else None
 		filled, position_data = self.execution_guard.wait_for_fill(
-			lambda: self._read_position(page)
+			lambda: self._read_position(page, target_symbol=expected_symbol_raw),
+			timeout_seconds=fill_timeout,
 		)
 		if not filled or not position_data:
+			diagnostics = self._fill_diagnostics(page)
+			if manual_test_mode:
+				return {
+					"status": "SUBMITTED_NO_CONFIRM",
+					"reason": "Fill confirmation timeout",
+					"requested_price": requested_price,
+					"button_price": button_price,
+					"confirm_clicked": bool(confirm_clicked),
+					"confirm_selector": confirm_selector,
+					"active_symbol": active_symbol_raw,
+					"volume_set": bool(volume_set),
+					"diagnostics": diagnostics,
+				}
 			self.emergency_halt("Order timeout - no fill confirmation")
-			return {"status": "Rejected", "reason": "Execution timeout"}
+			return {"status": "Rejected", "reason": "Execution timeout", "diagnostics": diagnostics}
 
 		executed_price = float(position_data.get("entry_price"))
+		if manual_test_mode:
+			return {
+				"status": "EXECUTED",
+				"model": signal.get("model"),
+				"direction": direction,
+				"lot_size": lot_size,
+				"requested_price": requested_price,
+				"button_price": button_price,
+				"entry_price": executed_price,
+				"fill_price": executed_price,
+				"position_data": position_data,
+				"confirm_clicked": bool(confirm_clicked),
+				"confirm_selector": confirm_selector,
+				"active_symbol": active_symbol_raw,
+				"volume_set": bool(volume_set),
+				"verification_mode": "manual_relaxed",
+				"execution_source": "PLAYWRIGHT",
+			}
 
 		if self._is_partial_fill(page, lot_size):
 			self.close_position_immediately(page)
@@ -580,10 +1188,15 @@ class PlaywrightExecutionEngine:
 			"direction": direction,
 			"lot_size": lot_size,
 			"requested_price": requested_price,
+			"button_price": button_price,
 			"entry_price": executed_price,
 			"slippage": slippage,
 			"fill_price": executed_price,
 			"position_data": position_data,
+			"confirm_clicked": bool(confirm_clicked),
+			"confirm_selector": confirm_selector,
+			"active_symbol": active_symbol_raw,
+			"volume_set": bool(volume_set),
 			"execution_source": "PLAYWRIGHT",
 		}
 
@@ -604,6 +1217,20 @@ class PlaywrightExecutionEngine:
 		return False
 
 	def execute(self, signal, lot_size, page=None):
+		manual_test_mode = str((signal or {}).get("model") or "").upper() == "MANUAL_TEST"
+		if not isinstance(signal, dict):
+			return {"status": "Rejected", "reason": "Invalid signal payload"}
+
+		if not manual_test_mode:
+			direction = str(signal.get("direction") or "").upper().strip()
+			symbol = str(signal.get("symbol") or "").upper().strip()
+			if direction not in {"BUY", "SELL"}:
+				return {"status": "Rejected", "reason": "Invalid signal direction"}
+			if not symbol:
+				return {"status": "Rejected", "reason": "Missing signal symbol"}
+			if signal.get("sl") is None or signal.get("tp") is None:
+				return {"status": "Rejected", "reason": "Missing SL/TP for strict execution"}
+
 		if self.execution_guard.is_halted():
 			return {"status": "Rejected", "reason": "Execution HALTED"}
 
@@ -629,14 +1256,9 @@ class PlaywrightExecutionEngine:
 					self.emergency_halt("Broker disconnected")
 					return {"status": "Rejected", "reason": "Broker disconnected", "retry_attempts": 0}
 
-			max_attempts = max(1, int(self.max_execution_retries) + 1)
+			max_attempts = 1 if manual_test_mode else max(1, int(self.max_execution_retries) + 1)
 			for attempt in range(1, max_attempts + 1):
-				result = execution_timeout(
-					self.timeout_seconds,
-					lambda: self._place_order(signal, lot_size, page),
-				)
-				if result == "TIMEOUT":
-					result = {"status": "Rejected", "reason": "Execution timeout"}
+				result = self._place_order(signal, lot_size, page)
 
 				if str(result.get("status") or "").upper() == "EXECUTED":
 					result["retry_attempts"] = attempt - 1
@@ -655,7 +1277,8 @@ class PlaywrightExecutionEngine:
 				self.last_browser_heartbeat = int(time.time())
 			return result
 		except Exception as exc:
-			self.emergency_halt(f"Playwright crash / execution failure: {exc}")
+			if not manual_test_mode:
+				self.emergency_halt(f"Playwright crash / execution failure: {exc}")
 			return {"status": "Rejected", "reason": f"Execution failed: {exc}"}
 		finally:
 			self.order_in_progress = False

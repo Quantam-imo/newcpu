@@ -389,9 +389,20 @@
         .mentor-content-wrap { padding: 10px; overflow: auto; }
         .mentor-content details { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; padding: 6px 8px; background: var(--surface-alt); }
         .mentor-content summary { cursor: pointer; font-weight: 700; }
-        .mentor-content .mentor-row { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed var(--border); padding: 5px 0; }
-        .mentor-content .mentor-row span { color: var(--muted); }
-        .mentor-content .mentor-row strong { color: var(--text); text-align: right; max-width: 62%; }
+        .mentor-content .mentor-row {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2px;
+            border-bottom: 1px dashed var(--border);
+            border-left: 3px solid color-mix(in srgb, var(--border-strong) 78%, transparent 22%);
+            padding: 6px 8px;
+            margin: 2px 0;
+            background: color-mix(in srgb, var(--surface-alt) 88%, transparent 12%);
+            border-radius: 6px;
+        }
+        .mentor-content .mentor-row span { color: var(--muted); text-transform: uppercase; letter-spacing: 0.3px; }
+        .mentor-content .mentor-row strong { color: var(--text); text-align: left; max-width: 100%; }
         .mentor-kpi-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 8px; }
         .mentor-kpi {
             border: 1px solid var(--border);
@@ -472,6 +483,48 @@
             line-height: 1.2;
             background: var(--surface-alt);
         }
+    
+        .mentor-meta { font-size: 10px !important; }
+        .mentor-content summary { font-size: 11px !important; }
+        .mentor-content .mentor-row span { font-size: 10px !important; }
+        .mentor-content .mentor-row strong { font-size: 11px !important; }
+        .mentor-kpi span { font-size: 9px !important; }
+        .mentor-kpi strong { font-size: 11px !important; }
+        .mentor-narrative-title { font-size: 10px !important; }
+        .mentor-narrative p { font-size: 10px !important; line-height: 1.4 !important; white-space: pre-line; }
+        .mentor-exec-item { font-size: 10px !important; }
+        .mentor-action-call {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            border: 1px solid var(--border-strong);
+            border-left-width: 4px;
+            border-radius: 8px;
+            background: var(--surface-alt);
+            padding: 8px 9px;
+            margin-bottom: 8px;
+        }
+        .mentor-action-call strong { font-size: 12px; color: var(--text); letter-spacing: 0.2px; }
+        .mentor-action-call span { font-size: 10px; color: var(--muted); line-height: 1.35; }
+        .mentor-tone-bull { border-left-color: #16a34a !important; }
+        .mentor-tone-bear { border-left-color: #dc2626 !important; }
+        .mentor-tone-warn { border-left-color: #d97706 !important; }
+        .mentor-tone-neutral { border-left-color: #64748b !important; }
+        .mentor-live-price { color: #facc15 !important; font-weight: 800; text-shadow: 0 0 8px rgba(250, 204, 21, 0.28); }
+        .mentor-content details { border-left-width: 4px !important; }
+        .mentor-section-market { border-left-color: #38bdf8 !important; }
+        .mentor-section-liquidity { border-left-color: #34d399 !important; }
+        .mentor-section-institution { border-left-color: #f59e0b !important; }
+        .mentor-section-ict { border-left-color: #f97316 !important; }
+        .mentor-section-gann { border-left-color: #a78bfa !important; }
+        .mentor-section-astro { border-left-color: #c084fc !important; }
+        .mentor-section-news { border-left-color: #ef4444 !important; }
+        .mentor-section-session { border-left-color: #22d3ee !important; }
+        .mentor-section-probability { border-left-color: #84cc16 !important; }
+        .mentor-section-story { border-left-color: #eab308 !important; }
+        .mentor-section-risk { border-left-color: #fb7185 !important; }
+        .mentor-section-actions { border-left-color: #64748b !important; }
+
     </style>
 </head>
 <body>
@@ -825,6 +878,11 @@
                                 <div><span>Selector Profile</span><strong id="opsSelectorProfile">--</strong></div>
                                 <div><span>Selector Updated</span><strong id="opsSelectorUpdated">--</strong></div>
                                 <div><span>Execution</span><strong id="opsExecutionStatus">--</strong></div>
+                                <div><span>Order Panel</span><strong id="opsOrderPanelReady">--</strong></div>
+                                <div><span>Panel Reason</span><strong id="opsOrderPanelReason">--</strong></div>
+                                <div><span>Volume Control</span><strong id="opsVolumeControl">--</strong></div>
+                                <div><span>Buy Btn Price</span><strong id="opsBuyButtonPrice">--</strong></div>
+                                <div><span>Sell Btn Price</span><strong id="opsSellButtonPrice">--</strong></div>
                                 <div><span>Risk Violations</span><strong id="opsRiskViolations">--</strong></div>
                             </div>
                         </div>
@@ -883,7 +941,7 @@
                     </div>
                     <div class="row">
                         <button id="opsProbeBtn">Run Feed Probe</button>
-                        <button id="opsReconnectBtn">Reconnect Browser</button>
+                        <button id="opsReconnectBtn" onclick="window.reconnectExecutionBrowserSafe && window.reconnectExecutionBrowserSafe()">Reconnect Browser</button>
                         <button id="opsKillSwitchBtn">Kill Switch</button>
                         <button id="opsRestartExecBtn">Restart Execution</button>
                         <button id="opsDisableAutoBtn">Disable Auto</button>

@@ -1,0 +1,67 @@
+{
+  "XAUUSD": {
+    "active_symbol": "GC.c.1",
+    "resolved_at": 1772846569,
+    "last_probe_at": 1772846569,
+    "last_status": "LIVE",
+    "sample_count": 120,
+    "attempts": 4344,
+    "consecutive_failures": 0,
+    "ttl_seconds": 14400,
+    "candidates_tried": [
+      "GC.c.1"
+    ]
+  },
+  "NQ": {
+    "active_symbol": "NQ.FUT",
+    "resolved_at": 1772846210,
+    "last_probe_at": 1772846210,
+    "last_status": "LIVE",
+    "sample_count": 111,
+    "attempts": 121,
+    "consecutive_failures": 0,
+    "ttl_seconds": 14400,
+    "candidates_tried": [
+      "NQ.FUT"
+    ]
+  },
+  "EURUSD": {
+    "active_symbol": "6E.FUT",
+    "resolved_at": 1772846214,
+    "last_probe_at": 1772846214,
+    "last_status": "LIVE",
+    "sample_count": 153,
+    "attempts": 116,
+    "consecutive_failures": 0,
+    "ttl_seconds": 14400,
+    "candidates_tried": [
+      "6E.FUT"
+    ]
+  },
+  "BTC": {
+    "active_symbol": "BTC.FUT",
+    "resolved_at": 1772846227,
+    "last_probe_at": 1772846227,
+    "last_status": "LIVE",
+    "sample_count": 60,
+    "attempts": 116,
+    "consecutive_failures": 0,
+    "ttl_seconds": 14400,
+    "candidates_tried": [
+      "BTC.FUT"
+    ]
+  },
+  "US30": {
+    "active_symbol": "YM.FUT",
+    "resolved_at": 1772846233,
+    "last_probe_at": 1772846233,
+    "last_status": "LIVE",
+    "sample_count": 87,
+    "attempts": 108,
+    "consecutive_failures": 0,
+    "ttl_seconds": 14400,
+    "candidates_tried": [
+      "YM.FUT"
+    ]
+  }
+}
