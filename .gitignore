@@ -22,6 +22,12 @@ logs/
 # Browser/runtime profiles
 **/data/playwright_user/
 **/data/playwright_matchtrader/
+**/browser_session/
+AstroQuant_Phase1/browser_session/
+**/SingletonCookie
+**/SingletonLock
+**/SingletonSocket
+*.pma
 
 # Cache and tooling
 .pytest_cache/
