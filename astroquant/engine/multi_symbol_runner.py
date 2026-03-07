@@ -742,6 +742,104 @@ class MultiSymbolRunner:
             "resolver_failures": resolver_failures,
         }
 
+    def offset_guard_snapshot(self, symbol, basis_snapshot=None):
+        basis = basis_snapshot or self.get_basis_snapshot(symbol)
+        guard = self._offset_guard_state(symbol, basis)
+        return {
+            "symbol": symbol,
+            "status": str(guard.get("status") or "UNAVAILABLE").upper(),
+            "deviation": guard.get("deviation"),
+            "baseline": guard.get("baseline"),
+            "smooth": guard.get("smooth"),
+        }
+
+    def trade_quality_snapshot(self, symbol, market_data=None, basis_snapshot=None, basis_policy=None):
+        data = market_data or self.get_market_data(symbol) or {}
+        basis = basis_snapshot or data.get("basis") or self.get_basis_snapshot(symbol)
+        policy = basis_policy or self.basis_safety_policy(symbol, basis_snapshot=basis)
+        offset = self.offset_guard_snapshot(symbol, basis_snapshot=basis)
+
+        score = 100.0
+        reasons = []
+
+        basis_status = str((basis or {}).get("status") or "UNINITIALIZED").upper()
+        if basis_status in {"UNINITIALIZED", "UNAVAILABLE"}:
+            score -= 40.0
+            reasons.append("Basis unavailable")
+        elif basis_status == "STALE":
+            score -= 25.0
+            reasons.append("Basis stale")
+        elif basis_status == "GUARDED":
+            score -= 45.0
+            reasons.append(str((basis or {}).get("guard_reason") or "Basis guarded"))
+
+        try:
+            zscore = abs(float((basis or {}).get("zscore") or 0.0))
+        except Exception:
+            zscore = 0.0
+        if zscore >= 3.0:
+            score -= 25.0
+            reasons.append("High basis z-score")
+        elif zscore >= 2.0:
+            score -= 12.0
+            reasons.append("Moderate basis z-score")
+
+        if bool((policy or {}).get("hard_block")):
+            score -= 45.0
+            reasons.append("Basis safety hard block")
+        score *= float((policy or {}).get("risk_modifier") or 1.0)
+
+        offset_status = str((offset or {}).get("status") or "UNAVAILABLE").upper()
+        if offset_status == "HALT":
+            score -= 25.0
+            reasons.append("Offset deviation halt")
+        elif offset_status == "KILL":
+            score -= 45.0
+            reasons.append("Offset kill threshold")
+
+        try:
+            if bool(data.get("spot_guard_block")):
+                score -= 35.0
+                reasons.append(str(data.get("spot_guard_reason") or "Spot fidelity guard"))
+        except Exception:
+            pass
+
+        try:
+            if bool(data.get("volume_spike")):
+                score += 5.0
+            if bool(data.get("liquidity_sweep")):
+                score += 3.0
+        except Exception:
+            pass
+
+        score = max(0.0, min(100.0, float(score)))
+        grade = "A" if score >= 80 else ("B" if score >= 65 else ("C" if score >= 50 else "D"))
+
+        signal_preview = []
+        try:
+            candidates = self.signal_manager.generate_signals(data, symbol) or []
+            for row in list(candidates)[:5]:
+                signal_preview.append({
+                    "model": str(row.get("model") or "UNKNOWN"),
+                    "direction": str(row.get("direction") or "").upper(),
+                    "confidence": float(row.get("confidence") or 0.0),
+                    "risk_percent": float(row.get("risk_percent") or 0.0),
+                })
+        except Exception:
+            signal_preview = []
+
+        return {
+            "symbol": symbol,
+            "score": round(score, 2),
+            "grade": grade,
+            "basis_status": basis_status,
+            "offset_status": offset_status,
+            "hard_block": bool((policy or {}).get("hard_block")),
+            "risk_modifier": float((policy or {}).get("risk_modifier") or 1.0),
+            "reasons": reasons,
+            "signal_candidates": signal_preview,
+        }
+
     def get_market_data(self, symbol):
         feed_symbol, candles = self.get_futures_candles(
             symbol,

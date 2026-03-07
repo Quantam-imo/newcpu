@@ -2782,6 +2782,60 @@ def market_context_endpoint(symbol: str):
     }
 
 
+@app.get("/market/offset_quality")
+def market_offset_quality(symbol: str = "GC.FUT"):
+    feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
+    canonical_symbol = feed_to_canonical.get(symbol, symbol)
+    _prime_symbol_runtime(canonical_symbol)
+
+    market_data = _run_with_timeout(2.0, lambda: runner.get_market_data(canonical_symbol) or {}, {})
+    basis_snapshot = _normalize_basis_snapshot(runner.get_basis_snapshot(canonical_symbol))
+    basis_policy = runner.basis_safety_policy(canonical_symbol, basis_snapshot=basis_snapshot)
+    offset_guard = runner.offset_guard_snapshot(canonical_symbol, basis_snapshot=basis_snapshot)
+    trade_quality = runner.trade_quality_snapshot(
+        canonical_symbol,
+        market_data=market_data,
+        basis_snapshot=basis_snapshot,
+        basis_policy=basis_policy,
+    )
+
+    broker_quote = _run_playwright_task(
+        lambda: runner.execution.broker_quote_snapshot(expected_symbols=[canonical_symbol, "XAUUSD", "XAU/USD"]),
+        fallback={},
+        timeout_seconds=4.0,
+    ) or {}
+
+    return {
+        "status": "ok",
+        "symbol": canonical_symbol,
+        "sources": {
+            "futures_source": (market_data or {}).get("futures_source"),
+            "spot_source": (market_data or {}).get("spot_source"),
+            "pricing_source": (market_data or {}).get("pricing_source"),
+            "broker_symbol": broker_quote.get("symbol"),
+            "dataset": symbol_dataset(canonical_symbol),
+        },
+        "basis": basis_snapshot,
+        "offset_guard": offset_guard,
+        "basis_policy": basis_policy,
+        "trade_quality": trade_quality,
+        "signal_detection": {
+            "count": len(list((trade_quality or {}).get("signal_candidates") or [])),
+            "candidates": list((trade_quality or {}).get("signal_candidates") or []),
+        },
+        "broker_quote": broker_quote,
+        "spot_fidelity": {
+            "spot_primary": bool((market_data or {}).get("spot_primary")),
+            "strict": bool((market_data or {}).get("spot_fidelity_strict")),
+            "spot_guard_block": bool((market_data or {}).get("spot_guard_block")),
+            "spot_guard_reason": (market_data or {}).get("spot_guard_reason"),
+            "spot_confirmation_bps": (market_data or {}).get("spot_confirmation_bps"),
+            "spot_confirmation_max_bps": (market_data or {}).get("spot_confirmation_max_bps"),
+        },
+        "captured_at": int(time.time()),
+    }
+
+
 @app.get("/mentor/context")
 def mentor_context(symbol: str = "GC.FUT"):
     feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
