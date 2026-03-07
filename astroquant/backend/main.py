@@ -1711,6 +1711,80 @@ def execution_debug_selectors():
     )
 
 
+@app.get("/execution/discover_symbols")
+def execution_discover_symbols(
+    limit: int = Query(default=300),
+    include_quotes: bool = Query(default=True),
+    persist: bool = Query(default=True),
+):
+    cache_path = BASE_DIR / "data" / "broker_symbols_cache.json"
+
+    def _read_cache_payload():
+        if not cache_path.exists():
+            return None
+        try:
+            cached = json.loads(cache_path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+        return {
+            "status": "cached",
+            "active_symbol": cached.get("active_symbol"),
+            "active_symbol_canonical": cached.get("active_symbol_canonical"),
+            "count": int(cached.get("count") or 0),
+            "symbols": list(cached.get("symbols") or []),
+            "captured_at": int(cached.get("captured_at") or 0),
+            "cache_file": str(cache_path.relative_to(BASE_DIR)),
+        }
+
+    def _impl():
+        page = runner.execution.playwright.page
+        if page is None:
+            connect = _connect_execution_browser(force=False)
+            page = connect.get("page")
+
+        if page is None:
+            cached = _read_cache_payload()
+            if cached:
+                cached["reason"] = "playwright_page_unavailable"
+                return cached
+            return {"status": "error", "reason": "playwright_page_unavailable", "symbols": []}
+
+        result = runner.execution.playwright.discover_broker_symbols(
+            page,
+            limit=max(10, min(int(limit or 300), 2000)),
+            include_quotes=bool(include_quotes),
+        ) or {}
+
+        payload = {
+            "status": "ok" if bool(result.get("ok", True)) else "error",
+            "active_symbol": result.get("active_symbol"),
+            "active_symbol_canonical": result.get("active_symbol_canonical"),
+            "count": int(result.get("count") or 0),
+            "symbols": list(result.get("symbols") or []),
+            "captured_at": int(result.get("captured_at") or time.time()),
+        }
+
+        if bool(persist):
+            out = {
+                "captured_at": payload["captured_at"],
+                "active_symbol": payload["active_symbol"],
+                "active_symbol_canonical": payload["active_symbol_canonical"],
+                "count": payload["count"],
+                "symbols": payload["symbols"],
+            }
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(json.dumps(out, indent=2), encoding="utf-8")
+            payload["cache_file"] = str(cache_path.relative_to(BASE_DIR))
+
+        return payload
+
+    return _run_playwright_task(
+        _impl,
+        fallback={"status": "error", "reason": "playwright_executor_timeout", "symbols": []},
+        timeout_seconds=15.0,
+    )
+
+
 @app.post("/execution/calibrate_selectors")
 def execution_calibrate_selectors(save: bool = Query(default=True)):
     def _impl():

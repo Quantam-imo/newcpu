@@ -589,6 +589,80 @@ class PlaywrightExecutionEngine:
 
 		return False
 
+	def discover_broker_symbols(self, page, limit=300, include_quotes=True):
+		max_items = max(10, min(int(limit or 300), 2000))
+		nodes = [
+			"[data-testid='instrument-symbol-name-wrapper']",
+			"[data-testid='quotation-symbol']",
+			"[data-testid='symbol-name']",
+			"[data-testid='instrument-symbol']",
+		]
+		if include_quotes:
+			nodes.extend([
+				"[data-testid='quotation-bid']",
+				"[data-testid='quotation-ask']",
+			])
+
+		try:
+			rows = page.evaluate(
+				"""
+				(selectors, maxItems) => {
+				  const out = [];
+				  const seen = new Set();
+				  const normalize = (v) => String(v || '').replace(/\s+/g, ' ').trim();
+				  const toCanonical = (v) => normalize(v).toUpperCase().replace(/[^A-Z0-9/]/g, '');
+				  for (const selector of selectors) {
+				    const all = Array.from(document.querySelectorAll(selector));
+				    for (const el of all) {
+				      const text = normalize(el.textContent || el.innerText || '');
+				      if (!text) continue;
+				      const canonical = toCanonical(text);
+				      if (!canonical) continue;
+				      if (seen.has(canonical)) continue;
+				      seen.add(canonical);
+				      out.push({
+				        symbol: text,
+				        canonical,
+				        selector,
+				      });
+				      if (out.length >= maxItems) return out;
+				    }
+				  }
+				  return out;
+				}
+				""",
+				nodes,
+				max_items,
+			) or []
+		except Exception:
+			rows = []
+
+		clean = []
+		seen = set()
+		for row in list(rows or []):
+			raw = str((row or {}).get("symbol") or "").strip()
+			canonical = self._normalize_symbol((row or {}).get("canonical") or raw)
+			if not re.search(r"[A-Z]", canonical):
+				continue
+			if not canonical or canonical in seen:
+				continue
+			seen.add(canonical)
+			clean.append({
+				"symbol": raw,
+				"canonical": canonical,
+				"selector": str((row or {}).get("selector") or ""),
+			})
+
+		active_raw, active_norm = self._active_order_symbol(page)
+		return {
+			"ok": True,
+			"active_symbol": active_raw,
+			"active_symbol_canonical": active_norm,
+			"count": len(clean),
+			"symbols": clean,
+			"captured_at": int(time.time()),
+		}
+
 	def _dom_stable(self, page):
 		def _has_actionable(selectors):
 			for selector in selectors:
