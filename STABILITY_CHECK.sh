@@ -43,19 +43,19 @@ fail_count=0
 run_test() {
     local name="$1"
     local cmd="$2"
-    ((test_count++))
+    test_count=$((test_count + 1))
 
     echo -ne "[$test_count] Testing: $name... " | tee -a "$VERIFY_LOG"
 
     if output=$(eval "$cmd" 2>&1); then
         success "PASS"
-        ((pass_count++))
+        pass_count=$((pass_count + 1))
         return 0
     else
         echo -e "${RED}✗${NC} FAIL" | tee -a "$VERIFY_LOG"
         echo "  Error: $output" | tee -a "$VERIFY_LOG"
-        ((fail_count++))
-        return 1
+        fail_count=$((fail_count + 1))
+        return 0
     fi
 }
 
@@ -195,7 +195,7 @@ for file in "${REQUIRED_FILES[@]}"; do
         success "Found: $file ($size)"
     else
         error "MISSING: $file"
-        ((fail_count++))
+        fail_count=$((fail_count + 1))
     fi
 done
 
