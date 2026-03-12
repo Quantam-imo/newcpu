@@ -2,6 +2,39 @@ import os
 from pathlib import Path
 
 
+def _env_first(*names: str, default: str = "") -> str:
+    for name in names:
+        value = os.getenv(name)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return str(default).strip()
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return bool(default)
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(*names: str, default: int = 0) -> int:
+    for name in names:
+        raw = os.getenv(name)
+        if raw is None:
+            continue
+        text = str(raw).strip()
+        if not text:
+            continue
+        try:
+            return int(float(text))
+        except Exception:
+            continue
+    return int(default)
+
+
 def _load_env_file():
     env_path = Path(__file__).resolve().parent.parent / ".env"
     if not env_path.exists():
@@ -32,11 +65,12 @@ ACCOUNT_CONFIG = {
 }
 
 SYMBOLS = {
-    "XAUUSD": {"databento": "GC.FUT", "priority_models": ["ICT", "ICEBERG"], "dataset": "GLBX.MDP3"},
-    "NQ": {"databento": "NQ.FUT", "priority_models": ["EXPANSION", "ICEBERG"], "dataset": "GLBX.MDP3"},
-    "EURUSD": {"databento": "6E.FUT", "priority_models": ["ICT"], "dataset": "GLBX.MDP3"},
-    "BTC": {"databento": "BTC.FUT", "priority_models": ["EXPANSION"], "dataset": "GLBX.MDP3"},
-    "US30": {"databento": "YM.FUT", "priority_models": ["ICT"], "dataset": "GLBX.MDP3"}
+    "XAUUSD": {"databento": "GC.c.1", "priority_models": ["ICT", "ICEBERG"], "dataset": "GLBX.MDP3"},
+    "GC-F": {"databento": "GC.c.1", "priority_models": ["ICT", "ICEBERG"], "dataset": "GLBX.MDP3"},
+    "NQ": {"databento": "NQ.c.1", "priority_models": ["EXPANSION", "ICEBERG"], "dataset": "GLBX.MDP3"},
+    "EURUSD": {"databento": "6E.c.1", "priority_models": ["ICT"], "dataset": "GLBX.MDP3"},
+    "BTC": {"databento": "BTC.c.1", "priority_models": ["EXPANSION"], "dataset": "GLBX.MDP3"},
+    "US30": {"databento": "YM.c.1", "priority_models": ["ICT"], "dataset": "GLBX.MDP3"}
 }
 
 DATABENTO_API_KEY = os.getenv("DATABENTO_API_KEY", "").strip()
@@ -47,12 +81,24 @@ SPOT_FIDELITY_SYMBOLS = [
 ]
 SPOT_FIDELITY_STRICT = os.getenv("SPOT_FIDELITY_STRICT", "true").strip().lower() in {"1", "true", "yes", "on"}
 SPOT_CONFIRMATION_MAX_BPS = float(os.getenv("SPOT_CONFIRMATION_MAX_BPS", "120"))
-EXECUTION_BROWSER_AUTO_ATTACH = os.getenv("EXECUTION_BROWSER_AUTO_ATTACH", "false").strip().lower() in {"1", "true", "yes", "on"}
-EXECUTION_BROWSER_CDP_URL = os.getenv("EXECUTION_BROWSER_CDP_URL", "").strip()
-EXECUTION_BROWSER_USER_DATA_DIR = os.getenv("EXECUTION_BROWSER_USER_DATA_DIR", "").strip()
+EXECUTION_BROWSER_CDP_URL = _env_first("EXECUTION_BROWSER_CDP_URL", "CDP_ENDPOINT")
+EXECUTION_BROWSER_USER_DATA_DIR = _env_first(
+    "EXECUTION_BROWSER_USER_DATA_DIR",
+    "PLAYWRIGHT_USER_DATA_DIR",
+    "BROWSER_PROFILE_DIR",
+)
+EXECUTION_BROWSER_AUTO_ATTACH = _env_flag(
+    "EXECUTION_BROWSER_AUTO_ATTACH",
+    default=bool(EXECUTION_BROWSER_CDP_URL or EXECUTION_BROWSER_USER_DATA_DIR),
+)
 EXECUTION_BROWSER_HEADLESS = os.getenv("EXECUTION_BROWSER_HEADLESS", "true").strip().lower() in {"1", "true", "yes", "on"}
 EXECUTION_BROWSER_URL = os.getenv("EXECUTION_BROWSER_URL", "https://manager.maven.markets/app/trade").strip()
-EXECUTION_BROWSER_TIMEOUT_MS = int(os.getenv("EXECUTION_BROWSER_TIMEOUT_MS", "12000"))
+EXECUTION_BROWSER_TIMEOUT_MS = _env_int(
+    "EXECUTION_BROWSER_TIMEOUT_MS",
+    default=_env_int("CDP_TIMEOUT_SEC", default=12) * 1000,
+)
+EXECUTION_LOGIN_USERNAME = os.getenv("EXECUTION_LOGIN_USERNAME", os.getenv("MAVEN_USERNAME", "")).strip()
+EXECUTION_LOGIN_PASSWORD = os.getenv("EXECUTION_LOGIN_PASSWORD", os.getenv("MAVEN_PASSWORD", "")).strip()
 ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "dev-admin-token").strip() or "dev-admin-token"
 ADMIN_DEFAULT_ROLE = os.getenv("ADMIN_DEFAULT_ROLE", "ADMIN").strip().upper() or "ADMIN"
 

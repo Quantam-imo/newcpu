@@ -980,19 +980,23 @@ async function updateBasisOps(forceRefresh = false) {
 	const symbol = selectedChartSymbol();
 	setText("basisSymbol", symbol);
 
-	const [basisRes, contractsRes, contextRes] = await Promise.all([
+	const [basisRes, contractsRes, contextRes, offsetRes] = await Promise.all([
 		apiFetch(`/market/basis?symbol=${encodeURIComponent(symbol)}&refresh=${forceRefresh ? "true" : "false"}`),
 		apiFetch(`/market/contracts?symbol=${encodeURIComponent(symbol)}`),
 		apiFetch(`/market/context?symbol=${encodeURIComponent(symbol)}`),
+		apiFetch(`/market/offset_quality?symbol=${encodeURIComponent(symbol)}`),
 	]);
-	if (!basisRes.ok || !contractsRes.ok || !contextRes.ok) return;
+	if (!basisRes.ok || !contractsRes.ok || !contextRes.ok || !offsetRes.ok) return;
 
 	const basis = await basisRes.json();
 	const contracts = await contractsRes.json();
 	const context = await contextRes.json();
+	const offset = await offsetRes.json();
 	const resolver = contracts?.resolver || {};
 	const policy = context?.basis_policy || {};
 	const watch = context?.resolver_watch || {};
+	const prices = offset?.prices || {};
+	const spotPipeline = offset?.spot_pipeline || {};
 
 	setText("basisStatus", basis?.status || "--");
 	setText("basisBps", basis?.smooth_bps != null ? Number(basis.smooth_bps).toFixed(2) : "--");
@@ -1009,6 +1013,39 @@ async function updateBasisOps(forceRefresh = false) {
 	setText("resolverTtl", resolver?.ttl_seconds != null ? `${resolver.ttl_seconds}s` : "--");
 	setText("resolverWatchOnly", watch?.watch_only ? "YES" : "NO");
 	setText("resolverWatchReason", watch?.reason || "--");
+
+	setText("opsSpotFuturesPrice", prices?.futures_price != null ? Number(prices.futures_price).toFixed(3) : "--");
+	setText("opsSpotPrice", prices?.spot_price != null ? Number(prices.spot_price).toFixed(3) : "--");
+	setText("opsBrokerXauPrice", prices?.broker_xauusd_price != null ? Number(prices.broker_xauusd_price).toFixed(3) : "--");
+	setText(
+		"opsSpotOffsetDiff",
+		prices?.offset_difference != null
+			? `${Number(prices.offset_difference).toFixed(3)} pts`
+			: "--",
+	);
+	setOpsValue("opsSpotConn", spotPipeline?.playwright_connected ? "CONNECTED" : "DISCONNECTED", spotPipeline?.playwright_connected ? "good" : "bad");
+	setOpsValue("opsSpotAbsorbing", spotPipeline?.data_absorbing ? "YES" : "NO", spotPipeline?.data_absorbing ? "good" : "warn");
+	setText("opsSpotAbsorbedTicks", spotPipeline?.absorbed_ticks != null ? String(spotPipeline.absorbed_ticks) : "--");
+	setText("opsSpotCacheAge", spotPipeline?.cache_age_seconds != null ? `${Number(spotPipeline.cache_age_seconds).toFixed(1)}s` : "--");
+	setText(
+		"opsSpotLastTick",
+		spotPipeline?.last_tick_price != null
+			? `${Number(spotPipeline.last_tick_price).toFixed(3)} @ ${spotPipeline?.last_tick_time ? new Date(Number(spotPipeline.last_tick_time) * 1000).toLocaleTimeString() : "--"}`
+			: "--",
+	);
+
+	const spotConnected = Boolean(spotPipeline?.playwright_connected);
+	const spotAbsorbing = Boolean(spotPipeline?.data_absorbing);
+	let spotPill = "SPOT DOWN";
+	let spotTone = "bad";
+	if (spotConnected && spotAbsorbing) {
+		spotPill = "SPOT LIVE";
+		spotTone = "good";
+	} else if (spotConnected) {
+		spotPill = "SPOT CONNECTED";
+		spotTone = "warn";
+	}
+	setOpsValue("opsSpotLinkPill", spotPill, spotTone);
 }
 
 async function warmupContracts() {

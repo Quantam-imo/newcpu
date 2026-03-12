@@ -1,19 +1,284 @@
 const AQ_DEFAULT_API_ORIGIN = ["8000", "8001"].includes(String(window.location.port || ""))
 	? window.location.origin
-	: "http://127.0.0.1:8001";
-const AQ_API_BASE_API = String(window.AQ_API_BASE || AQ_DEFAULT_API_ORIGIN)
-	.replace(/:8000(?=\/|$)/, ":8001");
-const apiFetch = async (path, options) => {
-	const target = `${AQ_API_BASE_API}${path}`;
-	try {
-		return await fetch(target, options);
-	} catch (error) {
-		console.warn("apiFetch failed", target, error);
-		return new Response(
-			JSON.stringify({ status: "error", message: String(error || "fetch failed") }),
-			{ status: 599, headers: { "Content-Type": "application/json" } },
-		);
+	: "http://127.0.0.1:8000";
+const AQ_API_BASE_API = String(window.AQ_API_BASE || AQ_DEFAULT_API_ORIGIN);
+
+// Backend connection monitoring & error handling
+let backendConnected = true;
+let failureCount = 0;
+const FAILURE_THRESHOLD = 2;
+const ERROR_EXPIRY_MS = 15000;
+
+const connectionStatusEl = document.getElementById("connectionStatus");
+const errorBannerContainerEl = document.getElementById("errorBannerContainer");
+const activeErrors = new Map();
+
+function updateConnectionStatus(isConnected, message = "") {
+	if (!connectionStatusEl) return;
+	backendConnected = isConnected;
+	connectionStatusEl.classList.remove("good", "warn", "bad");
+	if (isConnected) {
+		connectionStatusEl.classList.add("good");
+		connectionStatusEl.innerHTML = '<span class="status-dot"></span>Backend Connected';
+		failureCount = 0;
+	} else {
+		connectionStatusEl.classList.add("bad");
+		connectionStatusEl.innerHTML = `<span class="status-dot"></span>Backend ${message || "Unreachable"}`;
 	}
+}
+
+function showError(key, message, retryFn = null, autoDismiss = true) {
+	if (!errorBannerContainerEl) return;
+	if (activeErrors.has(key)) clearTimeout(activeErrors.get(key).timeout);
+	const errorDiv = document.createElement("div");
+	errorDiv.id = `error-${key}`;
+	errorDiv.className = "error-banner";
+	const errorText = document.createElement("div");
+	errorText.className = "error-text";
+	errorText.textContent = message;
+	errorDiv.appendChild(errorText);
+	if (retryFn) {
+		const retryBtn = document.createElement("button");
+		retryBtn.className = "retry-btn";
+		retryBtn.textContent = "Retry";
+		retryBtn.onclick = () => { retryFn(); removeError(key); };
+		errorDiv.appendChild(retryBtn);
+	}
+	const closeBtn = document.createElement("button");
+	closeBtn.className = "close-btn";
+	closeBtn.textContent = "×";
+	closeBtn.onclick = () => removeError(key);
+	errorDiv.appendChild(closeBtn);
+	errorBannerContainerEl.appendChild(errorDiv);
+	const timeout = autoDismiss ?setTimeout(() => removeError(key), ERROR_EXPIRY_MS) : null;
+	activeErrors.set(key, { errorDiv, retryFn, timeout });
+}
+
+function removeError(key) {
+	if (activeErrors.has(key)) {
+		const { errorDiv, timeout } = activeErrors.get(key);
+		if (timeout) clearTimeout(timeout);
+		if (errorDiv && errorDiv.parentNode) errorDiv.remove();
+		activeErrors.delete(key);
+	}
+}
+
+// ============================================================================
+// PHASE 2: Response Caching & Performance Monitoring
+// ============================================================================
+
+const CACHE_KEY_PREFIX = "AQ_CACHE_";
+const PERF_KEY_PREFIX = "AQ_PERF_";
+const CACHE_CONFIG = {
+	"/mentor/context": { ttl: 8000, maxSize: 100 },    // Cache mentor for 8s (matches poll interval)
+	"/mentor": { ttl: 8000, maxSize: 100 },
+	"/chart/data": { ttl: 3000, maxSize: 150 },        // Cache chart for 3s
+	"/market/orderflow_summary": { ttl: 5000, maxSize: 100 },
+	"/market/offset_quality": { ttl: 10000, maxSize: 80 }, // Slow endpoint - cache 10s
+	"/status": { ttl: 5000, maxSize: 50 },
+};
+
+const performanceMetrics = {
+	requests: [],         // Array of {path, startTime, duration, fromCache}
+	slowestEndpoints: {}, // {path: maxDuration}
+};
+
+/** Get cache key for a URL path */
+function getCacheKey(path) {
+	return `${CACHE_KEY_PREFIX}${path}`;
+}
+
+/** Store response in cache with TTL */
+function cacheResponse(path, jsonData) {
+	const config = CACHE_CONFIG[path] || { ttl: 5000, maxSize: 100 };
+	const cacheEntry = {
+		data: jsonData,
+		timestamp: Date.now(),
+		ttl: config.ttl,
+		size: JSON.stringify(jsonData).length,
+	};
+	try {
+		localStorage.setItem(getCacheKey(path), JSON.stringify(cacheEntry));
+	} catch (e) {
+		console.warn("Cache storage failed:", e);
+	}
+}
+
+/** Retrieve cached response if valid (not expired) */
+function getCachedResponse(path) {
+	const key = getCacheKey(path);
+	try {
+		const cached = localStorage.getItem(key);
+		if (!cached) return null;
+		const entry = JSON.parse(cached);
+		const age = Date.now() - entry.timestamp;
+		if (age >= entry.ttl) {
+			localStorage.removeItem(key); // Expired
+			return null;
+		}
+		return entry.data;
+	} catch (e) {
+		return null;
+	}
+}
+
+/** Clear cache for a specific path or pattern */
+function clearCache(pathPattern = "*") {
+	try {
+		if (pathPattern === "*") {
+			// Clear all caches
+			for (let i = 0; i < localStorage.length; i++) {
+				const key = localStorage.key(i);
+				if (key && key.startsWith(CACHE_KEY_PREFIX)) {
+					localStorage.removeItem(key);
+				}
+			}
+		} else {
+			// Clear specific path
+			const key = getCacheKey(pathPattern);
+			localStorage.removeItem(key);
+		}
+	} catch (e) {
+		console.warn("Cache clear failed:", e);
+	}
+}
+
+/** Track request performance */
+function trackPerformance(path, duration, fromCache = false) {
+	const metric = { path: path.split('?')[0], duration, fromCache, timestamp: Date.now() };
+	performanceMetrics.requests.push(metric);
+	
+	// Keep only last 100 requests in memory
+	if (performanceMetrics.requests.length > 100) {
+		performanceMetrics.requests.shift();
+	}
+	
+	// Track slowest endpoints
+	const pathKey = path.split('?')[0];
+	if (!performanceMetrics.slowestEndpoints[pathKey] || duration > performanceMetrics.slowestEndpoints[pathKey]) {
+		performanceMetrics.slowestEndpoints[pathKey] = duration;
+	}
+}
+
+/** Get performance summary for debugging */
+function getPerformanceSummary() {
+	const avgByPath = {};
+	const countByPath = {};
+	for (const metric of performanceMetrics.requests) {
+		countByPath[metric.path] = (countByPath[metric.path] || 0) + 1;
+		avgByPath[metric.path] = (avgByPath[metric.path] || 0) + metric.duration;
+	}
+	for (const path in avgByPath) {
+		avgByPath[path] = Math.round(avgByPath[path] / countByPath[path]);
+	}
+	return {
+		totalRequests: performanceMetrics.requests.length,
+		averageByPath: avgByPath,
+		slowestEndpoints: performanceMetrics.slowestEndpoints,
+		lastUpdated: new Date().toISOString(),
+	};
+}
+
+const apiFetch = async (path, options, timeoutMs = 25000) => {
+	const startTime = performance.now();
+	const pathBase = path.split('?')[0];
+	
+	// Check cache first for GET requests
+	if (!options.method || options.method === "GET") {
+		const cached = getCachedResponse(path);
+		if (cached) {
+			trackPerformance(path, 0, true);
+			console.debug(`apiFetch: Cache hit for ${path}`);
+			// Return cached data as Response object
+			return new Response(JSON.stringify(cached), {
+				status: 200,
+				headers: { "Content-Type": "application/json", "X-From-Cache": "true" }
+			});
+		}
+	}
+	
+	// Build comprehensive list of targets to try
+	const targets = [];
+	
+	// Always try relative URL first (same origin as page)
+	targets.push(path);
+	
+	// Then try absolute URLs in priority order
+	const uniqueOrigins = new Set();
+	const baseOrigins = [
+		window.location.origin,              // Current page origin
+		"http://localhost:8000",              // Localhost
+		"http://127.0.0.1:8000",              // Loopback
+	];
+	
+	for (const origin of baseOrigins) {
+		const trimmed = String(origin || "").trim();
+		if (trimmed && !uniqueOrigins.has(trimmed)) {
+			uniqueOrigins.add(trimmed);
+			targets.push(`${trimmed}${path}`);
+		}
+	}
+
+	let lastError = null;
+	for (const target of targets) {
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), timeoutMs);
+		try {
+			const response = await fetch(target, { ...options, signal: controller.signal });
+			clearTimeout(timer);
+			if (response.ok || response.status === 599) {
+				const duration = performance.now() - startTime;
+				trackPerformance(path, duration, false);
+				
+				// Success - update connection status if it was down
+				if (failureCount > 0) updateConnectionStatus(true);
+				// Update AQ_API_BASE on success
+				if (target.startsWith("http")) {
+					try {
+						const origin = new URL(target).origin;
+						if (origin && origin !== window.location.origin) {
+							window.AQ_API_BASE = origin;
+						}
+					} catch (_) {}
+				}
+				
+				// Cache successful JSON responses
+				if (response.ok && response.headers.get("Content-Type")?.includes("application/json")) {
+					try {
+						const jsonData = await response.clone().json();
+						if (CACHE_CONFIG[pathBase]) {
+							cacheResponse(path, jsonData);
+						}
+					} catch (_) {}
+				}
+				
+				return response;
+			}
+			lastError = response;
+		} catch (error) {
+			clearTimeout(timer);
+			lastError = error;
+			console.debug(`apiFetch: ${target} failed -`, error.message || error);
+		}
+	}
+	
+	// All attempts failed - track failure
+	failureCount++;
+	if (failureCount >= FAILURE_THRESHOLD) {
+		updateConnectionStatus(false, "Timeout");
+	}
+	
+	const fallbackError = lastError instanceof Error ? String(lastError) : "fetch failed";
+	const isTimeout = lastError?.name === "AbortError" || fallbackError.includes("timeout");
+	const errorMsg = isTimeout ? `Request timeout (${timeoutMs}ms): ${path}` : `Request failed: ${path}`;
+	const errorKey = `fetch-${path.split('?')[0]}`;
+	showError(errorKey, errorMsg, () => apiFetch(path, options, timeoutMs), false);
+	
+	console.warn("apiFetch failed on all targets:", targets, "lastError:", fallbackError);
+	return new Response(
+		JSON.stringify({ status: "error", message: fallbackError }),
+		{ status: 599, headers: { "Content-Type": "application/json" } },
+	);
 };
 const AQ_ADMIN_TOKEN = window.AQ_ADMIN_TOKEN || localStorage.getItem("AQ_ADMIN_TOKEN") || "dev-admin-token";
 const AQ_ADMIN_ROLE = window.AQ_ADMIN_ROLE || localStorage.getItem("AQ_ADMIN_ROLE") || "ADMIN";
@@ -37,6 +302,63 @@ const MICRO_PANEL_CONFIG = {
 	ladder: { panelId: "microLadderPanel", buttonId: "microLadderToggleBtn", dragHandleId: "microLadderDragHandle", label: "Ladder" },
 };
 
+function setSummaryField(id, value, className) {
+	const el = document.getElementById(id);
+	if (!el) return;
+	el.classList.remove("delta-pos", "delta-neg", "side-buy", "side-sell");
+	if (className) el.classList.add(className);
+	el.innerText = value;
+}
+
+async function refreshOrderflowSummaryPanel() {
+	const symbol = typeof selectedSymbol === "function"
+		? String(selectedSymbol() || "XAUUSD")
+		: String(document.getElementById("symbolSelect")?.value || "XAUUSD");
+	const timeframe = typeof selectedTimeframe === "function"
+		? String(selectedTimeframe() || "1m")
+		: "1m";
+	try {
+		const res = await apiFetch(`/market/orderflow_summary?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`);
+		if (!res.ok) return;
+		const payload = await res.json();
+		const s = payload?.summary || {};
+		const alertLevel = String(s?.alert_level || "LOW").toUpperCase();
+		const absorption = String(s?.absorption || "NEUTRAL").toUpperCase();
+		const delta = Number(s?.delta || 0);
+		const cvd = Number(s?.cumulative_delta || 0);
+		setSummaryField("summaryRegime", String(s?.regime_mode || "--"), null);
+		setSummaryField("summaryAlert", alertLevel, alertLevel === "HIGH" ? "delta-neg" : (alertLevel === "MEDIUM" ? "side-sell" : "side-buy"));
+		setSummaryField("summarySignalStrength", `${Number(s?.signal_strength || 0).toFixed(1)}%`, null);
+		setSummaryField("summaryBuyAgg", `${Number(s?.buy_aggression || 0).toFixed(1)}%`, "side-buy");
+		setSummaryField("summarySellAgg", `${Number(s?.sell_aggression || 0).toFixed(1)}%`, "side-sell");
+		setSummaryField("summaryDelta", `${delta >= 0 ? "+" : ""}${Math.round(delta)}`, delta >= 0 ? "delta-pos" : "delta-neg");
+		setSummaryField("summaryCvd", `${cvd >= 0 ? "+" : ""}${Math.round(cvd)}`, cvd >= 0 ? "delta-pos" : "delta-neg");
+		setSummaryField("summaryImbalance", String(s?.imbalance || "--"), null);
+		setSummaryField("summarySpread", Number(s?.dom_spread || 0).toFixed(2), null);
+		setSummaryField("summaryIceberg", `${Math.max(0, Math.round(Number(s?.iceberg_count || 0)))}`, null);
+		setSummaryField("summaryAbsorption", absorption, absorption === "BULLISH" ? "side-buy" : (absorption === "BEARISH" ? "side-sell" : null));
+		setSummaryField("summaryConfidence", `${Number(s?.confidence || 0).toFixed(1)}%`, null);
+		setSummaryField("summaryNarrative", String(s?.narrative || "--"), null);
+	} catch (_) {
+		// Keep existing values if snapshot refresh fails.
+	}
+}
+
+function keepPanelInViewport(panel) {
+	if (!panel) return;
+	const rect = panel.getBoundingClientRect();
+	const maxLeft = Math.max(0, window.innerWidth - rect.width);
+	const maxTop = Math.max(0, window.innerHeight - rect.height);
+	let left = rect.left;
+	let top = rect.top;
+	if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+	left = Math.max(0, Math.min(maxLeft, left));
+	top = Math.max(0, Math.min(maxTop, top));
+	panel.style.left = `${left}px`;
+	panel.style.top = `${top}px`;
+	panel.style.right = "auto";
+}
+
 function toggleMicroPanel(kind, forceOpen) {
 	const cfg = MICRO_PANEL_CONFIG[kind];
 	if (!cfg) return;
@@ -47,6 +369,12 @@ function toggleMicroPanel(kind, forceOpen) {
 		? forceOpen
 		: !panel.classList.contains("open");
 	panel.classList.toggle("open", shouldOpen);
+	if (shouldOpen) {
+		keepPanelInViewport(panel);
+		if (kind === "summary") {
+			refreshOrderflowSummaryPanel().catch(() => {});
+		}
+	}
 	if (btn) btn.innerText = shouldOpen ? `Hide ${cfg.label}` : `Open ${cfg.label}`;
 	try {
 		localStorage.setItem(`${AQ_MICRO_PANEL_STATE_PREFIX}${kind.toUpperCase()}`, shouldOpen ? "1" : "0");
@@ -84,6 +412,7 @@ function initMicroPanelDrags() {
 				panel.style.left = `${Math.max(0, left)}px`;
 				panel.style.top = `${Math.max(0, top)}px`;
 				panel.style.right = "auto";
+				keepPanelInViewport(panel);
 			}
 		} catch (_) {
 			// ignore position restore issues
@@ -133,6 +462,14 @@ function initMicroPanelDrags() {
 		window.addEventListener("mousemove", moveHandler);
 		window.addEventListener("mouseup", upHandler);
 	}
+	window.addEventListener("resize", () => {
+		for (const cfg of Object.values(MICRO_PANEL_CONFIG)) {
+			const panel = document.getElementById(cfg.panelId);
+			if (panel && panel.classList.contains("open")) {
+				keepPanelInViewport(panel);
+			}
+		}
+	});
 }
 
 function toggleJournalPanel(forceOpen) {
@@ -156,12 +493,12 @@ function toggleJournalPanel(forceOpen) {
 }
 
 function restoreJournalPanelState() {
-	let open = true;
+	let open = false;
 	try {
 		const saved = localStorage.getItem(AQ_JOURNAL_PANEL_STATE_KEY);
-		if (saved === "0") open = false;
+		if (saved === "1") open = true;
 	} catch (_) {
-		open = true;
+		open = false;
 	}
 	toggleJournalPanel(open);
 }
@@ -264,12 +601,12 @@ function toggleSystemHealthPanel(forceOpen) {
 }
 
 function _restorePanelState(storageKey, toggler) {
-	let open = true;
+	let open = false;
 	try {
 		const saved = localStorage.getItem(storageKey);
-		if (saved === "0") open = false;
+		if (saved === "1") open = true;
 	} catch (_) {
-		open = true;
+		open = false;
 	}
 	toggler(open);
 }
@@ -439,10 +776,10 @@ function resetFloatingPanelLayout() {
 		toggleMicroPanel(kind, true);
 	}
 
-	toggleOperationsConsole(true);
-	toggleJournalPanel(true);
-	toggleGovernancePanel(true);
-	toggleSystemHealthPanel(true);
+	toggleOperationsConsole(false);
+	toggleJournalPanel(false);
+	toggleGovernancePanel(false);
+	toggleSystemHealthPanel(false);
 }
 
 window.toggleMicroPanel = toggleMicroPanel;
@@ -475,12 +812,12 @@ function toggleOperationsConsole(forceOpen) {
 }
 
 function restoreOperationsConsoleState() {
-	let open = true;
+	let open = false;
 	try {
 		const saved = localStorage.getItem(AQ_OPS_PANEL_STATE_KEY);
-		if (saved === "0") open = false;
+		if (saved === "1") open = true;
 	} catch (_) {
-		open = true;
+		open = false;
 	}
 	toggleOperationsConsole(open);
 }
@@ -876,6 +1213,12 @@ function fmtPct(value) {
 	return `${n.toFixed(2)}%`;
 }
 
+function fmtPrice(value, digits = 2) {
+	const n = Number(value);
+	if (!Number.isFinite(n)) return "--";
+	return n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
 function setOpsValue(id, value, tone = "neutral") {
 	const el = document.getElementById(id);
 	if (!el) return;
@@ -910,7 +1253,7 @@ function setOpsChips(id, raw, defaultTone = "neutral") {
 		const t = token.toUpperCase();
 		if (t.includes("HALT") || t.includes("BLOCK") || t.includes("ERROR") || t.includes("FAIL") || t.includes("LOCK")) return "bad";
 		if (t.includes("WARN") || t.includes("DEFENSIVE") || t.includes("COOLDOWN") || t.includes("LIMIT")) return "warn";
-		if (t.includes("OK") || t.includes("ACTIVE") || t.includes("CALIBRATED") || t.includes("LIVE") || t.includes("ICT") || t.includes("ICEBERG") || t.includes("ASTRO")) return "good";
+		if (t.includes("OK") || t.includes("ACTIVE") || t.includes("CALIBRATED") || t.includes("LIVE") || t.includes("ICT") || t.includes("ICEBERG") || t.includes("GANN") || t.includes("ASTRO")) return "good";
 		return "";
 	};
 	el.innerHTML = `<span class="ops-chip-wrap">${tokens.map(token => {
@@ -1207,6 +1550,25 @@ async function updateOpsStatus() {
 			? "--"
 			: `${Number(offsetQuality.offset_guard.deviation).toFixed(3)} pts`,
 	);
+	setText(
+		"opsOqOffsetDifference",
+		offsetQuality?.prices?.offset_difference == null
+			? "--"
+			: `${Number(offsetQuality.prices.offset_difference).toFixed(3)} pts`,
+	);
+	setText(
+		"opsOqBrokerXauusd",
+		offsetQuality?.prices?.broker_xauusd_price == null
+			? "--"
+			: fmtPrice(offsetQuality.prices.broker_xauusd_price, 2),
+	);
+	const bq = offsetQuality?.broker_quote || {};
+	const quoteParts = [];
+	if (bq?.bid != null) quoteParts.push(`B ${fmtPrice(bq.bid, 3)}`);
+	if (bq?.ask != null) quoteParts.push(`A ${fmtPrice(bq.ask, 3)}`);
+	if (bq?.price != null) quoteParts.push(`P ${fmtPrice(bq.price, 3)}`);
+	if (bq?.last != null) quoteParts.push(`L ${fmtPrice(bq.last, 3)}`);
+	setText("opsOqBrokerQuote", quoteParts.length ? quoteParts.join(" | ") : "--");
 	setOpsValue(
 		"opsOqQualityScore",
 		Number.isFinite(oqScore) ? oqScore.toFixed(2) : "--",
@@ -1225,6 +1587,38 @@ async function updateOpsStatus() {
 			? offsetQuality.trade_quality.reasons.join(" | ")
 			: "NONE",
 	);
+
+	// Non-blocking multi-symbol scan (don't wait for slow offset_quality)
+	const scanSymbols = ["XAUUSD", "NQ", "EURUSD", "BTC", "US30"];
+	const timeoutMs = 4000; // 4s timeout per fetch
+	Promise.allSettled(scanSymbols.map(async (sym) => {
+		try {
+			const controller = new AbortController();
+			const timer = setTimeout(() => controller.abort(), timeoutMs);
+			const r = await fetch(`${window.location.origin || "http://127.0.0.1:8000"}/market/offset_quality?symbol=${encodeURIComponent(sym)}`, { signal: controller.signal });
+			clearTimeout(timer);
+			if (!r.ok) return { sym, text: `${sym}: --` };
+			const d = await r.json();
+			const brokerSym = d?.sources?.broker_symbol || "--";
+			const xauPx = d?.prices?.broker_xauusd_price;
+			const priceText = xauPx == null ? "" : ` ${fmtPrice(xauPx, 2)}`;
+			return { sym, text: `${sym}: ${brokerSym}${priceText}` };
+		} catch (_) {
+			return { sym, text: `${sym}: --` };
+		}
+	})).then(results => {
+		const snapRows = results
+			.filter(r => r.status === "fulfilled")
+			.map(r => r.value?.text || "")
+			.filter(Boolean);
+		if (snapRows.length > 0) {
+			setOpsChips("opsOqBrokerMulti", snapRows.join(" | "), "neutral");
+		} else {
+			setText("opsOqBrokerMulti", "--");
+		}
+	}).catch(() => {
+		setText("opsOqBrokerMulti", "--");
+	});
 
 	const runtime = String(exec?.execution_status || "UNKNOWN").toUpperCase() === "HALTED" ? "HALTED" : "ACTIVE";
 	setOpsValue("engineRuntimeStatus", runtime, runtime === "HALTED" ? "bad" : "good");
@@ -1266,6 +1660,7 @@ async function updateOpsStatus() {
 			const flags = [
 				engineCfg?.ict_enabled ? "ICT" : null,
 				engineCfg?.iceberg_enabled ? "ICEBERG" : null,
+				engineCfg?.gann_enabled ? "GANN" : null,
 				engineCfg?.astro_enabled ? "ASTRO" : null,
 			].filter(Boolean);
 			setOpsChips("opsCfgEngineFlags", flags.length ? flags.join("|") : "NONE");
@@ -1470,6 +1865,44 @@ async function adminEmergency(action, enabled = null) {
 	await updateOpsStatus();
 }
 
+async function setGannEngineEnabled(enabled) {
+	const stateRes = await apiFetch("/admin/control/state", {
+		headers: adminHeaders(),
+	});
+	if (!stateRes.ok) {
+		setText("opsProbeSnapshot", "Failed to load admin state for GANN toggle");
+		return;
+	}
+	const state = await stateRes.json();
+	const cfg = state?.engine_controls || {};
+	const nextEnabled = Boolean(enabled);
+
+	const payload = {
+		ict_enabled: Boolean(cfg?.ict_enabled),
+		iceberg_enabled: Boolean(cfg?.iceberg_enabled),
+		gann_enabled: nextEnabled,
+		astro_enabled: Boolean(cfg?.astro_enabled),
+		confluence_threshold: Number(cfg?.confluence_threshold ?? 0.5),
+		confidence_threshold: Number(cfg?.confidence_threshold ?? 55),
+	};
+
+	const res = await apiFetch("/admin/control/engine_controls", {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			...adminHeaders(),
+		},
+		body: JSON.stringify(payload),
+	});
+	if (!res.ok) {
+		setText("opsProbeSnapshot", `GANN toggle failed (${res.status})`);
+		return;
+	}
+
+	setText("opsProbeSnapshot", `GANN ${nextEnabled ? "enabled" : "disabled"}`);
+	await updateOpsStatus();
+}
+
 setInterval(() => {
 	if (!document.getElementById("governancePanel")?.classList.contains("open")) return;
 	loadStatus().catch(() => {});
@@ -1531,6 +1964,12 @@ if (engineStopBtn) engineStopBtn.addEventListener("click", () => engineAction("s
 const opsProbeBtn = document.getElementById("opsProbeBtn");
 if (opsProbeBtn) opsProbeBtn.addEventListener("click", () => runFeedProbe().catch(() => {}));
 
+const opsGannOnBtn = document.getElementById("opsGannOnBtn");
+if (opsGannOnBtn) opsGannOnBtn.addEventListener("click", () => setGannEngineEnabled(true).catch(() => {}));
+
+const opsGannOffBtn = document.getElementById("opsGannOffBtn");
+if (opsGannOffBtn) opsGannOffBtn.addEventListener("click", () => setGannEngineEnabled(false).catch(() => {}));
+
 const opsReconnectBtn = document.getElementById("opsReconnectBtn");
 if (opsReconnectBtn) opsReconnectBtn.addEventListener("click", () => window.reconnectExecutionBrowserSafe());
 
@@ -1587,3 +2026,96 @@ toggleOperationsConsole(false);
 initOperationsConsoleDrag();
 toggleJournalPanel(false);
 initJournalPanelDrag();
+
+// Performance Dashboard initialization
+function updatePerfDashboard() {
+	const perfDiv = document.getElementById("perfMetrics");
+	if (!perfDiv) return;
+	
+	const summary = getPerformanceSummary();
+	if (!summary || summary.totalRequests === 0) {
+		perfDiv.innerHTML = "<p>No metrics yet</p>";
+		return;
+	}
+	
+	let html = `<p><strong>Total Requests:</strong> ${summary.totalRequests}</p>`;
+	html += "<p><strong>Avg Time by Endpoint:</strong></p>";
+	html += "<table style='width:100%;'>";
+	for (const [path, avg] of Object.entries(summary.averageByPath)) {
+		html += `<tr><td>${path}</td><td style='text-align:right;'>${avg}ms</td></tr>`;
+	}
+	html += "</table>";
+	
+	perfDiv.innerHTML = html;
+}
+
+function updateCacheStatus() {
+	const cacheDiv = document.getElementById("cacheStatus");
+	if (!cacheDiv) return;
+	
+	let html = "<table style='width:100%;'>";
+	html += "<tr><th style='text-align:left;'>Path</th><th style='text-align:right;'>TTL (ms)</th></tr>";
+	for (const [path, config] of Object.entries(CACHE_CONFIG)) {
+		const cached = getCachedResponse(path);
+		const status = cached ? "✓ Cached" : "∅ Empty";
+		html += `<tr><td>${path}</td><td style='text-align:right;'>${config.ttl} - ${status}</td></tr>`;
+	}
+	html += "</table>";
+	
+	cacheDiv.innerHTML = html;
+}
+
+function initPerfDashboard() {
+	const perfBtn = document.getElementById("perfDashBtn");
+	const perfDash = document.getElementById("perfDashboard");
+	const perfClose = document.getElementById("perfDashClose");
+	const clearCacheBtn = document.getElementById("clearCacheBtn");
+	const refreshMetricsBtn = document.getElementById("refreshMetricsBtn");
+	
+	if (perfBtn) {
+		perfBtn.addEventListener("click", () => {
+			if (perfDash) {
+				perfDash.classList.toggle("hidden");
+				if (!perfDash.classList.contains("hidden")) {
+					updatePerfDashboard();
+					updateCacheStatus();
+				}
+			}
+		});
+	}
+	
+	if (perfClose) {
+		perfClose.addEventListener("click", () => {
+			if (perfDash) perfDash.classList.add("hidden");
+		});
+	}
+	
+	if (clearCacheBtn) {
+		clearCacheBtn.addEventListener("click", () => {
+			clearCache("*");
+			showError("cache_cleared", "✓ All caches cleared", null, true);
+			updateCacheStatus();
+		});
+	}
+	
+	if (refreshMetricsBtn) {
+		refreshMetricsBtn.addEventListener("click", () => {
+			updatePerfDashboard();
+			updateCacheStatus();
+		});
+	}
+}
+
+initPerfDashboard();
+
+// Health check: Ping backend every 30 seconds to detect recovery
+setInterval(async () => {
+    try {
+        const res = await apiFetch("/status", {}, 5000);
+        if (res && res.ok) {
+            updateConnectionStatus(true, "Connected");
+        }
+    } catch (err) {
+        // apiFetch() already shows errors, just track them here
+    }
+}, 30000); // Every 30 seconds

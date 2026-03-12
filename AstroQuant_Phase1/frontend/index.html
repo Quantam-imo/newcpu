@@ -776,6 +776,7 @@
                     <div id="opsConsoleDragHandle" class="ops-console-head">
                         <h3>Operations Console</h3>
                         <div class="ops-head-actions">
+                            <strong id="opsSpotLinkPill" class="ops-value">SPOT --</strong>
                             <button id="opsConsoleCloseBtn" class="panel-close-btn" onclick="toggleOperationsConsole(false)" aria-label="Close Operations Console">✕ Close</button>
                         </div>
                     </div>
@@ -864,6 +865,15 @@
                                 <div><span>Resolver TTL</span><strong id="resolverTtl">--</strong></div>
                                 <div><span>Watch-Only</span><strong id="resolverWatchOnly">--</strong></div>
                                 <div><span>Watch Reason</span><strong id="resolverWatchReason">--</strong></div>
+                                <div><span>Futures Price</span><strong id="opsSpotFuturesPrice">--</strong></div>
+                                <div><span>Spot Price</span><strong id="opsSpotPrice">--</strong></div>
+                                <div><span>Broker XAUUSD</span><strong id="opsBrokerXauPrice">--</strong></div>
+                                <div><span>Offset Diff</span><strong id="opsSpotOffsetDiff">--</strong></div>
+                                <div><span>Playwright Spot Conn</span><strong id="opsSpotConn">--</strong></div>
+                                <div><span>Spot Data Absorbing</span><strong id="opsSpotAbsorbing">--</strong></div>
+                                <div><span>Absorbed Ticks</span><strong id="opsSpotAbsorbedTicks">--</strong></div>
+                                <div><span>Spot Cache Age</span><strong id="opsSpotCacheAge">--</strong></div>
+                                <div><span>Last Spot Tick</span><strong id="opsSpotLastTick">--</strong></div>
                             </div>
                         </div>
                     </div>
@@ -920,7 +930,7 @@
             window.AQ_API_BASE = existingBase || "http://127.0.0.1:8000";
             const prefixes = ["", "/frontend"];
             const scripts = ["api.js", "chart.js", "mentor.js"];
-            const scriptVersion = "aq-v20260503";
+            const scriptVersion = "aq-v20260503a";
 
             const loadScriptWithFallback = (name, done) => {
                 let attempt = 0;

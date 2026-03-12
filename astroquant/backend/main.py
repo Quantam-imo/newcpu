@@ -1,4 +1,5 @@
 from __future__ import annotations
+from dotenv import load_dotenv
 
 import copy
 import concurrent.futures
@@ -30,6 +31,8 @@ from backend.config import (
     EXECUTION_BROWSER_AUTO_ATTACH,
     EXECUTION_BROWSER_CDP_URL,
     EXECUTION_BROWSER_HEADLESS,
+    EXECUTION_LOGIN_PASSWORD,
+    EXECUTION_LOGIN_USERNAME,
     EXECUTION_BROWSER_TIMEOUT_MS,
     EXECUTION_BROWSER_URL,
     EXECUTION_BROWSER_USER_DATA_DIR,
@@ -48,10 +51,16 @@ from engine.delta_engine import DeltaEngine
 from engine.dom_engine import DomEngine
 from engine.orderflow_summary_engine import OrderflowSummaryEngine
 from engine.time_sales_engine import TimeSalesEngine
+from engine.models.gann_model import GannModel
 from execution.playwright_engine import PlaywrightEngine
 
 BASE_DIR = Path(__file__).resolve().parents[1]
+load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR.parent / ".env")
 FRONTEND_DIR = BASE_DIR / "frontend"
+CHART_CANDLE_CACHE_LOCK = threading.Lock()
+CHART_CANDLE_CACHE: dict[str, list[dict]] = {}
+CHART_CANDLE_CACHE.clear()  # Clear chart cache on startup to remove synthetic/demo data
 
 symbols = ["XAUUSD", "NQ", "EURUSD", "BTC", "US30"]
 prop_engine = PropGovernance(PropConfig())
@@ -63,6 +72,23 @@ orderflow_summary_engine = OrderflowSummaryEngine()
 dynamic_prop_engine = DynamicPropEngine()
 mentor_engine = MentorEngine()
 mentor_v3_engine = AIMentorV3()
+chart_gann_model = GannModel()
+runner_thread = None
+
+SELECTOR_PROFILE_PATH = Path("data/matchtrader_selectors.json")
+EXECUTION_BROWSER_LOCK = threading.Lock()
+runtime_browser_engine = None
+CHART_CANDLE_CACHE_LOCK = threading.Lock()
+CHART_CANDLE_CACHE: dict[str, list[dict]] = {}
+CHART_CANDLE_CACHE.clear()  # Clear chart cache on startup to remove synthetic/demo data
+time_sales_engine = TimeSalesEngine(getattr(getattr(runner, "signal_manager", None), "orderflow_engine", None))
+delta_engine = DeltaEngine()
+dom_engine = DomEngine()
+orderflow_summary_engine = OrderflowSummaryEngine()
+dynamic_prop_engine = DynamicPropEngine()
+mentor_engine = MentorEngine()
+mentor_v3_engine = AIMentorV3()
+chart_gann_model = GannModel()
 runner_thread = None
 
 SELECTOR_PROFILE_PATH = Path("data/matchtrader_selectors.json")
@@ -99,7 +125,7 @@ JOURNAL_EXPORT_DIR = BASE_DIR / "reports" / "journal_dayend"
 JOURNAL_EXPORT_EVENT = threading.Event()
 JOURNAL_EXPORT_THREAD = None
 LAST_PHASE_EVENT = None
-TIMEOUT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=12, thread_name_prefix="aq-timeout")
+TIMEOUT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=64, thread_name_prefix="aq-timeout")
 PLAYWRIGHT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="aq-playwright")
 
 
@@ -181,6 +207,61 @@ def _enforce_symbol_lot_cap(symbol: str | None, requested_lot: float) -> dict:
         "account_size": round(account_size, 2),
         "account_key": account_key,
         "admin_max_lot_approved": round(float(admin_max_cap), 4) if admin_max_cap is not None else None,
+    }
+
+
+def _risk_based_lot_plan(
+    symbol: str | None,
+    entry_price: float | None,
+    sl_price: float | None,
+    requested_lot: float | None = None,
+    risk_percent: float | None = None,
+    account_size: float | None = None,
+) -> dict:
+    entry = float(entry_price) if entry_price is not None else None
+    sl = float(sl_price) if sl_price is not None else None
+
+    account = float(account_size) if account_size is not None else float(getattr(getattr(prop_engine, "config", None), "account_size", 50000.0) or 50000.0)
+    account = max(1000.0, account)
+
+    active_phase = str(getattr(prop_engine, "phase", "PHASE1") or "PHASE1").upper()
+
+    phase_map = getattr(prop_engine, "phase_risk_pct", None)
+    if isinstance(phase_map, dict):
+        phase_base = float(phase_map.get(active_phase, phase_map.get("PHASE1", 0.005)) or 0.005)
+    else:
+        phase_base = float(getattr(getattr(runner, "risk", None), "max_risk_per_trade", 0.005) or 0.005)
+
+    phase_multiplier = float(getattr(runner, "phase_risk_multipliers", {}).get(active_phase, 1.0) or 1.0)
+    effective_risk_fraction = max(0.0001, min(0.03, phase_base * phase_multiplier))
+    if risk_percent is not None:
+        effective_risk_fraction = max(0.0001, min(0.03, float(risk_percent) / 100.0))
+
+    stop_distance = None
+    raw_lot = None
+    risk_amount = round(account * effective_risk_fraction, 2)
+    if entry is not None and sl is not None:
+        stop_distance = abs(float(entry) - float(sl))
+        if stop_distance > 0.0:
+            raw_lot = risk_amount / stop_distance
+
+    requested = float(requested_lot) if requested_lot is not None else (float(raw_lot) if raw_lot is not None else 0.01)
+    requested = max(0.01, round(requested, 4))
+    capped = _enforce_symbol_lot_cap(symbol, requested)
+
+    return {
+        "symbol": capped.get("symbol"),
+        "phase": active_phase,
+        "account_size": round(account, 2),
+        "risk_fraction": round(effective_risk_fraction, 6),
+        "risk_percent": round(effective_risk_fraction * 100.0, 4),
+        "risk_amount": risk_amount,
+        "entry_price": entry,
+        "sl_price": sl,
+        "stop_distance": round(stop_distance, 6) if stop_distance is not None else None,
+        "raw_lot": round(float(raw_lot), 4) if raw_lot is not None else None,
+        "lot": float(capped.get("effective_lot") or requested),
+        "lot_meta": capped,
     }
 
 
@@ -446,12 +527,15 @@ def _latest_trade_for_symbol(symbol: str):
 
 
 def selector_profile_status():
+    runtime_health = runner.execution.execution_health() or {}
     if not SELECTOR_PROFILE_PATH.exists():
         return {
             "calibrated": False,
             "profile_file": str(SELECTOR_PROFILE_PATH),
             "updated_at": None,
             "selector_counts": {},
+            "runtime_loaded": bool(runtime_health.get("selector_profile_loaded")),
+            "runtime_updated_at": runtime_health.get("selector_profile_updated_at"),
         }
     try:
         payload = json.loads(SELECTOR_PROFILE_PATH.read_text(encoding="utf-8"))
@@ -469,6 +553,8 @@ def selector_profile_status():
             "profile_file": str(SELECTOR_PROFILE_PATH),
             "updated_at": updated_iso,
             "selector_counts": selector_counts,
+            "runtime_loaded": bool(runtime_health.get("selector_profile_loaded")),
+            "runtime_updated_at": runtime_health.get("selector_profile_updated_at"),
         }
     except Exception as exc:
         return {
@@ -476,6 +562,8 @@ def selector_profile_status():
             "profile_file": str(SELECTOR_PROFILE_PATH),
             "updated_at": None,
             "selector_counts": {},
+            "runtime_loaded": bool(runtime_health.get("selector_profile_loaded")),
+            "runtime_updated_at": runtime_health.get("selector_profile_updated_at"),
             "error": str(exc),
         }
 
@@ -533,16 +621,76 @@ def _connect_execution_browser(force: bool = False):
                     pass
 
             runner.execution.set_page(page)
+            login_result = None
+            if EXECUTION_LOGIN_USERNAME and EXECUTION_LOGIN_PASSWORD:
+                try:
+                    login_result = runner.execution.playwright.login_if_needed(
+                        username=EXECUTION_LOGIN_USERNAME,
+                        password=EXECUTION_LOGIN_PASSWORD,
+                    )
+                except Exception:
+                    login_result = None
             return {
                 "status": "connected",
                 "connected": True,
                 "mode": "cdp" if EXECUTION_BROWSER_CDP_URL else "persistent",
+                "login_status": (login_result or {}).get("status") if isinstance(login_result, dict) else None,
                 "page": page,
             }
         except Exception as exc:
             import traceback, logging
             logging.basicConfig(level=logging.ERROR)
             logging.error("Playwright/browser startup failed: %s\n%s", str(exc), traceback.format_exc())
+
+            # If CDP attach fails but a persistent profile is configured, fall back
+            # to local persistent browser mode so execution can continue.
+            can_fallback_persistent = bool(EXECUTION_BROWSER_CDP_URL and EXECUTION_BROWSER_USER_DATA_DIR)
+            if can_fallback_persistent:
+                try:
+                    if runtime_browser_engine is not None:
+                        runtime_browser_engine.close()
+                except Exception:
+                    pass
+                runtime_browser_engine = None
+
+                try:
+                    runtime_browser_engine = PlaywrightEngine(
+                        headless=EXECUTION_BROWSER_HEADLESS,
+                        timeout_ms=EXECUTION_BROWSER_TIMEOUT_MS,
+                        user_data_dir=EXECUTION_BROWSER_USER_DATA_DIR or None,
+                        cdp_url=None,
+                    )
+                    page = runtime_browser_engine.start()
+                    if page is not None:
+                        target_url = str(EXECUTION_BROWSER_URL or "https://manager.maven.markets/app/trade").strip()
+                        if target_url:
+                            try:
+                                runtime_browser_engine.goto(target_url)
+                            except Exception:
+                                pass
+
+                        runner.execution.set_page(page)
+                        login_result = None
+                        if EXECUTION_LOGIN_USERNAME and EXECUTION_LOGIN_PASSWORD:
+                            try:
+                                login_result = runner.execution.playwright.login_if_needed(
+                                    username=EXECUTION_LOGIN_USERNAME,
+                                    password=EXECUTION_LOGIN_PASSWORD,
+                                )
+                            except Exception:
+                                login_result = None
+
+                        return {
+                            "status": "connected",
+                            "connected": True,
+                            "mode": "persistent_fallback",
+                            "login_status": (login_result or {}).get("status") if isinstance(login_result, dict) else None,
+                            "page": page,
+                            "fallback_from": "cdp",
+                        }
+                except Exception as fallback_exc:
+                    logging.error("Playwright persistent fallback failed: %s", str(fallback_exc))
+
             return {
                 "status": "error",
                 "connected": bool(getattr(runner.execution.playwright, 'page', False)),
@@ -789,9 +937,9 @@ def _chart_overlays(candles: list[dict]):
     }
 
 
-def _chart_meta(symbol: str):
-    market_ctx = market_context(symbol)
-    execution_health = runner.execution.execution_health()
+def _chart_meta(symbol: str, market_ctx: dict | None = None, include_runtime: bool = True):
+    market_ctx = market_ctx if isinstance(market_ctx, dict) else market_context(symbol)
+    execution_health = runner.execution.execution_health() if include_runtime else {"execution_status": "OK"}
     execution_control = _execution_control_snapshot()
     paused_reasons = []
     if str(execution_health.get("execution_status", "OK")).upper() == "HALTED":
@@ -820,6 +968,51 @@ def _chart_meta(symbol: str):
         "position": market_ctx.get("position"),
         "data_source": "LIVE",
     }
+
+
+def _chart_gann_snapshot(symbol: str, candles: list[dict]) -> dict:
+    enabled = bool(getattr(runner, "engine_enable_flags", {}).get("GANN", True))
+    base = {
+        "enabled": enabled,
+        "detected": False,
+        "model": "GANN",
+        "direction": None,
+        "confidence": None,
+        "score": None,
+        "signals": {},
+    }
+    if not enabled:
+        return base
+
+    try:
+        seq = list(candles or [])
+        if len(seq) < 8:
+            return base
+
+        trend_hint = "BUY"
+        try:
+            trend_hint = "BUY" if float(seq[-1].get("close")) >= float(seq[-2].get("close")) else "SELL"
+        except Exception:
+            trend_hint = "BUY"
+
+        best = chart_gann_model.check({"candles": seq, "trend": trend_hint}, symbol)
+        if not best:
+            return base
+
+        score = (best or {}).get("gann_score")
+        confidence = (best or {}).get("confidence")
+        base.update(
+            {
+                "detected": True,
+                "direction": (best or {}).get("direction"),
+                "confidence": round(float(confidence), 2) if confidence is not None else None,
+                "score": int(score) if score is not None else None,
+                "signals": dict((best or {}).get("gann_signals") or {}),
+            }
+        )
+        return base
+    except Exception:
+        return base
 
 
 def _synthetic_candles(limit: int = 120, base_price: float = 2325.0):
@@ -966,8 +1159,44 @@ def _journal_model_stats(limit: int = 500):
 def _canonical_symbol(symbol: str | None) -> str | None:
     if not symbol:
         return None
-    feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
-    return feed_to_canonical.get(symbol, symbol)
+    raw = str(symbol).strip().upper()
+    if not raw:
+        return None
+
+    def _norm_key(value: str) -> str:
+        return str(value or "").strip().upper().replace("/", "").replace("-", "").replace("_", "")
+
+    # 1) Direct canonical symbol hit.
+    if raw in runner.SYMBOL_MAP:
+        return raw
+
+    # 2) Feed symbol aliases (e.g. GC.FUT -> XAUUSD).
+    feed_to_canonical = {str(v).upper(): str(k).upper() for k, v in runner.SYMBOL_MAP.items()}
+    if raw in feed_to_canonical:
+        return feed_to_canonical[raw]
+
+    # 3) Spot aliases (e.g. XAU/USD -> XAUUSD).
+    normalized_to_canonical = {}
+    for canonical, aliases in getattr(runner, "SPOT_SYMBOL_MAP", {}).items():
+        c = str(canonical).upper()
+        normalized_to_canonical[_norm_key(c)] = c
+        for alias in (aliases or []):
+            normalized_to_canonical[_norm_key(alias)] = c
+    spot_hit = normalized_to_canonical.get(_norm_key(raw))
+    if spot_hit:
+        return spot_hit
+
+    # 4) Contract-root and continuous aliases (e.g. GC.c.1, GCZ6 -> XAUUSD).
+    root_to_canonical = {str(v).split(".")[0].upper(): str(k).upper() for k, v in runner.SYMBOL_MAP.items()}
+    root = raw.split(".")[0]
+    for token in (".C.0", ".C.1", ".FUT"):
+        if root.endswith(token):
+            root = root[: -len(token)]
+            break
+    if root in root_to_canonical:
+        return root_to_canonical[root]
+
+    return raw
 
 
 def _journal_model_stats_for_symbol(symbol: str | None, limit: int = 500):
@@ -1442,13 +1671,15 @@ def execution_reconnect(
     result = _run_playwright_task(
         lambda: _connect_execution_browser(force=force),
         fallback={"status": "error", "connected": False, "reason": "playwright_executor_timeout"},
-        timeout_seconds=12.0,
+        timeout_seconds=30.0,
     ) or {}
     return {
         "status": result.get("status"),
         "connected": bool(result.get("connected")),
         "mode": result.get("mode"),
         "reason": result.get("reason"),
+        "login_status": result.get("login_status"),
+        "fallback_from": result.get("fallback_from"),
         "connection": execution_connection_status(),
         "reconnect": _execution_reconnect_snapshot(),
     }
@@ -1469,13 +1700,64 @@ def execution_recover(force_reconnect: bool = Query(default=False)):
     }
 
 
+@app.get("/execution/size_preview")
+def execution_size_preview(
+    symbol: str = Query(default="XAUUSD"),
+    direction: str = Query(default="BUY"),
+    entry_price: float | None = Query(default=None),
+    sl: float | None = Query(default=None),
+    lot_size: float | None = Query(default=None),
+    risk_percent: float | None = Query(default=None),
+    account_size: float | None = Query(default=None),
+):
+    side = str(direction or "BUY").strip().upper()
+    if side not in {"BUY", "SELL"}:
+        return {"status": "error", "reason": "direction_must_be_buy_or_sell"}
+
+    panel = _run_playwright_task(
+        lambda: runner.execution.playwright.order_panel_snapshot(),
+        fallback={"ready": False, "reason": "playwright_unavailable"},
+        timeout_seconds=6.0,
+    ) or {"ready": False, "reason": "playwright_unavailable"}
+
+    expected_entry = entry_price
+    if expected_entry is None:
+        expected_entry = panel.get("buy_price") if side == "BUY" else panel.get("sell_price")
+
+    plan = _risk_based_lot_plan(
+        symbol=symbol,
+        entry_price=expected_entry,
+        sl_price=sl,
+        requested_lot=lot_size,
+        risk_percent=risk_percent,
+        account_size=account_size,
+    )
+    return {
+        "status": "ok",
+        "symbol": str(symbol or "XAUUSD").strip().upper(),
+        "direction": side,
+        "entry_price": expected_entry,
+        "sl": sl,
+        "plan": plan,
+        "order_panel": panel,
+    }
+
+
 @app.post("/execution/test_order")
 def execution_test_order(
     direction: str = Query(default="BUY"),
-    lot_size: float = Query(default=0.01),
+    lot_size: float = Query(default=0.2),
     symbol: str = Query(default="XAUUSD"),
+    entry_price: float | None = Query(default=None),
     sl: float | None = Query(default=None),
     tp: float | None = Query(default=None),
+    auto_size: bool = Query(default=False),
+    risk_percent: float | None = Query(default=None),
+    account_size: float | None = Query(default=None),
+    partial_enabled: bool = Query(default=False),
+    partial_ratio: float = Query(default=0.5),
+    partial_target_rr: float = Query(default=1.0),
+    partial_ttl_seconds: int = Query(default=10800),
     execute: bool = Query(default=False),
     confirm: str | None = Query(default=None),
 ):
@@ -1512,16 +1794,52 @@ def execution_test_order(
             timeout_seconds=6.0,
         ) or {"ready": False, "reason": "playwright_unavailable"}
 
-    if not panel.get("ready"):
+    expected_entry = entry_price if entry_price is not None else (panel.get("buy_price") if side == "BUY" else panel.get("sell_price"))
+
+    if not panel.get("ready") and execute:
         return {
             "status": "failed",
             "reason": "order_panel_not_ready",
             "order_panel": panel,
         }
 
-    expected_entry = panel.get("buy_price") if side == "BUY" else panel.get("sell_price")
+    if expected_entry is None:
+        return {
+            "status": "failed",
+            "reason": "entry_price_unavailable",
+            "message": "Provide entry_price for offline dry-run or reconnect broker panel",
+            "order_panel": panel,
+        }
+
     sl_value = float(sl) if sl is not None else None
     tp_value = float(tp) if tp is not None else None
+
+    rr_metrics = {
+        "risk_distance": None,
+        "reward_distance": None,
+        "rr": None,
+    }
+    if sl_value is not None and tp_value is not None:
+        risk_distance = abs(float(expected_entry) - float(sl_value))
+        reward_distance = abs(float(tp_value) - float(expected_entry))
+        rr_metrics = {
+            "risk_distance": round(risk_distance, 6),
+            "reward_distance": round(reward_distance, 6),
+            "rr": round(reward_distance / risk_distance, 6) if risk_distance > 0 else None,
+        }
+
+    lot_plan = _risk_based_lot_plan(
+        symbol=symbol,
+        entry_price=expected_entry,
+        sl_price=sl_value,
+        requested_lot=(None if bool(auto_size) else lot),
+        risk_percent=risk_percent,
+        account_size=account_size,
+    )
+    if auto_size and sl_value is not None and expected_entry is not None:
+        lot_meta = dict(lot_plan.get("lot_meta") or lot_meta)
+        lot = float(lot_plan.get("lot") or lot)
+
     if execute and expected_entry is not None and (sl_value is None or tp_value is None):
         # Provide conservative defaults for explicit manual live tests.
         default_offset = max(0.0005, float(expected_entry) * 0.001)
@@ -1539,6 +1857,12 @@ def execution_test_order(
         "entry_price": expected_entry,
         "sl": sl_value,
         "tp": tp_value,
+        "partial": {
+            "enabled": bool(partial_enabled),
+            "ratio": max(0.1, min(0.9, float(partial_ratio or 0.5))),
+            "target_rr": max(0.2, min(5.0, float(partial_target_rr or 1.0))),
+            "ttl_seconds": max(60, min(8 * 3600, int(partial_ttl_seconds or 10800))),
+        },
     }
 
     if not execute:
@@ -1547,8 +1871,12 @@ def execution_test_order(
             "message": "Validation passed; no live order submitted",
             "order_panel": panel,
             "signal": signal,
+            "rr_metrics": rr_metrics,
             "lot_size": lot,
             "lot_meta": lot_meta,
+            "lot_plan": lot_plan,
+            "auto_size": bool(auto_size),
+            "offline_validation": not bool(panel.get("ready")),
             "live_submit_armed": False,
         }
 
@@ -1573,8 +1901,11 @@ def execution_test_order(
         "status": "submitted" if submitted else "failed",
         "result": result,
         "signal": signal,
+        "rr_metrics": rr_metrics,
         "lot_size": lot,
         "lot_meta": lot_meta,
+        "lot_plan": lot_plan,
+        "auto_size": bool(auto_size),
         "order_panel": panel,
         "live_submit_armed": True,
     }
@@ -1827,6 +2158,34 @@ def execution_close_position(symbol: str | None = Query(default=None)):
         _impl,
         fallback={"status": "error", "reason": "playwright_executor_timeout"},
         timeout_seconds=12.0,
+    )
+
+
+@app.post("/execution/partial_close")
+def execution_partial_close(
+    symbol: str | None = Query(default=None),
+    fraction: float = Query(default=0.5),
+):
+    frac = max(0.1, min(0.9, float(fraction or 0.5)))
+
+    def _impl():
+        page = runner.execution.playwright.page
+        if page is None:
+            return {"status": "error", "reason": "playwright_page_unavailable"}
+
+        outcome = runner.execution.playwright.close_position_fraction(page, symbol=symbol, fraction=frac) or {}
+        ok = bool(outcome.get("ok"))
+        return {
+            "status": "ok" if ok else "failed",
+            "fraction": frac,
+            "symbol": str(symbol).upper() if symbol else None,
+            "result": outcome,
+        }
+
+    return _run_playwright_task(
+        _impl,
+        fallback={"status": "error", "reason": "playwright_executor_timeout"},
+        timeout_seconds=15.0,
     )
 
 
@@ -2165,10 +2524,92 @@ def dashboard_multi_symbol():
 
 @app.get("/chart/data")
 def chart_data(symbol: str, timeframe: str = "1m", limit: int = 300):
-    feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
-    canonical_symbol = feed_to_canonical.get(symbol, symbol)
+    request_started_at = time.monotonic()
+
+    def budget_exceeded(seconds: float = 14.0) -> bool:
+        return (time.monotonic() - request_started_at) >= float(seconds)
+
+    canonical_symbol = _canonical_symbol(symbol) or str(symbol)
     timeframe_minutes = _timeframe_to_minutes(timeframe)
     requested_limit = max(30, min(int(limit or 300), 1000))
+    # Improve symbol resolution: use contract resolver if available
+    resolved_symbol = None
+    try:
+        resolver_snapshot = runner.contract_resolver.snapshot(canonical_symbol)
+        resolved_symbol = resolver_snapshot.get("active_symbol")
+        if not resolved_symbol:
+            # Fallback to SYMBOL_MAP
+            resolved_symbol = runner.SYMBOL_MAP.get(canonical_symbol, canonical_symbol)
+    except Exception:
+        resolved_symbol = runner.SYMBOL_MAP.get(canonical_symbol, canonical_symbol)
+    # Use resolved_symbol for Databento feed
+    cache_key = f"{resolved_symbol}:{timeframe_minutes}"
+    with CHART_CANDLE_CACHE_LOCK:
+        warm_cached_rows = list(CHART_CANDLE_CACHE.get(cache_key, []) or [])
+    if warm_cached_rows:
+        candles = warm_cached_rows[-requested_limit:]
+        overlays = _chart_overlays(candles)
+        volume = [
+            {
+                "time": int(c.get("time", 0)),
+                "value": _float_value(c.get("volume", 0.0)),
+                "color": "#22c55e66" if _float_value(c.get("close")) >= _float_value(c.get("open")) else "#ef444466",
+            }
+            for c in candles
+        ]
+        payload = {
+            "candles": candles,
+            "volume": volume,
+            "overlays": overlays,
+            "signals": [],
+            "meta": _chart_meta(
+                canonical_symbol,
+                market_ctx={
+                    "risk_percent": prop_engine.get_phase_risk(),
+                    "confidence": 0.0,
+                    "position": runner.state.open_positions.get(canonical_symbol),
+                },
+                include_runtime=False,
+            ),
+        }
+        payload["meta"]["timeframe"] = str(timeframe or "1m")
+        payload["meta"]["timeframe_minutes"] = timeframe_minutes
+        payload["meta"]["data_source"] = "CACHE_FAST"
+        payload["meta"]["requested_symbol"] = str(symbol or canonical_symbol)
+        payload["meta"]["canonical_symbol"] = canonical_symbol
+        payload["meta"]["active_feed_symbol"] = str(runner.SYMBOL_MAP.get(canonical_symbol, canonical_symbol))
+        payload["meta"]["cache_fast"] = True
+        payload["meta"]["degraded_data"] = False
+        payload["meta"]["degraded_reason"] = None
+        payload["meta"]["time_sales"] = []
+        payload["meta"]["delta_summary"] = {}
+        payload["meta"]["delta_candles"] = []
+        payload["meta"]["dom_ladder"] = []
+        payload["meta"]["dom_summary"] = {}
+        payload["meta"]["orderflow_summary"] = {}
+        payload["meta"]["gann"] = _chart_gann_snapshot(canonical_symbol, candles)
+
+        def _refresh_in_background():
+            try:
+                _, fresh_rows = _run_with_timeout(
+                    1.4,
+                    lambda: runner.get_futures_candles(
+                        canonical_symbol,
+                        lookback_minutes=max(240, min(3 * 24 * 60, requested_limit * timeframe_minutes * 3)),
+                        record_limit=max(600, min(3000, requested_limit * timeframe_minutes * 2)),
+                        prefer_cached=False,
+                    ),
+                    (None, []),
+                )
+                refreshed = _aggregate_candles(fresh_rows or [], timeframe_minutes)
+                if refreshed:
+                    with CHART_CANDLE_CACHE_LOCK:
+                        CHART_CANDLE_CACHE[cache_key] = list(refreshed[-requested_limit:])
+            except Exception:
+                pass
+
+        threading.Thread(target=_refresh_in_background, daemon=True).start()
+        return payload
     base_record_limit = max(300, min(4000, requested_limit * timeframe_minutes * 2))
     base_lookback_minutes = max(240, min(3 * 24 * 60, requested_limit * timeframe_minutes * 3))
     preferred_active_symbol = runner.SYMBOL_MAP.get(canonical_symbol, canonical_symbol)
@@ -2181,14 +2622,18 @@ def chart_data(symbol: str, timeframe: str = "1m", limit: int = 300):
     else:
         primary_record_limit = max(600, min(base_record_limit, 1200 if guard_cooldown_active else 1800))
         primary_lookback_minutes = max(240, min(base_lookback_minutes, 12 * 60 if guard_cooldown_active else 24 * 60))
-    resolved_active_symbol = runner.resolve_active_feed_symbol(canonical_symbol)
+    resolved_active_symbol = _run_with_timeout(
+        5.5,
+        lambda: runner.resolve_active_feed_symbol(canonical_symbol),
+        runner.SYMBOL_MAP.get(canonical_symbol, canonical_symbol),
+    )
 
     root = str(preferred_active_symbol or canonical_symbol).split(".")[0]
     candidate_symbols = []
     if resolved_active_symbol:
         candidate_symbols.append(resolved_active_symbol)
     if str(preferred_active_symbol).endswith(".FUT"):
-        candidate_symbols.extend([f"{root}.c.1", f"{root}.c.0"])
+        candidate_symbols.extend([f"{root}.c.0", f"{root}.c.1"])
     candidate_symbols.extend(runner.candidate_feed_symbols(canonical_symbol, include_contracts=True))
 
     unique_candidates = []
@@ -2205,7 +2650,7 @@ def chart_data(symbol: str, timeframe: str = "1m", limit: int = 300):
 
     if timeframe_minutes >= 15:
         prefetch_active, prefetch_candles = _run_with_timeout(
-            10.0,
+            3.0,
             lambda: runner.get_futures_candles(
                 canonical_symbol,
                 lookback_minutes=max(primary_lookback_minutes, 12 * 60),
@@ -2220,15 +2665,17 @@ def chart_data(symbol: str, timeframe: str = "1m", limit: int = 300):
             feed_error = None
 
     attempted_candidates = []
-    max_primary_candidates = 2 if timeframe_minutes >= 15 else 3
+    max_primary_candidates = 2 if timeframe_minutes >= 15 else 2
     for index, candidate in enumerate(unique_candidates[:max_primary_candidates]):
         if candles:
             break
+        if budget_exceeded(8.0):
+            break
         attempted_candidates.append(candidate)
         if timeframe_minutes >= 15:
-            candidate_timeout = 5.5 if index == 0 else 4.5
+            candidate_timeout = 2.5 if index == 0 else 2.0
         else:
-            candidate_timeout = 8.0 if index == 0 else 7.0
+            candidate_timeout = 5.5 if index == 0 else 4.0
         candidate_candles = _run_with_timeout(
             candidate_timeout,
             lambda c=candidate: runner.feed.get_ohlcv(
@@ -2261,20 +2708,57 @@ def chart_data(symbol: str, timeframe: str = "1m", limit: int = 300):
         except Exception:
             pass
         feed_error = runner.feed.last_error or feed_error
+
+    if not candles and not budget_exceeded(10.5):
+        fallback_active, fallback_rows = _run_with_timeout(
+            10.0,
+            lambda: runner.get_futures_candles(
+                canonical_symbol,
+                lookback_minutes=max(primary_lookback_minutes, 12 * 60),
+                record_limit=max(primary_record_limit, 1400),
+                prefer_cached=False,
+            ),
+            (active_symbol, []),
+        )
+        if fallback_rows:
+            active_symbol = fallback_active or active_symbol
+            candles = fallback_rows
+            feed_error = None
+    live_continuous_symbol = str(active_symbol or "").strip()
+    live_parent_symbol = str(active_symbol or "").strip()
+    if live_continuous_symbol.upper().endswith(".FUT"):
+        live_root = live_continuous_symbol.split(".")[0]
+        live_continuous_symbol = f"{live_root}.c.0"
+        live_parent_symbol = f"{live_root}.FUT"
+    elif ".C." in live_continuous_symbol.upper():
+        live_parent_symbol = f"{live_continuous_symbol.split('.')[0]}.FUT"
+
     try:
-        runner.feed.ensure_live_subscription_async(dataset=dataset, symbol=active_symbol, stype_in="continuous")
-        runner.feed.ensure_live_subscription_async(dataset=dataset, symbol=active_symbol, stype_in="parent")
+        _run_with_timeout(
+            0.25,
+            lambda: runner.feed.ensure_live_subscription_async(dataset=dataset, symbol=live_continuous_symbol, stype_in="continuous"),
+            None,
+        )
+        _run_with_timeout(
+            0.25,
+            lambda: runner.feed.ensure_live_subscription_async(dataset=dataset, symbol=live_parent_symbol, stype_in="parent"),
+            None,
+        )
     except Exception:
         pass
-    live_quote = runner.feed.get_live_quote(dataset=dataset, symbol=active_symbol, stype_in="raw_symbol", max_age_seconds=20)
+    live_quote = _run_with_timeout(
+        0.3,
+        lambda: runner.feed.get_live_quote(dataset=dataset, symbol=live_continuous_symbol, stype_in=None, max_age_seconds=20),
+        None,
+    )
     candles = _aggregate_candles(candles or [], timeframe_minutes)
     candles = candles[-requested_limit:]
 
     min_candle_target = max(20, min(120, requested_limit // 2)) if timeframe_minutes >= 5 else max(40, min(180, requested_limit))
-    if candles and len(candles) < min_candle_target:
+    if candles and len(candles) < min_candle_target and not budget_exceeded(2.2):
         try:
             extended_history = _run_with_timeout(
-                8.5,
+                0.9,
                 lambda: runner.feed.get_ohlcv(
                     dataset=dataset,
                     symbol=active_symbol,
@@ -2294,13 +2778,13 @@ def chart_data(symbol: str, timeframe: str = "1m", limit: int = 300):
     if candles:
         with CHART_CANDLE_CACHE_LOCK:
             CHART_CANDLE_CACHE[cache_key] = list(candles)
-    if not candles:
+    if not candles and not budget_exceeded(2.3):
         if timeframe_minutes > 1:
             try:
                 resample_record_limit = max(500, min(4000, requested_limit * timeframe_minutes * 5))
                 resample_lookback = max(720, min(3 * 24 * 60, requested_limit * timeframe_minutes * 8))
                 _, base_1m = _run_with_timeout(
-                    4.5,
+                    1.0,
                     lambda: runner.get_futures_candles(
                         canonical_symbol,
                         lookback_minutes=resample_lookback,
@@ -2318,10 +2802,10 @@ def chart_data(symbol: str, timeframe: str = "1m", limit: int = 300):
             except Exception:
                 pass
 
-    if not candles:
+    if not candles and not budget_exceeded(2.4):
         try:
             _, probed_history = _run_with_timeout(
-                5.5,
+                0.9,
                 lambda: runner.get_futures_candles(
                     canonical_symbol,
                     lookback_minutes=max(base_lookback_minutes, 12 * 60),
@@ -2346,10 +2830,10 @@ def chart_data(symbol: str, timeframe: str = "1m", limit: int = 300):
         if cached_rows:
             candles = cached_rows[-requested_limit:]
             data_source = "CACHE_FALLBACK_AUTH" if str(feed_error or "").lower().find("auth") >= 0 else "CACHE_FALLBACK"
-        elif timeframe_minutes == 1:
+        elif timeframe_minutes == 1 and not budget_exceeded(2.5):
             try:
                 _, long_history = _run_with_timeout(
-                    4.5,
+                    1.0,
                     lambda: runner.get_futures_candles(
                         canonical_symbol,
                         lookback_minutes=3 * 24 * 60,
@@ -2367,15 +2851,15 @@ def chart_data(symbol: str, timeframe: str = "1m", limit: int = 300):
             except Exception:
                 pass
 
-    if not candles:
+    if not candles and not budget_exceeded(2.6):
         recent_candidates = []
-        for candidate in [active_symbol, resolved_active_symbol, f"{root}.c.1", f"{root}.c.0", preferred_active_symbol]:
+        for candidate in [active_symbol, resolved_active_symbol, f"{root}.c.0", f"{root}.c.1", preferred_active_symbol]:
             key = str(candidate or "").strip()
             if key and key not in recent_candidates:
                 recent_candidates.append(key)
         for index, candidate in enumerate(recent_candidates[:3]):
             recent_1m = _run_with_timeout(
-                6.0 if index == 0 else 5.0,
+                0.8 if index == 0 else 0.6,
                 lambda c=candidate: runner.feed.get_ohlcv(
                     dataset=dataset,
                     symbol=c,
@@ -2393,27 +2877,45 @@ def chart_data(symbol: str, timeframe: str = "1m", limit: int = 300):
                     CHART_CANDLE_CACHE[cache_key] = list(candles)
                 break
 
-    if not candles:
-            fallback_base_price = 2325.0
-            with CHART_CANDLE_CACHE_LOCK:
-                for cache_symbol_key, cache_rows in CHART_CANDLE_CACHE.items():
-                    if not str(cache_symbol_key).startswith(f"{canonical_symbol}:"):
-                        continue
-                    if not cache_rows:
-                        continue
-                    try:
-                        candidate_price = float((cache_rows[-1] or {}).get("close"))
-                        if candidate_price > 0:
-                            fallback_base_price = candidate_price
-                            break
-                    except Exception:
-                        continue
-            data_source = "SYNTHETIC_FALLBACK_AUTH" if str(feed_error or "").lower().find("auth") >= 0 else "SYNTHETIC_FALLBACK"
-            base_synthetic = _synthetic_candles(
-                limit=max(120, min(base_record_limit, 2000)),
-                base_price=fallback_base_price,
+    if not candles and not budget_exceeded(13.5):
+        try:
+            time.sleep(0.35)
+            retry_active, retry_rows = _run_with_timeout(
+                5.0,
+                lambda: runner.get_futures_candles(
+                    canonical_symbol,
+                    lookback_minutes=max(primary_lookback_minutes, 8 * 60),
+                    record_limit=max(primary_record_limit, 1200),
+                    prefer_cached=True,
+                ),
+                (active_symbol, []),
             )
-            candles = _aggregate_candles(base_synthetic, timeframe_minutes)[-requested_limit:]
+            retry_candles = _aggregate_candles(retry_rows or [], timeframe_minutes)
+            if retry_candles:
+                candles = retry_candles[-requested_limit:]
+                active_symbol = retry_active or active_symbol
+                data_source = "HISTORICAL_RETRY"
+                with CHART_CANDLE_CACHE_LOCK:
+                    CHART_CANDLE_CACHE[cache_key] = list(candles)
+        except Exception:
+            pass
+
+    if not candles:
+        # No real Databento price data available, return error or empty chart
+        return {
+            "candles": [],
+            "volume": [],
+            "overlays": {},
+            "signals": [],
+            "meta": {
+                "error": "No real price data available",
+                "requested_symbol": str(symbol or canonical_symbol),
+                "canonical_symbol": canonical_symbol,
+                "data_source": "NO_REAL_DATA",
+                "degraded_data": True,
+                "degraded_reason": str(feed_error or runner.feed.last_error or runner.feed.live_last_error or ""),
+            }
+        }
 
     if live_quote and candles:
         try:
@@ -2431,7 +2933,7 @@ def chart_data(symbol: str, timeframe: str = "1m", limit: int = 300):
     try:
         if getattr(getattr(runner, "signal_manager", None), "orderflow_engine", None):
             trades = _run_with_timeout(
-                1.8,
+                0.6,
                 lambda: runner.signal_manager.orderflow_engine.get_recent_trades(
                     dataset=dataset,
                     symbol=active_symbol,
@@ -2492,6 +2994,17 @@ def chart_data(symbol: str, timeframe: str = "1m", limit: int = 300):
     payload["meta"]["dom_ladder"] = dom_payload.get("levels", [])
     payload["meta"]["dom_summary"] = dom_payload.get("summary", {})
     payload["meta"]["orderflow_summary"] = orderflow_summary
+    payload["meta"]["gann"] = _chart_gann_snapshot(canonical_symbol, candles)
+
+    gann_meta = payload["meta"].get("gann") or {}
+    if gann_meta.get("detected") and candles:
+        payload["signals"].append(
+            {
+                "time": int((candles[-1] or {}).get("time", 0) or 0),
+                "model": "GANN",
+                "direction": str(gann_meta.get("direction") or "").upper() or "BUY",
+            }
+        )
     payload["overlays"]["cumulative_delta"] = [
         {"time": int(row.get("time", 0)), "value": float(row.get("cum_delta", 0.0))}
         for row in (delta_payload.get("candles", []) or [])
@@ -2524,8 +3037,7 @@ def chart_data(symbol: str, timeframe: str = "1m", limit: int = 300):
 
 @app.get("/market/time_sales")
 def market_time_sales(symbol: str, limit: int = 40):
-    feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
-    canonical_symbol = feed_to_canonical.get(symbol, symbol)
+    canonical_symbol = _canonical_symbol(symbol) or str(symbol)
     dataset = symbol_dataset(canonical_symbol)
     active_symbol = runner.resolve_active_feed_symbol(canonical_symbol) or runner.SYMBOL_MAP.get(canonical_symbol, canonical_symbol)
 
@@ -2571,8 +3083,7 @@ def market_time_sales(symbol: str, limit: int = 40):
 
 @app.get("/market/delta")
 def market_delta(symbol: str, timeframe: str = "1m", limit: int = 120):
-    feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
-    canonical_symbol = feed_to_canonical.get(symbol, symbol)
+    canonical_symbol = _canonical_symbol(symbol) or str(symbol)
     dataset = symbol_dataset(canonical_symbol)
     timeframe_minutes = _timeframe_to_minutes(timeframe)
     active_symbol = runner.resolve_active_feed_symbol(canonical_symbol) or runner.SYMBOL_MAP.get(canonical_symbol, canonical_symbol)
@@ -2628,8 +3139,7 @@ def market_delta(symbol: str, timeframe: str = "1m", limit: int = 120):
 
 @app.get("/market/dom")
 def market_dom(symbol: str, timeframe: str = "1m", depth: int = 12, limit: int = 120):
-    feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
-    canonical_symbol = feed_to_canonical.get(symbol, symbol)
+    canonical_symbol = _canonical_symbol(symbol) or str(symbol)
     dataset = symbol_dataset(canonical_symbol)
     timeframe_minutes = _timeframe_to_minutes(timeframe)
     active_symbol = runner.resolve_active_feed_symbol(canonical_symbol) or runner.SYMBOL_MAP.get(canonical_symbol, canonical_symbol)
@@ -2685,8 +3195,7 @@ def market_dom(symbol: str, timeframe: str = "1m", depth: int = 12, limit: int =
 
 @app.get("/market/orderflow_summary")
 def market_orderflow_summary(symbol: str, timeframe: str = "1m", limit: int = 120):
-    feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
-    canonical_symbol = feed_to_canonical.get(symbol, symbol)
+    canonical_symbol = _canonical_symbol(symbol) or str(symbol)
     timeframe_minutes = _timeframe_to_minutes(timeframe)
 
     chart_payload = chart_data(symbol=symbol, timeframe=timeframe, limit=max(60, min(400, int(limit or 120))))
@@ -2716,8 +3225,7 @@ def market_orderflow_summary(symbol: str, timeframe: str = "1m", limit: int = 12
 
 @app.get("/market/basis")
 def market_basis(symbol: str, refresh: bool = False):
-    feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
-    canonical_symbol = feed_to_canonical.get(symbol, symbol)
+    canonical_symbol = _canonical_symbol(symbol) or str(symbol)
     if refresh:
         _prime_symbol_runtime(canonical_symbol)
     snapshot = runner.get_basis_snapshot(canonical_symbol)
@@ -2729,8 +3237,7 @@ def market_basis(symbol: str, refresh: bool = False):
 
 @app.get("/market/contracts")
 def market_contracts(symbol: str):
-    feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
-    canonical_symbol = feed_to_canonical.get(symbol, symbol)
+    canonical_symbol = _canonical_symbol(symbol) or str(symbol)
     active = runner.resolve_active_feed_symbol(canonical_symbol)
     resolver = runner.contract_resolver.snapshot(canonical_symbol)
     return {
@@ -2756,8 +3263,7 @@ def market_symbol_probe(
     include_contracts: bool = Query(default=False),
     max_candidates: int = Query(default=4, ge=1, le=12),
 ):
-    feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
-    canonical_symbol = feed_to_canonical.get(symbol, symbol)
+    canonical_symbol = _canonical_symbol(symbol) or str(symbol)
     candidates = runner.candidate_feed_symbols(canonical_symbol, include_contracts=include_contracts)[:max_candidates]
     dataset = runner.dataset
     out = []
@@ -2769,8 +3275,7 @@ def market_symbol_probe(
 
 @app.get("/market/context")
 def market_context_endpoint(symbol: str):
-    feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
-    canonical_symbol = feed_to_canonical.get(symbol, symbol)
+    canonical_symbol = _canonical_symbol(symbol) or str(symbol)
     _prime_symbol_runtime(canonical_symbol)
     basis_snapshot = _normalize_basis_snapshot(runner.get_basis_snapshot(canonical_symbol))
     resolver_snapshot = runner.contract_resolver.snapshot(canonical_symbol)
@@ -2784,11 +3289,10 @@ def market_context_endpoint(symbol: str):
 
 @app.get("/market/offset_quality")
 def market_offset_quality(symbol: str = "GC.FUT"):
-    feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
-    canonical_symbol = feed_to_canonical.get(symbol, symbol)
+    canonical_symbol = _canonical_symbol(symbol) or str(symbol)
     _prime_symbol_runtime(canonical_symbol)
 
-    market_data = _run_with_timeout(2.0, lambda: runner.get_market_data(canonical_symbol) or {}, {})
+    market_data = _run_with_timeout(0.5, lambda: runner.get_market_data(canonical_symbol) or {}, {})
     basis_snapshot = _normalize_basis_snapshot(runner.get_basis_snapshot(canonical_symbol))
     basis_policy = runner.basis_safety_policy(canonical_symbol, basis_snapshot=basis_snapshot)
     offset_guard = runner.offset_guard_snapshot(canonical_symbol, basis_snapshot=basis_snapshot)
@@ -2799,11 +3303,64 @@ def market_offset_quality(symbol: str = "GC.FUT"):
         basis_policy=basis_policy,
     )
 
-    broker_quote = _run_playwright_task(
-        lambda: runner.execution.broker_quote_snapshot(expected_symbols=[canonical_symbol, "XAUUSD", "XAU/USD"]),
-        fallback={},
-        timeout_seconds=4.0,
-    ) or {}
+    broker_quote = {}
+
+    futures_price = None
+    try:
+        candles = list((market_data or {}).get("candles") or [])
+        if candles:
+            futures_price = float((candles[-1] or {}).get("close"))
+    except Exception:
+        futures_price = None
+
+    cached_spot_quote = {}
+    try:
+        cached_spot_quote = runner.get_broker_spot_quote(canonical_symbol) or {}
+    except Exception:
+        cached_spot_quote = {}
+    try:
+        broker_quote = dict(cached_spot_quote.get("snapshot") or {})
+    except Exception:
+        broker_quote = {}
+
+    spot_price = None
+    try:
+        if cached_spot_quote.get("price") is not None:
+            spot_price = float(cached_spot_quote.get("price"))
+    except Exception:
+        spot_price = None
+
+    offset_difference = None
+    try:
+        if futures_price is not None and spot_price is not None:
+            offset_difference = float(futures_price) - float(spot_price)
+    except Exception:
+        offset_difference = None
+
+    broker_xauusd_price = None
+    try:
+        if broker_quote.get("mid") is not None:
+            broker_xauusd_price = float(broker_quote.get("mid"))
+        elif broker_quote.get("last") is not None:
+            broker_xauusd_price = float(broker_quote.get("last"))
+        elif spot_price is not None:
+            broker_xauusd_price = float(spot_price)
+    except Exception:
+        broker_xauusd_price = None
+
+    execution_health = {}
+    try:
+        execution_health = runner.execution.execution_health() or {}
+    except Exception:
+        execution_health = {}
+
+    now_ts = int(time.time())
+    last_hb = int(execution_health.get("last_browser_heartbeat") or 0)
+    page_attached = bool(getattr(getattr(runner.execution, "playwright", None), "page", None))
+    browser_connected = bool(page_attached and last_hb > 0 and (now_ts - last_hb) <= 20)
+
+    tick_rows = list(getattr(runner, "spot_tick_history", {}).get(str(canonical_symbol).upper(), []) or [])
+    last_tick = tick_rows[-1] if tick_rows else {}
 
     return {
         "status": "ok",
@@ -2824,6 +3381,26 @@ def market_offset_quality(symbol: str = "GC.FUT"):
             "candidates": list((trade_quality or {}).get("signal_candidates") or []),
         },
         "broker_quote": broker_quote,
+        "prices": {
+            "futures_price": futures_price,
+            "spot_price": spot_price,
+            "offset_difference": offset_difference,
+            "broker_xauusd_price": broker_xauusd_price,
+        },
+        "spot_pipeline": {
+            "playwright_connected": browser_connected,
+            "playwright_page_attached": page_attached,
+            "last_browser_heartbeat": last_hb or None,
+            "scanner_enabled": bool(getattr(runner, "broker_spot_scanner_enabled", False)),
+            "cache_stale": bool(cached_spot_quote.get("stale", True)),
+            "cache_age_seconds": cached_spot_quote.get("cache_age_seconds"),
+            "from_cache": bool(cached_spot_quote.get("from_cache", False)),
+            "data_absorbing": bool(len(tick_rows) > 0),
+            "absorbed_ticks": int(len(tick_rows)),
+            "last_tick_time": last_tick.get("time") if isinstance(last_tick, dict) else None,
+            "last_tick_price": last_tick.get("price") if isinstance(last_tick, dict) else None,
+            "last_tick_source": last_tick.get("source") if isinstance(last_tick, dict) else None,
+        },
         "spot_fidelity": {
             "spot_primary": bool((market_data or {}).get("spot_primary")),
             "strict": bool((market_data or {}).get("spot_fidelity_strict")),
@@ -2837,11 +3414,52 @@ def market_offset_quality(symbol: str = "GC.FUT"):
 
 
 @app.get("/mentor/context")
-def mentor_context(symbol: str = "GC.FUT"):
-    feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
-    canonical_symbol = feed_to_canonical.get(symbol, symbol)
+def mentor_context(symbol: str = "XAUUSD"):
+    canonical_symbol = _canonical_symbol(symbol) or str(symbol)
+    feed_health = runner.feed.health() if getattr(runner, "feed", None) is not None else {}
+    used_chart_fallback = False
 
     market_data_raw = _run_with_timeout(1.5, lambda: runner.get_market_data(canonical_symbol) or {}, {})
+    if not isinstance(market_data_raw, dict):
+        market_data_raw = {}
+
+    if len(list((market_data_raw or {}).get("candles") or [])) < 5:
+        used_chart_fallback = True
+        chart_payload = chart_data(symbol=canonical_symbol, timeframe="1m", limit=240)
+        chart_candles = list((chart_payload or {}).get("candles") or [])
+        chart_meta = dict((chart_payload or {}).get("meta") or {})
+        if len(chart_candles) >= 5:
+            last_close = _float_value(chart_candles[-1].get("close"), 0.0)
+            reference_close = _float_value(chart_candles[-5].get("close"), last_close)
+            market_data_raw.update(
+                {
+                    "candles": chart_candles,
+                    "trend": "UP" if last_close >= reference_close else "DOWN",
+                    "dataset": symbol_dataset(canonical_symbol),
+                    "pricing_source": chart_meta.get("active_feed_symbol") or chart_meta.get("data_source"),
+                    "futures_source": chart_meta.get("active_feed_symbol"),
+                    "spot_source": None,
+                    "spot_primary": False,
+                    "spot_fidelity_strict": False,
+                    "spot_confirmation_bps": None,
+                    "spot_confirmation_max_bps": getattr(runner, "spot_confirmation_max_bps", None),
+                    "spot_guard_block": False,
+                    "spot_guard_reason": None,
+                    "liquidity_sweep": False,
+                    "absorption": False,
+                    "absorption_levels": [],
+                    "delta_positive": False,
+                    "delta": 0.0,
+                    "buy_volume": 0.0,
+                    "sell_volume": 0.0,
+                    "volatility_breakout": False,
+                    "time_cycle_alignment": False,
+                    "high_impact_news": False,
+                    "volume_spike": False,
+                    "basis": (market_data_raw or {}).get("basis") or {},
+                }
+            )
+
     candles = list((market_data_raw or {}).get("candles") or [])
     last_candle = candles[-1] if candles else {}
     last_open = _float_value((last_candle or {}).get("open"), 0.0)
@@ -2904,12 +3522,54 @@ def mentor_context(symbol: str = "GC.FUT"):
         "iceberg": iceberg,
     }
 
+    pricing_source = str((market_data_raw or {}).get("pricing_source") or "").strip()
+    spot_source = str((market_data_raw or {}).get("spot_source") or "").strip()
+    feed_source = spot_source or pricing_source
+    source_upper = feed_source.upper()
+    verified_live = False
+    live_reason = "price source unavailable"
+    if used_chart_fallback:
+        live_reason = "chart fallback in use"
+    elif source_upper.startswith("BROKER:") or source_upper.startswith("DATABENTO:"):
+        verified_live = True
+        live_reason = "live source attached"
+    elif pricing_source and bool(feed_health.get("configured")):
+        verified_live = True
+        live_reason = "historical/live market feed configured"
+    elif pricing_source:
+        live_reason = "price available but live feed not verified"
+    elif bool(feed_health.get("reason")):
+        live_reason = str(feed_health.get("reason"))
+
+    gann_snapshot = _chart_gann_snapshot(canonical_symbol, candles)
+    gann_signals = dict((gann_snapshot or {}).get("signals") or {})
+
     model_data = _mentor_model_data(canonical_symbol, market_data_raw if isinstance(market_data_raw, dict) else {})
     risk_data = _mentor_risk_data()
     phase_data, exit_data = _mentor_phase_data(canonical_symbol)
     context = mentor_engine.build_context(market_data, model_data, risk_data, phase_data)
     context["exit"] = exit_data
-    context["gann"] = gann_lines
+    context["gann_lines"] = gann_lines
+    context["gann"] = {
+        "cycle": int(len(candles) or 0),
+        "target_100": round(nearest_resistance, 4) if nearest_resistance is not None else None,
+        "target_200": round(nearest_support, 4) if nearest_support is not None else None,
+        "enabled": bool((gann_snapshot or {}).get("enabled", True)),
+        "detected": bool((gann_snapshot or {}).get("detected", False)),
+        "direction": (gann_snapshot or {}).get("direction"),
+        "confidence": (gann_snapshot or {}).get("confidence"),
+        "score": (gann_snapshot or {}).get("score"),
+        "degree": gann_signals.get("degree"),
+        "key_degree": gann_signals.get("key_degree"),
+        "cross": gann_signals.get("cross"),
+        "vibration": gann_signals.get("vibration"),
+        "time_vibration": gann_signals.get("time_vibration"),
+        "cycle_144": bool(gann_signals.get("cycle_144", False)),
+        "master_cycle": bool(gann_signals.get("master_cycle", False)),
+        "price_time_alignment": bool(gann_signals.get("price_time_alignment", False)),
+        "support": gann_signals.get("support"),
+        "resistance": gann_signals.get("resistance"),
+    }
     context["astro"] = astro_markers
     context["prices"] = {
         "last": round(last_close, 4) if last_close > 0 else None,
@@ -2920,6 +3580,21 @@ def mentor_context(symbol: str = "GC.FUT"):
         "range_points": round(range_points, 4) if range_points > 0 else None,
         "nearest_support": round(nearest_support, 4) if nearest_support is not None else None,
         "nearest_resistance": round(nearest_resistance, 4) if nearest_resistance is not None else None,
+    }
+    context["price"] = context["prices"].get("last")
+    context["data_feed"] = {
+        "verified_live": bool(verified_live and last_close > 0),
+        "live_ready": bool(verified_live and last_close > 0 and not bool((market_data_raw or {}).get("spot_guard_block"))),
+        "reason": live_reason,
+        "source": feed_source or None,
+        "pricing_source": pricing_source or None,
+        "spot_source": spot_source or None,
+        "used_chart_fallback": bool(used_chart_fallback),
+        "feed_configured": bool(feed_health.get("configured")),
+        "feed_healthy": bool(feed_health.get("healthy")),
+        "feed_reason": feed_health.get("reason"),
+        "spot_guard_block": bool((market_data_raw or {}).get("spot_guard_block")),
+        "spot_guard_reason": (market_data_raw or {}).get("spot_guard_reason"),
     }
     context["orderflow_summary"] = orderflow_summary
 
@@ -2978,11 +3653,34 @@ def mentor_context(symbol: str = "GC.FUT"):
 
 
 @app.get("/mentor")
-def mentor_v3(symbol: str = "GC.FUT"):
+def mentor_v3(symbol: str = "XAUUSD"):
     context = mentor_context(symbol=symbol)
     v3_payload = dict(context.get("v3") or {})
     if not v3_payload:
         return {"status": "error", "message": "mentor v3 unavailable"}
+    gann_from_context = dict(context.get("gann") or {})
+    gann_from_v3 = dict(v3_payload.get("gann") or {})
+    if gann_from_context:
+        # Keep V3's base fields, but enrich with confluence diagnostics for frontend display.
+        gann_from_v3.update({
+            "enabled": gann_from_context.get("enabled"),
+            "detected": gann_from_context.get("detected"),
+            "direction": gann_from_context.get("direction"),
+            "confidence": gann_from_context.get("confidence"),
+            "score": gann_from_context.get("score"),
+            "degree": gann_from_context.get("degree"),
+            "key_degree": gann_from_context.get("key_degree"),
+            "cross": gann_from_context.get("cross"),
+            "vibration": gann_from_context.get("vibration"),
+            "time_vibration": gann_from_context.get("time_vibration"),
+            "cycle_144": gann_from_context.get("cycle_144"),
+            "master_cycle": gann_from_context.get("master_cycle"),
+            "price_time_alignment": gann_from_context.get("price_time_alignment"),
+            "support": gann_from_context.get("support"),
+            "resistance": gann_from_context.get("resistance"),
+        })
+    v3_payload["gann"] = gann_from_v3
+    v3_payload["gann_lines"] = list(context.get("gann_lines") or [])
     v3_payload["prices"] = context.get("prices", {})
     v3_payload["updated_at"] = context.get("updated_at")
     v3_payload["symbol"] = symbol
@@ -3017,8 +3715,7 @@ def mentor_action(data: dict):
 @app.get("/prop/auto_behavior")
 def prop_auto_behavior(symbol: str | None = None):
     if symbol:
-        feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
-        canonical_symbol = feed_to_canonical.get(symbol, symbol)
+        canonical_symbol = _canonical_symbol(symbol) or str(symbol)
         _prime_symbol_runtime(canonical_symbol)
         return {
             "symbol": canonical_symbol,
@@ -3040,8 +3737,7 @@ def prop_auto_behavior_override(data: dict):
     symbol = str(payload.get("symbol", "")).strip()
     if not symbol:
         return {"status": "error", "message": "symbol is required"}
-    feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
-    canonical_symbol = feed_to_canonical.get(symbol, symbol)
+    canonical_symbol = _canonical_symbol(symbol) or str(symbol)
     snapshot = runner.set_behavior_override(
         canonical_symbol,
         mode=payload.get("mode"),
@@ -3060,8 +3756,7 @@ def prop_auto_behavior_override_clear(data: dict):
     payload = data or {}
     symbol = payload.get("symbol")
     if symbol:
-        feed_to_canonical = {v: k for k, v in runner.SYMBOL_MAP.items()}
-        symbol = feed_to_canonical.get(symbol, symbol)
+        symbol = _canonical_symbol(symbol) or str(symbol)
     return runner.clear_behavior_override(symbol=symbol)
 
 

@@ -1,67 +1,83 @@
 {
   "XAUUSD": {
-    "active_symbol": "GC.c.1",
-    "resolved_at": 1772846569,
-    "last_probe_at": 1772846569,
-    "last_status": "LIVE",
-    "sample_count": 120,
-    "attempts": 4344,
-    "consecutive_failures": 0,
+    "active_symbol": null,
+    "resolved_at": 1773250515,
+    "last_probe_at": 1773276122,
+    "last_status": "UNRESOLVED",
+    "sample_count": 240,
+    "attempts": 22240,
+    "consecutive_failures": 1,
     "ttl_seconds": 14400,
     "candidates_tried": [
       "GC.c.1"
     ]
   },
   "NQ": {
-    "active_symbol": "NQ.FUT",
-    "resolved_at": 1772846210,
-    "last_probe_at": 1772846210,
-    "last_status": "LIVE",
-    "sample_count": 111,
-    "attempts": 121,
-    "consecutive_failures": 0,
+    "active_symbol": null,
+    "resolved_at": 1773250355,
+    "last_probe_at": 1773276131,
+    "last_status": "UNRESOLVED",
+    "sample_count": 219,
+    "attempts": 1746,
+    "consecutive_failures": 1,
     "ttl_seconds": 14400,
     "candidates_tried": [
-      "NQ.FUT"
+      "NQ.c.1"
     ]
   },
   "EURUSD": {
-    "active_symbol": "6E.FUT",
-    "resolved_at": 1772846214,
-    "last_probe_at": 1772846214,
-    "last_status": "LIVE",
-    "sample_count": 153,
-    "attempts": 116,
-    "consecutive_failures": 0,
+    "active_symbol": null,
+    "resolved_at": 1773250355,
+    "last_probe_at": 1773276137,
+    "last_status": "UNRESOLVED",
+    "sample_count": 41,
+    "attempts": 381,
+    "consecutive_failures": 1,
     "ttl_seconds": 14400,
     "candidates_tried": [
-      "6E.FUT"
+      "6E.c.1"
     ]
   },
   "BTC": {
-    "active_symbol": "BTC.FUT",
-    "resolved_at": 1772846227,
-    "last_probe_at": 1772846227,
-    "last_status": "LIVE",
-    "sample_count": 60,
-    "attempts": 116,
-    "consecutive_failures": 0,
+    "active_symbol": null,
+    "resolved_at": 1773250358,
+    "last_probe_at": 1773276148,
+    "last_status": "UNRESOLVED",
+    "sample_count": 37,
+    "attempts": 391,
+    "consecutive_failures": 1,
     "ttl_seconds": 14400,
     "candidates_tried": [
-      "BTC.FUT"
+      "BTC.c.1"
     ]
   },
   "US30": {
-    "active_symbol": "YM.FUT",
-    "resolved_at": 1772846233,
-    "last_probe_at": 1772846233,
+    "active_symbol": null,
+    "resolved_at": 1773250359,
+    "last_probe_at": 1773276155,
+    "last_status": "UNRESOLVED",
+    "sample_count": 182,
+    "attempts": 380,
+    "consecutive_failures": 1,
+    "ttl_seconds": 14400,
+    "candidates_tried": [
+      "YM.c.1"
+    ]
+  },
+  "GC-F": {
+    "active_symbol": "GC.FUT",
+    "resolved_at": 1773196515,
+    "last_probe_at": 1773196515,
     "last_status": "LIVE",
-    "sample_count": 87,
-    "attempts": 108,
+    "sample_count": 1200,
+    "attempts": 34,
     "consecutive_failures": 0,
     "ttl_seconds": 14400,
     "candidates_tried": [
-      "YM.FUT"
+      "GC-F",
+      "GC-F.c.1",
+      "GC-F.c.0",
+      "GC.FUT"
     ]
   }
 }

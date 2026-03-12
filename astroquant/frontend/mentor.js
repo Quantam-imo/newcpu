@@ -1,39 +1,119 @@
 const MENTOR_STATE_KEY = "aq_mentor_drawer_open";
 const MENTOR_WIDTH_KEY = "aq_mentor_drawer_width";
 const MENTOR_SECTIONS_KEY = "aq_mentor_sections";
+const MENTOR_COMPACT_KEY = "aq_mentor_compact_mode";
 const AQ_DEFAULT_MENTOR_API_ORIGIN = "http://127.0.0.1:8000";
 
 function resolveMentorApiBase() {
-    const normalized = AQ_DEFAULT_MENTOR_API_ORIGIN;
-    window.AQ_API_BASE = normalized;
-    return normalized;
+    const configured = String(window.AQ_API_BASE || "").trim();
+    return configured || AQ_DEFAULT_MENTOR_API_ORIGIN;
 }
 
-const mentorFetch = async (path, options) => {
-    const primary = `${resolveMentorApiBase()}${path}`;
-    const backup = `http://127.0.0.1:8000${path}`;
-    for (const target of [primary, backup]) {
-        try {
-            return await fetch(target, options);
-        } catch (error) {
-            console.warn("mentorFetch failed", target, error);
+const mentorFetch = async (path, options, timeoutMs = 25000) => {
+    const startTime = performance.now();
+    const pathBase = path.split('?')[0];
+    
+    // Check cache first for GET requests
+    if (!options?.method || options?.method === "GET") {
+        const cached = getCachedResponse(path);
+        if (cached) {
+            trackPerformance(path, 0, true);
+            console.debug(`mentorFetch: Cache hit for ${path}`);
+            // Return cached data as Response object
+            return new Response(JSON.stringify(cached), {
+                status: 200,
+                headers: { "Content-Type": "application/json", "X-From-Cache": "true" }
+            });
         }
     }
+    
+    // Build comprehensive list of targets to try
+    const targets = [];
+    
+    // Always try relative URL first (same origin as page)
+    targets.push(path);
+    
+    // Then try absolute URLs in priority order
+    const uniqueOrigins = new Set();
+    const baseOrigins = [
+        window.location.origin,              // Current page origin
+        "http://localhost:8000",              // Localhost
+        "http://127.0.0.1:8000",              // Loopback
+    ];
+    
+    for (const origin of baseOrigins) {
+        const trimmed = String(origin || "").trim();
+        if (trimmed && !uniqueOrigins.has(trimmed)) {
+            uniqueOrigins.add(trimmed);
+            targets.push(`${trimmed}${path}`);
+        }
+    }
+    
+    let lastError = null;
+    for (const target of targets) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const response = await fetch(target, { ...options, signal: controller.signal });
+            clearTimeout(timer);
+            
+            if (response.ok) {
+                const duration = performance.now() - startTime;
+                trackPerformance(path, duration, false);
+                
+                // Update AQ_API_BASE on success
+                if (target.startsWith("http")) {
+                    try {
+                        const origin = new URL(target).origin;
+                        if (origin && origin !== window.location.origin) {
+                            window.AQ_API_BASE = origin;
+                        }
+                    } catch (_) {}
+                }
+                
+                // Cache successful JSON responses
+                try {
+                    const jsonData = await response.clone().json();
+                    if (CACHE_CONFIG[pathBase]) {
+                        cacheResponse(path, jsonData);
+                    }
+                } catch (_) {}
+                
+                return response;
+            }
+            lastError = response;
+        } catch (error) {
+            clearTimeout(timer);
+            lastError = error;
+            console.debug(`mentorFetch: ${target} failed -`, error.message || error);
+        }
+    }
+    
+    console.warn("mentorFetch failed on all targets:", targets, "lastError:", lastError);
     return new Response(
         JSON.stringify({ status: "error", message: "fetch failed" }),
         { status: 599, headers: { "Content-Type": "application/json" } },
     );
 };
 let mentorLoadedOnce = false;
+let mentorRequestInFlight = false;
+let mentorRefreshQueued = false;
+let mentorRequestSerial = 0;
+let mentorLastRenderSignature = "";
 
 function selectedMentorSymbol() {
     const select = document.getElementById("chartSymbol");
-    return select ? select.value : "GC.FUT";
+    return select ? select.value : "XAUUSD";
 }
 
 function setMentorMeta(text) {
     const el = document.getElementById("mentorMeta");
     if (el) el.innerHTML = text;
+}
+
+function statusBadge(label, tone = "warn") {
+    const safeTone = ["good", "warn", "bad"].includes(String(tone)) ? tone : "warn";
+    return `<span class="mentor-status-badge ${safeTone}">${fmt(label)}</span>`;
 }
 
 function fmt(v) {
@@ -62,6 +142,10 @@ function section(id, title, body, isOpen = true) {
     `;
 }
 
+function sectionOpen(savedSections, id) {
+    return Boolean(savedSections && savedSections[id] === true);
+}
+
 function getCurrentSectionState() {
     const content = document.getElementById("mentorContent");
     const state = {};
@@ -81,9 +165,21 @@ function actionCall(verdict, detail, tone = "neutral") {
     return `<div class="mentor-action-call mentor-tone-${safeTone}"><strong>${fmt(verdict)}</strong><span>${fmt(detail)}</span></div>`;
 }
 
+function gannStatusPill(gann) {
+    const enabled = gann?.enabled !== false;
+    const detected = Boolean(gann?.detected);
+    const direction = String(gann?.direction || "").toUpperCase();
+    const confidence = gann?.confidence != null ? `${fmt(gann.confidence)}%` : "";
+
+    if (!enabled) return `<span class="mentor-gann-pill gann-off">GANN OFF</span>`;
+    if (!detected) return `<span class="mentor-gann-pill gann-none">GANN NO SIGNAL</span>`;
+    if (direction === "SELL") return `<span class="mentor-gann-pill gann-sell">GANN SELL ${confidence}</span>`;
+    return `<span class="mentor-gann-pill gann-buy">GANN BUY ${confidence}</span>`;
+}
+
 function normalizeMentorData(raw, symbol) {
     const payload = raw || {};
-    if (payload.context && payload.probability) {
+    if (payload.context && payload.probability && !Array.isArray(payload.gann)) {
         return payload;
     }
 
@@ -94,6 +190,7 @@ function normalizeMentorData(raw, symbol) {
     const iceberg = payload.iceberg || {};
     const summary = payload.orderflow_summary || {};
     const gannRows = Array.isArray(payload.gann) ? payload.gann : [];
+    const gannRaw = (!Array.isArray(payload.gann) && payload.gann && typeof payload.gann === "object") ? payload.gann : {};
     const astroRows = Array.isArray(payload.astro) ? payload.astro : [];
 
     const support = prices.nearest_support ?? null;
@@ -137,6 +234,13 @@ function normalizeMentorData(raw, symbol) {
             delta: summary.delta_state || "NEUTRAL",
             poc: price,
         },
+        iceberg: {
+            detected: iceberg.detected,
+            price: iceberg.price,
+            strength: iceberg.strength,
+            bias: iceberg.bias,
+            absorption: iceberg.absorption,
+        },
         ict: {
             turtle_soup: "--",
             fvg_zone: model.entry_logic || "OFF",
@@ -144,9 +248,24 @@ function normalizeMentorData(raw, symbol) {
             liquidity_sweep: summary.absorption_signal || "none",
         },
         gann: {
-            cycle: gannRows.length,
-            target_100: resistance,
-            target_200: support,
+            cycle: gannRaw.cycle ?? gannRows.length,
+            target_100: gannRaw.target_100 ?? resistance,
+            target_200: gannRaw.target_200 ?? support,
+            enabled: gannRaw.enabled,
+            detected: gannRaw.detected,
+            direction: gannRaw.direction,
+            confidence: gannRaw.confidence,
+            score: gannRaw.score,
+            degree: gannRaw.degree,
+            key_degree: gannRaw.key_degree,
+            cross: gannRaw.cross,
+            vibration: gannRaw.vibration,
+            time_vibration: gannRaw.time_vibration,
+            cycle_144: gannRaw.cycle_144,
+            master_cycle: gannRaw.master_cycle,
+            price_time_alignment: gannRaw.price_time_alignment,
+            support: gannRaw.support,
+            resistance: gannRaw.resistance,
         },
         astro: {
             harmonic_window: astroRows.length > 0,
@@ -175,17 +294,51 @@ function normalizeMentorData(raw, symbol) {
 function renderMentorSkeleton(message = "Loading mentor modules...") {
     const content = document.getElementById("mentorContent");
     if (!content) return;
-    content.innerHTML = section("market", "AI Mentor", row("Status", message), true);
+    content.innerHTML = `<div class="mentor-action-call mentor-tone-neutral"><strong>AI Mentor</strong><span>${fmt(message)}</span></div>`;
+}
+
+function mentorRenderSignature(data) {
+    const context = data?.context || {};
+    const probability = data?.probability || {};
+    const gann = data?.gann || {};
+    const iceberg = data?.iceberg || {};
+    const summary = {
+        symbol: data?.symbol,
+        price: context?.price,
+        htf: context?.htf_bias,
+        ltf: context?.ltf_structure,
+        vol: context?.volatility,
+        score: probability?.score,
+        verdict: probability?.verdict,
+        story: data?.story,
+        gannDetected: gann?.detected,
+        gannDir: gann?.direction,
+        gannConf: gann?.confidence,
+        iceDetected: iceberg?.detected,
+        iceBias: iceberg?.bias,
+        iceAbsorption: iceberg?.absorption,
+        iceStrength: iceberg?.strength,
+    };
+    try {
+        return JSON.stringify(summary);
+    } catch (_) {
+        return String(Date.now());
+    }
 }
 
 function renderMentorContext(data, sectionOverrides = null) {
     const content = document.getElementById("mentorContent");
     if (!content) return;
+    const previousHeight = Math.max(0, content.getBoundingClientRect().height || 0);
+    if (previousHeight > 0) {
+        content.style.minHeight = `${Math.ceil(previousHeight)}px`;
+    }
 
     const savedSections = sectionOverrides || JSON.parse(localStorage.getItem(MENTOR_SECTIONS_KEY) || "{}");
     const context = data.context || {};
     const liquidity = data.liquidity || {};
     const institution = data.institution || {};
+    const iceberg = data.iceberg || {};
     const ict = data.ict || {};
     const gann = data.gann || {};
     const astro = data.astro || {};
@@ -218,6 +371,18 @@ function renderMentorContext(data, sectionOverrides = null) {
         row("POC", fmtPrice(institution.poc)),
     ].join("");
 
+    const icebergBody = [
+        narrative(
+            "Iceberg Detection",
+            `${Boolean(iceberg.detected) ? "Detected" : "Not detected"} | Bias ${fmt(iceberg.bias)} | Absorption ${fmt(iceberg.absorption)}.`,
+        ),
+        row("Detected", iceberg.detected ? "YES" : "NO"),
+        row("Price", fmtPrice(iceberg.price)),
+        row("Strength", iceberg.strength != null ? fmt(iceberg.strength) : "--"),
+        row("Bias", iceberg.bias),
+        row("Absorption", iceberg.absorption),
+    ].join("");
+
     const ictBody = [
         narrative("ICT Pattern", `Turtle Soup ${fmt(ict.turtle_soup)}, FVG ${fmt(ict.fvg_zone)}, OB ${fmt(ict.order_block)}.`),
         row("Turtle Soup", ict.turtle_soup),
@@ -226,9 +391,35 @@ function renderMentorContext(data, sectionOverrides = null) {
         row("Liquidity Sweep", ict.liquidity_sweep),
     ].join("");
 
+    const gannDetected = Boolean(gann.detected);
+    const gannEnabled = gann.enabled !== false;
+    const gannStatus = !gannEnabled
+        ? "OFF"
+        : (gannDetected
+            ? `${fmt(gann.direction)} ${gann.confidence != null ? `${fmt(gann.confidence)}%` : ""}`.trim()
+            : "NO ACTIVE SIGNAL");
     const gannBody = [
-        narrative("Gann Time + Price", `Cycle ${fmt(gann.cycle)} bars | Targets ${fmtPrice(gann.target_100)} / ${fmtPrice(gann.target_200)}.`),
+        `<div style="margin-bottom:6px;">${gannStatusPill(gann)}</div>`,
+        narrative(
+            "Gann Time + Price",
+            `Status ${gannStatus} | Score ${fmt(gann.score)} | Cycle ${fmt(gann.cycle)} bars | Targets ${fmtPrice(gann.target_100)} / ${fmtPrice(gann.target_200)}.`,
+        ),
+        row("Engine", gannEnabled ? "ON" : "OFF"),
+        row("Signal", gannDetected ? "DETECTED" : "NONE"),
+        row("Direction", gann.direction),
+        row("Confidence", gann.confidence != null ? `${fmt(gann.confidence)}%` : "--"),
+        row("Score", gann.score),
         row("Cycle", gann.cycle),
+        row("Cycle 144", gann.cycle_144 ? "YES" : "NO"),
+        row("Master Cycle", gann.master_cycle ? "YES" : "NO"),
+        row("Cross", gann.cross),
+        row("Degree", gann.degree),
+        row("Key Degree", gann.key_degree),
+        row("Vibration", gann.vibration),
+        row("Time Vibration", gann.time_vibration),
+        row("Price-Time Align", gann.price_time_alignment ? "YES" : "NO"),
+        row("Support", fmtPrice(gann.support)),
+        row("Resistance", fmtPrice(gann.resistance)),
         row("Target 100", fmtPrice(gann.target_100)),
         row("Target 200", fmtPrice(gann.target_200)),
     ].join("");
@@ -278,23 +469,40 @@ function renderMentorContext(data, sectionOverrides = null) {
     }
     const actionDetail = `Score ${fmt(probability.score)}% (${scoreSource}) | Risk ${riskText} | Last ${fmtPrice(context.price)} | Sweep ${fmt(liquidity.sweep)} | POC ${fmtPrice(institution.poc)}`;
     const actionBlock = actionCall(actionVerdict, actionDetail, actionTone);
+    const performanceStrip = `
+        <div class="mentor-exec-summary mentor-tone-${actionTone}">
+            <div class="mentor-exec-item">Verdict<br/><strong>${fmt(actionVerdict)}</strong></div>
+            <div class="mentor-exec-item">Score<br/><strong>${fmt(probability.score)}%</strong></div>
+            <div class="mentor-exec-item">Signal<br/><strong>${fmt(scoreSource)}</strong></div>
+            <div class="mentor-exec-item">Bias<br/><strong>${fmt(context.htf_bias)}</strong></div>
+            <div class="mentor-exec-item">Volatility<br/><strong>${fmt(context.volatility)}</strong></div>
+            <div class="mentor-exec-item">Last Price<br/><strong class="mentor-live-price">${fmtPrice(context.price)}</strong></div>
+        </div>
+    `;
 
     content.innerHTML = `
         ${actionBlock}
-        ${section("market", "1) Market Context", marketBody, savedSections.market !== false)}
-        ${section("liquidity", "2) Liquidity", liquidityBody, savedSections.liquidity !== false)}
-        ${section("institution", "3) Institutional Flow", institutionBody, savedSections.institution !== false)}
-        ${section("ict", "4) ICT", ictBody, savedSections.ict !== false)}
-        ${section("gann", "5) Gann", gannBody, savedSections.gann !== false)}
-        ${section("astro", "6) Astro", astroBody, savedSections.astro !== false)}
-        ${section("news", "7) News", newsBody, savedSections.news !== false)}
-        ${section("session", "8) Session", sessionBody, savedSections.session !== false)}
-        ${section("probability", "9) Probability", probabilityBody, savedSections.probability !== false)}
-        ${section("story", "10) Story", storyBody, savedSections.story !== false)}
+        ${performanceStrip}
+        ${section("market", "1) Market Context", marketBody, sectionOpen(savedSections, "market"))}
+        ${section("liquidity", "2) Liquidity", liquidityBody, sectionOpen(savedSections, "liquidity"))}
+        ${section("institution", "3) Institutional Flow", institutionBody, sectionOpen(savedSections, "institution"))}
+        ${section("iceberg", "4) Iceberg", icebergBody, sectionOpen(savedSections, "iceberg"))}
+        ${section("ict", "5) ICT", ictBody, sectionOpen(savedSections, "ict"))}
+        ${section("gann", "6) Gann", gannBody, sectionOpen(savedSections, "gann"))}
+        ${section("astro", "7) Astro", astroBody, sectionOpen(savedSections, "astro"))}
+        ${section("news", "8) News", newsBody, sectionOpen(savedSections, "news"))}
+        ${section("session", "9) Session", sessionBody, sectionOpen(savedSections, "session"))}
+        ${section("probability", "10) Probability", probabilityBody, sectionOpen(savedSections, "probability"))}
+        ${section("story", "11) Story", storyBody, sectionOpen(savedSections, "story"))}
     `;
 
     for (const details of content.querySelectorAll("details[data-section-id]")) {
         details.addEventListener("toggle", () => {
+            if (details.open && window.innerWidth <= 900) {
+                for (const other of content.querySelectorAll("details[data-section-id]")) {
+                    if (other !== details) other.open = false;
+                }
+            }
             const state = JSON.parse(localStorage.getItem(MENTOR_SECTIONS_KEY) || "{}");
             state[details.dataset.sectionId] = details.open;
             localStorage.setItem(MENTOR_SECTIONS_KEY, JSON.stringify(state));
@@ -302,11 +510,34 @@ function renderMentorContext(data, sectionOverrides = null) {
     }
 
     const last = fmtPrice(context.price);
-    setMentorMeta(`Updated: ${new Date(data.updated_at || Date.now()).toLocaleString()} | ${fmt(context.symbol || data.symbol || selectedMentorSymbol())} | Last: <span class="mentor-live-price">${last}</span>`);
+    const updatedAt = new Date(data.updated_at || Date.now());
+    const ageSec = Math.max(0, Math.round((Date.now() - updatedAt.getTime()) / 1000));
+    const freshnessTone = ageSec <= 15 ? "good" : (ageSec <= 60 ? "warn" : "bad");
+    const hasPrice = Number.isFinite(Number(context.price));
+    const hasOrderflow = institution?.delta != null && String(institution.delta || "").trim() !== "";
+    const hasIceberg = iceberg?.detected != null || iceberg?.strength != null;
+    const completenessCount = [hasPrice, hasOrderflow, hasIceberg].filter(Boolean).length;
+    const completenessTone = completenessCount >= 3 ? "good" : (completenessCount >= 2 ? "warn" : "bad");
+    setMentorMeta(`
+        <div class="mentor-meta-line">
+            <span class="mentor-meta-text">Updated: ${updatedAt.toLocaleString()} | ${fmt(context.symbol || data.symbol || selectedMentorSymbol())} | Last: <span class="mentor-live-price">${last}</span></span>
+            ${statusBadge(`Fresh ${ageSec}s`, freshnessTone)}
+            ${statusBadge(`Completeness ${completenessCount}/3`, completenessTone)}
+        </div>
+    `);
+    requestAnimationFrame(() => {
+        content.style.minHeight = "";
+    });
 }
 
 async function loadMentor() {
+    if (mentorRequestInFlight) {
+        mentorRefreshQueued = true;
+        return;
+    }
+    mentorRequestInFlight = true;
     try {
+        const requestSerial = ++mentorRequestSerial;
         const mergedState = {
             ...(JSON.parse(localStorage.getItem(MENTOR_SECTIONS_KEY) || "{}") || {}),
             ...getCurrentSectionState(),
@@ -318,8 +549,6 @@ async function loadMentor() {
 
         if (!mentorLoadedOnce) {
             renderMentorSkeleton();
-        } else {
-            setMentorMeta("Updating mentor...");
         }
 
         const symbol = selectedMentorSymbol();
@@ -329,8 +558,18 @@ async function loadMentor() {
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const raw = await res.json();
+        if (requestSerial !== mentorRequestSerial) return;
+        if (selectedMentorSymbol() !== symbol) return;
         const data = normalizeMentorData(raw, symbol);
-        renderMentorContext(data, mergedState);
+        const signature = mentorRenderSignature(data);
+        if (!mentorLoadedOnce || signature !== mentorLastRenderSignature) {
+            renderMentorContext(data, mergedState);
+            mentorLastRenderSignature = signature;
+        } else {
+            const context = data.context || {};
+            const last = fmtPrice(context.price);
+            setMentorMeta(`Updated: ${new Date(data.updated_at || Date.now()).toLocaleString()} | ${fmt(context.symbol || data.symbol || selectedMentorSymbol())} | Last: <span class="mentor-live-price">${last}</span>`);
+        }
         mentorLoadedOnce = true;
 
         if (wrap) {
@@ -340,6 +579,22 @@ async function loadMentor() {
     } catch (err) {
         renderMentorSkeleton("Mentor data unavailable");
         setMentorMeta(`Mentor unavailable: ${err}`);
+        
+        // Show error banner with retry capability
+        const symbol = selectedMentorSymbol();
+        const errorMsg = `Failed to load mentor data for ${symbol}. ${err.message || err}`;
+        showError(
+            "mentor_load_error",
+            errorMsg,
+            () => loadMentor().catch(() => {}),
+            true
+        );
+    } finally {
+        mentorRequestInFlight = false;
+        if (mentorRefreshQueued) {
+            mentorRefreshQueued = false;
+            setTimeout(() => loadMentor().catch(() => {}), 0);
+        }
     }
 }
 
@@ -355,6 +610,7 @@ function toggleMentor(forceOpen) {
 function initMentorDrawer() {
     const drawer = document.getElementById("mentorDrawer");
     const refreshBtn = document.getElementById("mentorRefreshBtn");
+    const compactBtn = document.getElementById("mentorCompactBtn");
     const symbolSelect = document.getElementById("chartSymbol");
     if (!drawer) return;
 
@@ -366,8 +622,25 @@ function initMentorDrawer() {
         drawer.style.width = `${savedWidth}px`;
     }
 
+    const compactMode = localStorage.getItem(MENTOR_COMPACT_KEY) === "1";
+    drawer.classList.toggle("mentor-compact", compactMode);
+    if (compactBtn) compactBtn.innerText = compactMode ? "Expanded" : "Compact";
+
     if (refreshBtn) refreshBtn.addEventListener("click", () => loadMentor().catch(() => {}));
-    if (symbolSelect) symbolSelect.addEventListener("change", () => loadMentor().catch(() => {}));
+    if (compactBtn) {
+        compactBtn.addEventListener("click", () => {
+            const nextCompact = !drawer.classList.contains("mentor-compact");
+            drawer.classList.toggle("mentor-compact", nextCompact);
+            compactBtn.innerText = nextCompact ? "Expanded" : "Compact";
+            localStorage.setItem(MENTOR_COMPACT_KEY, nextCompact ? "1" : "0");
+        });
+    }
+    if (symbolSelect) {
+        symbolSelect.addEventListener("change", () => {
+            if (!drawer.classList.contains("open")) return;
+            loadMentor().catch(() => {});
+        });
+    }
 
     const resizer = document.getElementById("mentorResizer");
     if (resizer) {
@@ -389,8 +662,13 @@ function initMentorDrawer() {
     }
 
     renderMentorSkeleton();
-    loadMentor().catch(() => {});
-    setInterval(() => loadMentor().catch(() => {}), 8000);
+    if (savedOpen) {
+        loadMentor().catch(() => {});
+    }
+    setInterval(() => {
+        if (!drawer.classList.contains("open")) return;
+        loadMentor().catch(() => {});
+    }, 8000);
 }
 
 window.toggleMentor = toggleMentor;

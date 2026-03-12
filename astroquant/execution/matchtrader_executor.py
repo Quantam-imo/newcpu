@@ -176,12 +176,28 @@ class MatchTraderExecutor:
         if not isinstance(selectors, dict):
             return
 
+        legacy_map = {
+            "volume": ["lot"],
+            "lot": ["lot"],
+            "quote": ["bid", "ask", "last"],
+            "bid": ["bid"],
+            "ask": ["ask"],
+            "last": ["last"],
+            "login_username": ["login_email"],
+            "login_submit": ["login_button"],
+            "stop_loss_input": ["sl"],
+            "take_profit_input": ["tp"],
+        }
+
         for key, values in selectors.items():
-            if key not in self.config.selectors:
-                continue
             if not isinstance(values, list):
                 continue
-            self._merge_selector_candidates(key, [str(v) for v in values])
+
+            targets = [key] if key in self.config.selectors else legacy_map.get(str(key or "").strip(), [])
+            for target in targets:
+                if target not in self.config.selectors:
+                    continue
+                self._merge_selector_candidates(target, [str(v) for v in values])
 
         self.selector_profile_loaded = True
 

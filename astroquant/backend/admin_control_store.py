@@ -54,6 +54,7 @@ class AdminControlStore:
                     id INTEGER PRIMARY KEY CHECK (id = 1),
                     ict_enabled INTEGER NOT NULL,
                     iceberg_enabled INTEGER NOT NULL,
+                    gann_enabled INTEGER NOT NULL,
                     astro_enabled INTEGER NOT NULL,
                     confluence_threshold REAL NOT NULL,
                     confidence_threshold REAL NOT NULL,
@@ -133,11 +134,18 @@ class AdminControlStore:
         if cur.fetchone() is None:
             cur.execute(
                 """
-                INSERT INTO engine_controls (id, ict_enabled, iceberg_enabled, astro_enabled, confluence_threshold, confidence_threshold, updated_at)
-                VALUES (1, 1, 1, 1, ?, ?, ?)
+                INSERT INTO engine_controls (id, ict_enabled, iceberg_enabled, gann_enabled, astro_enabled, confluence_threshold, confidence_threshold, updated_at)
+                VALUES (1, 1, 1, 1, 1, ?, ?, ?)
                 """,
                 (0.5, 55.0, now),
             )
+        else:
+            # Backward-compatible migration for existing DBs created before GANN toggle support.
+            cur.execute("PRAGMA table_info(engine_controls)")
+            cols = {str(row[1]).lower() for row in (cur.fetchall() or [])}
+            if "gann_enabled" not in cols:
+                cur.execute("ALTER TABLE engine_controls ADD COLUMN gann_enabled INTEGER NOT NULL DEFAULT 1")
+                cur.execute("UPDATE engine_controls SET gann_enabled = 1 WHERE gann_enabled IS NULL")
 
         cur.execute("SELECT 1 FROM execution_controls WHERE id = 1")
         if cur.fetchone() is None:

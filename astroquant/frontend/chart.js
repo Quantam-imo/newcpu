@@ -14,6 +14,7 @@ let chartRefreshQueued = false;
 let chartRetryTimer = null;
 let chartRequestSerial = 0;
 let chartAppliedSerial = 0;
+let chartInitialLoadDone = false;
 let chartInteractionTimer = null;
 const chartInteractionState = {
 	isUserInteracting: false,
@@ -68,9 +69,9 @@ const toggleIds = [
 	"toggleAstro",
 ];
 
-const AQ_DEFAULT_CHART_API_ORIGIN = String(window.location.port || "") === "8001"
+const AQ_DEFAULT_CHART_API_ORIGIN = ["8000", "8001"].includes(String(window.location.port || ""))
 	? window.location.origin
-	: "http://127.0.0.1:8001";
+	: "http://127.0.0.1:8000";
 const AQ_API_BASE_CHART = window.AQ_API_BASE || AQ_DEFAULT_CHART_API_ORIGIN;
 const AQ_CHART_SETTINGS_KEY = "AQ_CHART_SETTINGS_V2";
 const AQ_CHART_DRAWINGS_KEY = "AQ_CHART_DRAWINGS_V1";
@@ -704,30 +705,100 @@ function selectedTimeframe() {
 }
 
 function chartApiOrigins() {
-	window.AQ_API_BASE = "http://127.0.0.1:8001";
-	return ["http://127.0.0.1:8001", "http://127.0.0.1:8000"];
+	const existing = String(window.AQ_API_BASE || "").trim();
+	
+	// Priority 1: Use saved working origin
+	if (existing) {
+		return [existing, "http://localhost:8000", "http://127.0.0.1:8000"];
+	}
+	
+	// Priority 2: Build list of origins to try
+	const origins = [];
+	const uniqueOrigins = new Set();
+	
+	const baseOrigins = [
+		String(window.location.origin || "").trim(),
+		"http://localhost:8000",
+		"http://127.0.0.1:8000",
+	];
+	
+	for (const origin of baseOrigins) {
+		if (origin && !uniqueOrigins.has(origin)) {
+			uniqueOrigins.add(origin);
+			origins.push(origin);
+		}
+	}
+	
+	return origins.length ? origins : ["http://127.0.0.1:8000"];
 }
 
-async function fetchJson(url, timeoutMs = 12000) {
+async function fetchJson(url, timeoutMs = 30000) {
+	const startTime = performance.now();
 	const isAbsolute = String(url || "").startsWith("http");
-	const targets = isAbsolute
-		? [String(url)]
-		: chartApiOrigins().map(origin => `${origin}${url}`);
+	
+	// Check cache first for GET requests
+	if (!isAbsolute) {
+		const cached = getCachedResponse(url);
+		if (cached) {
+			trackPerformance(url, 0, true);
+			console.debug(`fetchJson: Cache hit for ${url}`);
+			return cached;
+		}
+	}
+	
+	// Build list of targets to try
+	let targets;
+	if (isAbsolute) {
+		targets = [String(url)];
+	} else {
+		// Start with relative URL (same origin as page)
+		targets = [url];
+		
+		// Add absolute URLs from chartApiOrigins fallback
+		const origins = chartApiOrigins();
+		for (const origin of origins) {
+			const full = `${origin}${url}`;
+			if (targets.indexOf(full) === -1) {
+				targets.push(full);
+			}
+		}
+	}
 
 	let lastError = null;
 	for (const target of targets) {
 		const controller = new AbortController();
-		const timer = setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || 12000));
+		const timer = setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || 30000));
 		try {
 			const res = await fetch(target, { signal: controller.signal });
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			return await res.json();
-		} catch (err) {
-			lastError = err;
-		} finally {
 			clearTimeout(timer);
+			if (!res.ok) throw new Error(`HTTP ${res.status}`);
+			try {
+				const jsonData = await res.json();
+				const duration = performance.now() - startTime;
+				trackPerformance(url, duration, false);
+				
+				if (target.startsWith("http")) {
+					const origin = new URL(target).origin;
+					if (origin) window.AQ_API_BASE = origin;
+				}
+				
+				// Cache successful JSON responses
+				const urlPath = url.split('?')[0];
+				if (CACHE_CONFIG[urlPath]) {
+					cacheResponse(url, jsonData);
+				}
+				
+				return jsonData;
+			} catch (parseErr) {
+				throw parseErr;
+			}
+		} catch (err) {
+			clearTimeout(timer);
+			lastError = err;
+			console.debug(`fetchJson: ${target} failed -`, err.message || err);
 		}
 	}
+	console.warn("fetchJson failed on all targets:", targets, "lastError:", lastError);
 	throw lastError || new Error("Chart request failed");
 }
 
@@ -1476,6 +1547,18 @@ function updateChartMeta(payload, timeframe, candles) {
 	document.getElementById("chartPhaseBadge").innerText = meta.phase || "--";
 	document.getElementById("chartNewsBadge").innerText = meta.news || "--";
 	document.getElementById("chartDataSource").innerText = meta.data_source || "--";
+	const gannMeta = meta.gann || {};
+	const gannEnabled = gannMeta.enabled !== false;
+	const gannDetected = Boolean(gannMeta.detected);
+	const gannDir = String(gannMeta.direction || "").toUpperCase();
+	const gannConf = gannMeta.confidence != null ? Number(gannMeta.confidence).toFixed(1) : null;
+	const gannSignalText = !gannEnabled
+		? "OFF"
+		: (gannDetected
+			? `${gannDir || "GANN"}${gannConf ? ` ${gannConf}%` : ""}`
+			: "NONE");
+	document.getElementById("chartGannSignal").innerText = gannSignalText;
+	document.getElementById("chartGannScore").innerText = gannMeta.score != null ? String(gannMeta.score) : "--";
 
 	const state = document.getElementById("chartState");
 	if (state) {
@@ -1815,7 +1898,8 @@ async function loadInstitutionalChart() {
 	loadDrawings(symbol, timeframe);
 	const renderKey = `${symbol}|${timeframe}`;
 	updateChartWatermark(symbol, timeframe);
-	const payload = await fetchJson(`/chart/data?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&limit=220`, 26000);
+	const requestLimit = chartInitialLoadDone ? 220 : 80;
+	const payload = await fetchJson(`/chart/data?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&limit=${requestLimit}`, 18000);
 	if (requestSerial < chartRequestSerial) {
 		return;
 	}
@@ -1879,6 +1963,7 @@ async function loadInstitutionalChart() {
 	updateChartMeta(payload, timeframe, candles);
 	renderMicrostructureTables(payload, candles);
 	applyOverlayVisibility();
+	chartInitialLoadDone = true;
 	setChartStateMessage("", "");
 	paintLiveCandleFromQuote(timeframe);
 	} catch (err) {
@@ -1887,6 +1972,20 @@ async function loadInstitutionalChart() {
 			? "⚠ Chart load timed out. Retrying automatically..."
 			: `⚠ Chart load failed${err?.message ? `: ${err.message}` : ""}`;
 		setChartStateMessage("error", text);
+		
+		// Show error banner for non-timeout errors
+		if (!timeoutLike) {
+			const symbol = selectedSymbol();
+			const timeframe = selectedTimeframe();
+			const errorMsg = `Chart data failed to load for ${symbol} ${timeframe}. ${err?.message || err}`;
+			showError(
+				"chart_load_error",
+				errorMsg,
+				() => loadInstitutionalChart().catch(() => {}),
+				true
+			);
+		}
+		
 		if (timeoutLike) {
 			if (chartRetryTimer) clearTimeout(chartRetryTimer);
 			chartRetryTimer = setTimeout(() => {

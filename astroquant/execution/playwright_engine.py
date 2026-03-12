@@ -2,8 +2,11 @@ import threading
 import time
 import re
 import json
+import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
+from urllib.request import urlopen
 from backend.execution.execution_guard import ExecutionGuard
 
 
@@ -31,7 +34,8 @@ class PlaywrightEngine:
 
 		self.p = sync_playwright().start()
 		if self.cdp_url:
-			self.browser = self.p.chromium.connect_over_cdp(self.cdp_url)
+			cdp_target = self._resolve_cdp_url(self.cdp_url)
+			self.browser = self.p.chromium.connect_over_cdp(cdp_target)
 			contexts = list(self.browser.contexts)
 			self.context = contexts[0] if contexts else self.browser.new_context()
 			candidate_pages = []
@@ -74,6 +78,35 @@ class PlaywrightEngine:
 			self.page = self.context.new_page()
 		self.page.set_default_timeout(self.timeout_ms)
 		return self.page
+
+	def _resolve_cdp_url(self, endpoint):
+		value = str(endpoint or "").strip()
+		if not value:
+			return value
+
+		parsed = urlparse(value)
+		if parsed.scheme in {"ws", "wss"} and "/devtools/browser/" in str(parsed.path or ""):
+			return value
+
+		discovery_url = None
+		if parsed.scheme in {"http", "https"} and parsed.netloc:
+			discovery_url = value.rstrip("/")
+			if not str(parsed.path or "").endswith("/json/version"):
+				discovery_url = f"{discovery_url}/json/version"
+		elif parsed.scheme in {"ws", "wss"} and parsed.netloc and str(parsed.path or "") in {"", "/"}:
+			discovery_scheme = "https" if parsed.scheme == "wss" else "http"
+			discovery_url = f"{discovery_scheme}://{parsed.netloc}/json/version"
+
+		if not discovery_url:
+			return value
+
+		try:
+			with urlopen(discovery_url, timeout=max(2.0, min(float(self.timeout_ms) / 1000.0, 5.0))) as response:
+				payload = json.loads(response.read().decode("utf-8"))
+			websocket_url = str((payload or {}).get("webSocketDebuggerUrl") or "").strip()
+			return websocket_url or value
+		except Exception:
+			return value
 
 	def goto(self, url):
 		self.start()
@@ -198,6 +231,11 @@ class PlaywrightExecutionEngine:
 		self.execution_guard = ExecutionGuard()
 		self.selector_halted = False
 		self.last_selector_failure_reason = None
+		self.partial_watchers = {}
+		self.partial_watch_lock = threading.Lock()
+		self.selector_profile_path = Path(os.getenv("EXECUTION_SELECTOR_PROFILE_FILE", "data/matchtrader_selectors.json"))
+		self.selector_profile_loaded = False
+		self.selector_profile_updated_at = None
 		self.selector_aliases = {
 			"order_panel": [
 				"trade-order-panel[data-testid='mw-order-panel']",
@@ -249,9 +287,124 @@ class PlaywrightExecutionEngine:
 			"confirm_checkbox": [
 				"[data-testid='checkbox-input']",
 			],
+			"stop_loss_input": [
+				"[data-testid='mw-order-panel'] [data-testid*='stop-loss'] input",
+				"[data-testid='mw-order-panel'] [data-testid='position-sl'] input",
+				"[data-testid*='stop-loss'] input",
+				"input[name='stopLoss']",
+				"input[placeholder*='SL']",
+			],
+			"take_profit_input": [
+				"[data-testid='mw-order-panel'] [data-testid*='take-profit'] input",
+				"[data-testid='mw-order-panel'] [data-testid='position-tp'] input",
+				"[data-testid*='take-profit'] input",
+				"input[name='takeProfit']",
+				"input[placeholder*='TP']",
+			],
+			"close_partial_volume": [
+				"[data-testid*='close-volume'] input",
+				"[data-testid*='close-position-volume'] input",
+				"[data-testid*='volume'] input",
+				"input[name='volume']",
+			],
+			"close_partial_confirm": [
+				"[data-testid*='confirm-close']",
+				"[data-testid='overlay-confirm-actions-confirm']",
+				"button:has-text('Close Position')",
+				"button:has-text('Close partially')",
+				"button:has-text('Confirm')",
+			],
+			"login_username": [
+				"input[type='email']",
+				"input[name='email']",
+				"input[name='username']",
+				"input[autocomplete='username']",
+				"input[placeholder*='Email']",
+				"input[placeholder*='User']",
+			],
+			"login_password": [
+				"input[type='password']",
+				"input[name='password']",
+				"input[autocomplete='current-password']",
+				"input[placeholder*='Password']",
+			],
+			"login_submit": [
+				"button[type='submit']",
+				"button:has-text('Login')",
+				"button:has-text('Log in')",
+				"button:has-text('Sign in')",
+			],
 		}
 		self.max_execution_retries = 2
 		self.retry_backoff_seconds = 0.9
+		self.fixed_lot_size = float(os.getenv("EXECUTION_FIXED_LOT", "0.2") or 0.2)
+		self.force_fixed_lot = str(os.getenv("EXECUTION_FORCE_FIXED_LOT", "true") or "true").strip().lower() in {"1", "true", "yes", "on"}
+		self._load_selector_profile()
+
+	def _merge_selector_values(self, key, values):
+		if key not in self.selector_aliases or not isinstance(values, list):
+			return
+		current = list(self.selector_aliases.get(key, []))
+		merged = []
+		seen = set()
+		for selector in [*values, *current]:
+			text = str(selector or "").strip()
+			if not text or text in seen:
+				continue
+			seen.add(text)
+			merged.append(text)
+		self.selector_aliases[key] = merged
+
+	def _selector_profile_targets(self, key):
+		mapping = {
+			"login_email": ["login_username"],
+			"login_button": ["login_submit"],
+			"volume": ["volume"],
+			"lot": ["volume"],
+			"quote": ["quote"],
+			"bid": ["quote"],
+			"ask": ["quote"],
+			"last": ["quote"],
+			"sl": ["stop_loss_input"],
+			"tp": ["take_profit_input"],
+		}
+		if key in self.selector_aliases:
+			return [key]
+		return mapping.get(str(key or "").strip(), [])
+
+	def _load_selector_profile(self):
+		path = self.selector_profile_path
+		if not path.exists():
+			return
+		try:
+			payload = json.loads(path.read_text(encoding="utf-8"))
+		except Exception:
+			return
+
+		if not isinstance(payload, dict):
+			return
+
+		selectors = payload.get("selectors", {})
+		if not isinstance(selectors, dict):
+			return
+
+		loaded_any = False
+		for key, values in selectors.items():
+			if not isinstance(values, list):
+				continue
+			for target in self._selector_profile_targets(key):
+				self._merge_selector_values(target, [str(v) for v in values])
+				loaded_any = True
+
+		if not loaded_any:
+			return
+
+		self.selector_profile_loaded = True
+		updated_at = payload.get("updated_at")
+		try:
+			self.selector_profile_updated_at = int(updated_at) if updated_at is not None else None
+		except Exception:
+			self.selector_profile_updated_at = None
 
 	def set_page(self, page):
 		self.page = page
@@ -272,7 +425,101 @@ class PlaywrightExecutionEngine:
 		snapshot["reconnect_attempts"] = self.reconnect_attempts
 		snapshot["last_reconnect_attempt"] = self.last_reconnect_attempt
 		snapshot["last_browser_heartbeat"] = self.last_browser_heartbeat
+		snapshot["selector_profile_loaded"] = bool(self.selector_profile_loaded)
+		snapshot["selector_profile_updated_at"] = self.selector_profile_updated_at
 		return snapshot
+
+	def _has_any_selector(self, page, selectors):
+		for selector in selectors or []:
+			try:
+				loc = page.locator(selector)
+				if loc.count() > 0 and bool(loc.first.is_visible()):
+					return True
+			except Exception:
+				continue
+		return False
+
+	def _set_text_input(self, page, selectors, value):
+		text = str(value or "")
+		if not text:
+			return False
+		for selector in selectors or []:
+			try:
+				loc = page.locator(selector)
+				if loc.count() <= 0:
+					continue
+				field = loc.first
+				try:
+					field.click(timeout=1200)
+					field.fill("")
+					field.type(text, delay=5)
+					return True
+				except Exception:
+					pass
+				try:
+					field.fill(text)
+					return True
+				except Exception:
+					continue
+			except Exception:
+				continue
+		return False
+
+	def _execution_surface_ready(self, page):
+		try:
+			if self._has_any_selector(page, self.selector_aliases.get("order_panel", [])):
+				return True
+		except Exception:
+			pass
+		try:
+			quote = self.broker_quote_snapshot(expected_symbols=None) or {}
+			if quote.get("mid") is not None or quote.get("last") is not None:
+				return True
+		except Exception:
+			pass
+		return False
+
+	def login_if_needed(self, username=None, password=None):
+		page = self.page
+		if page is None:
+			if not self._attempt_reconnect():
+				return {"ok": False, "status": "not_connected"}
+			page = self.page
+
+		if self._execution_surface_ready(page):
+			return {"ok": True, "status": "already_authenticated"}
+
+		login_user_present = self._has_any_selector(page, self.selector_aliases.get("login_username", []))
+		login_pass_present = self._has_any_selector(page, self.selector_aliases.get("login_password", []))
+		if not (login_user_present and login_pass_present):
+			return {"ok": False, "status": "login_form_not_detected"}
+
+		if not username or not password:
+			return {"ok": False, "status": "credentials_missing"}
+
+		user_ok = self._set_text_input(page, self.selector_aliases.get("login_username", []), username)
+		pass_ok = self._set_text_input(page, self.selector_aliases.get("login_password", []), password)
+		clicked, click_err = self._click_order_button(page, self.selector_aliases.get("login_submit", []))
+
+		if not (user_ok and pass_ok and clicked):
+			return {
+				"ok": False,
+				"status": "login_submit_failed",
+				"user_ok": bool(user_ok),
+				"pass_ok": bool(pass_ok),
+				"click_ok": bool(clicked),
+				"click_error": click_err,
+			}
+
+		try:
+			time.sleep(2.0)
+			if self._execution_surface_ready(page):
+				self.last_browser_heartbeat = int(time.time())
+				return {"ok": True, "status": "login_success"}
+		except Exception:
+			pass
+
+		return {"ok": False, "status": "login_attempted_pending"}
 
 	def _record_selector_failure(self, reason):
 		self.selector_failure_count += 1
@@ -491,31 +738,25 @@ class PlaywrightExecutionEngine:
 		for key, values in discovered.items():
 			if not values:
 				continue
-			current = list(self.selector_aliases.get(key, []))
-			merged = []
-			seen = set()
-			for selector in [*values, *current]:
-				text = str(selector or "").strip()
-				if not text or text in seen:
-					continue
-				seen.add(text)
-				merged.append(text)
-			self.selector_aliases[key] = merged
+			self._merge_selector_values(key, values)
 
 		profile = {
 			"updated_at": int(time.time()),
 			"selectors": self.selector_aliases,
 		}
 
-		profile_file = Path("data/matchtrader_selectors.json")
+		profile_file = self.selector_profile_path
 		if save:
 			profile_file.parent.mkdir(parents=True, exist_ok=True)
 			profile_file.write_text(json.dumps(profile, indent=2), encoding="utf-8")
+			self.selector_profile_loaded = True
+			self.selector_profile_updated_at = profile.get("updated_at")
 
 		return {
 			"ok": True,
 			"profile_file": str(profile_file),
 			"discovered_keys": {k: len(v) for k, v in discovered.items()},
+			"profile_loaded": bool(self.selector_profile_loaded),
 		}
 
 	def _parse_price(self, text):
@@ -770,6 +1011,194 @@ class PlaywrightExecutionEngine:
 		except Exception:
 			return False
 
+	def close_position_fraction(self, page, symbol=None, fraction=0.5):
+		target_norm = self._normalize_symbol(symbol)
+		fraction = max(0.01, min(0.99, float(fraction or 0.5)))
+
+		try:
+			rows = page.locator("[data-testid='open-positions-desktop-list-row']")
+			count = int(rows.count())
+		except Exception:
+			return {"ok": False, "reason": "positions_unavailable"}
+
+		selected = None
+		selected_symbol = None
+		selected_volume = None
+		for i in range(min(count, 25)):
+			row = rows.nth(i)
+			row_symbol = None
+			try:
+				row_symbol = str(row.locator("[data-testid='instrument-symbol-name-wrapper']").first.inner_text() or "").strip()
+			except Exception:
+				row_symbol = None
+			if target_norm and self._normalize_symbol(row_symbol) not in {target_norm}:
+				continue
+			selected = row
+			selected_symbol = row_symbol
+			try:
+				v_text = selected.locator("[data-testid='open-position-volume']").first.inner_text()
+				selected_volume = float(self._parse_price(v_text))
+			except Exception:
+				selected_volume = None
+			break
+
+		if selected is None:
+			return {"ok": False, "reason": "symbol_not_found", "symbol": symbol}
+
+		btn = selected.locator("[data-testid='close-position-button']")
+		if btn.count() <= 0:
+			btn = selected.locator("[data-testid*='close-position']")
+		if btn.count() <= 0:
+			return {"ok": False, "reason": "close_button_not_found", "symbol": selected_symbol}
+
+		try:
+			btn.first.click(timeout=1200)
+		except Exception:
+			try:
+				btn.first.click(timeout=1200, force=True)
+			except Exception as exc:
+				return {"ok": False, "reason": f"close_click_failed: {exc}", "symbol": selected_symbol}
+
+		if selected_volume is None:
+			selected_volume = 0.0
+		close_volume = max(0.01, round(float(selected_volume) * fraction, 2))
+		if selected_volume > 0:
+			close_volume = min(close_volume, max(0.01, round(selected_volume - 0.01, 2)))
+
+		volume_set = self._set_price_input(page, self.selector_aliases.get("close_partial_volume", []), close_volume)
+		if not volume_set:
+			self._dismiss_overlay_backdrop(page)
+			return {
+				"ok": False,
+				"reason": "partial_volume_input_not_found",
+				"symbol": selected_symbol,
+				"requested_close_volume": close_volume,
+			}
+
+		clicked, err = self._click_order_button(page, self.selector_aliases.get("close_partial_confirm", []))
+		if not clicked:
+			self._dismiss_overlay_backdrop(page)
+			return {
+				"ok": False,
+				"reason": err or "close_partial_confirm_missing",
+				"symbol": selected_symbol,
+				"requested_close_volume": close_volume,
+			}
+
+		self._confirm_order_if_present(page)
+		return {
+			"ok": True,
+			"symbol": selected_symbol,
+			"fraction": fraction,
+			"requested_close_volume": close_volume,
+			"source_volume": selected_volume,
+		}
+
+	def _cancel_partial_watch(self, symbol):
+		key = self._normalize_symbol(symbol)
+		if not key:
+			return
+		with self.partial_watch_lock:
+			active = self.partial_watchers.get(key)
+			if active and isinstance(active, dict):
+				active["cancelled"] = True
+
+	def _start_partial_watch(self, signal, position_data):
+		partial_cfg = dict(signal.get("partial") or {})
+		if not partial_cfg or not bool(partial_cfg.get("enabled", False)):
+			return {"enabled": False}
+
+		symbol = str(position_data.get("symbol") or signal.get("symbol") or "").strip()
+		direction = str(signal.get("direction") or "").upper().strip()
+		entry = float(position_data.get("entry_price") or signal.get("entry_price") or 0.0)
+		sl = signal.get("sl")
+		ratio = max(0.1, min(0.9, float(partial_cfg.get("ratio") or 0.5)))
+		rr = max(0.2, min(5.0, float(partial_cfg.get("target_rr") or 1.0)))
+		ttl_seconds = max(60, min(8 * 3600, int(partial_cfg.get("ttl_seconds") or 3 * 3600)))
+
+		if not symbol or direction not in {"BUY", "SELL"} or entry <= 0.0 or sl is None:
+			return {"enabled": False, "reason": "invalid_partial_parameters"}
+
+		stop_distance = abs(float(entry) - float(sl))
+		if stop_distance <= 0.0:
+			return {"enabled": False, "reason": "invalid_stop_distance"}
+
+		target_price = float(partial_cfg.get("target_price") or 0.0)
+		if target_price <= 0.0:
+			if direction == "BUY":
+				target_price = float(entry) + (stop_distance * rr)
+			else:
+				target_price = float(entry) - (stop_distance * rr)
+
+		key = self._normalize_symbol(symbol)
+		if not key:
+			return {"enabled": False, "reason": "invalid_symbol"}
+
+		self._cancel_partial_watch(symbol)
+		job = {
+			"symbol": symbol,
+			"key": key,
+			"direction": direction,
+			"target_price": target_price,
+			"ratio": ratio,
+			"started_at": int(time.time()),
+			"ttl_seconds": ttl_seconds,
+			"cancelled": False,
+			"triggered": False,
+			"result": None,
+		}
+
+		def _worker():
+			deadline = time.time() + ttl_seconds
+			while time.time() < deadline:
+				with self.partial_watch_lock:
+					active = self.partial_watchers.get(key)
+					if active is not job or bool(job.get("cancelled")):
+						return
+				if self.page is None:
+					if not self._attempt_reconnect():
+						time.sleep(1.0)
+						continue
+				quote = self.broker_quote_snapshot(expected_symbols=[symbol]) or {}
+				price = quote.get("mid") or quote.get("last") or quote.get("bid") or quote.get("ask")
+				if price is None:
+					time.sleep(1.0)
+					continue
+
+				reached = (float(price) >= float(target_price)) if direction == "BUY" else (float(price) <= float(target_price))
+				if not reached:
+					time.sleep(1.0)
+					continue
+
+				result = self.close_position_fraction(self.page, symbol=symbol, fraction=ratio)
+				job["triggered"] = True
+				job["trigger_price"] = float(price)
+				job["result"] = result
+				with self.partial_watch_lock:
+					if self.partial_watchers.get(key) is job:
+						self.partial_watchers.pop(key, None)
+				return
+
+			with self.partial_watch_lock:
+				if self.partial_watchers.get(key) is job:
+					job["result"] = {"ok": False, "reason": "partial_watch_timeout"}
+					self.partial_watchers.pop(key, None)
+
+		thread = threading.Thread(target=_worker, daemon=True, name=f"aq-partial-{key[:8]}")
+		job["thread"] = thread
+		with self.partial_watch_lock:
+			self.partial_watchers[key] = job
+		thread.start()
+
+		return {
+			"enabled": True,
+			"symbol": symbol,
+			"target_price": round(float(target_price), 5),
+			"ratio": ratio,
+			"target_rr": rr,
+			"ttl_seconds": ttl_seconds,
+		}
+
 	def _safe_text(self, page, selector):
 		try:
 			locator = page.locator(selector)
@@ -858,6 +1287,73 @@ class PlaywrightExecutionEngine:
 			except Exception:
 				continue
 		return False
+
+	def _set_price_input(self, page, selectors, price_value):
+		if price_value is None:
+			return False
+		value_text = str(round(float(price_value), 5))
+		for selector in selectors or []:
+			try:
+				locator = page.locator(selector)
+				if locator.count() <= 0:
+					continue
+				field = locator.first
+
+				try:
+					field.click(timeout=1000)
+					page.keyboard.press("Control+A")
+					page.keyboard.type(value_text, delay=8)
+					page.keyboard.press("Enter")
+					time.sleep(0.05)
+					return True
+				except Exception:
+					pass
+
+				try:
+					field.fill(value_text)
+					time.sleep(0.05)
+					return True
+				except Exception:
+					pass
+
+				try:
+					field.evaluate(
+						"""
+						(el, value) => {
+						  const target = el.matches('input,textarea,[contenteditable="true"]')
+						    ? el
+						    : el.querySelector('input,textarea,[contenteditable="true"]') || el;
+						  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+						    target.focus();
+						    target.value = String(value);
+						    target.dispatchEvent(new Event('input', { bubbles: true }));
+						    target.dispatchEvent(new Event('change', { bubbles: true }));
+						    return true;
+						  }
+						  return false;
+						}
+						""",
+						value_text,
+					)
+					time.sleep(0.05)
+					return True
+				except Exception:
+					continue
+			except Exception:
+				continue
+		return False
+
+	def _configure_protection(self, page, signal):
+		sl = signal.get("sl")
+		tp = signal.get("tp")
+		sl_set = self._set_price_input(page, self.selector_aliases.get("stop_loss_input", []), sl) if sl is not None else False
+		tp_set = self._set_price_input(page, self.selector_aliases.get("take_profit_input", []), tp) if tp is not None else False
+		return {
+			"sl_requested": sl,
+			"tp_requested": tp,
+			"sl_set": bool(sl_set),
+			"tp_set": bool(tp_set),
+		}
 
 	def _dismiss_overlay_backdrop(self, page):
 		dismissed = False
@@ -1174,6 +1670,8 @@ class PlaywrightExecutionEngine:
 		if not volume_set and not manual_test_mode:
 			return {"status": "Rejected", "reason": "Volume selector not found"}
 
+		protection_setup = self._configure_protection(page, signal)
+
 		direction = signal.get("direction", "").upper()
 		button_price = None
 		if direction == "BUY":
@@ -1232,6 +1730,7 @@ class PlaywrightExecutionEngine:
 				"volume_set": bool(volume_set),
 				"verification_mode": "manual_relaxed",
 				"execution_source": "PLAYWRIGHT",
+				"protection_setup": protection_setup,
 			}
 
 		if self._is_partial_fill(page, lot_size):
@@ -1256,6 +1755,8 @@ class PlaywrightExecutionEngine:
 			self.emergency_halt(verify_reason)
 			return {"status": "Rejected", "reason": verify_reason}
 
+		partial_plan = self._start_partial_watch(signal, position_data)
+
 		return {
 			"status": "EXECUTED",
 			"model": signal.get("model"),
@@ -1272,6 +1773,8 @@ class PlaywrightExecutionEngine:
 			"active_symbol": active_symbol_raw,
 			"volume_set": bool(volume_set),
 			"execution_source": "PLAYWRIGHT",
+			"protection_setup": protection_setup,
+			"partial_plan": partial_plan,
 		}
 
 	def _is_transient_rejection(self, result):
@@ -1307,6 +1810,9 @@ class PlaywrightExecutionEngine:
 
 		if self.execution_guard.is_halted():
 			return {"status": "Rejected", "reason": "Execution HALTED"}
+
+		if self.force_fixed_lot and self.fixed_lot_size > 0:
+			lot_size = float(self.fixed_lot_size)
 
 		if lot_size <= 0:
 			return {"status": "Rejected", "reason": "Invalid lot size"}

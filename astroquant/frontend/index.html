@@ -150,7 +150,19 @@
         .micro-timesales { right: 460px; top: 86px; }
         .micro-ladder { right: 460px; top: calc(86px + 38vh); }
         .micro-summary { right: 906px; top: 86px; }
+        #microOrderflowSummaryPanel {
+            min-height: 240px;
+            z-index: 60;
+            border-color: #3c5d86;
+        }
         .micro-float.open { display: block; }
+        @media (max-width: 1480px) {
+            .micro-summary {
+                left: 14px;
+                right: auto;
+                top: 86px;
+            }
+        }
         .micro-head {
             display: flex;
             justify-content: space-between;
@@ -386,6 +398,24 @@
         .mentor-body { flex: 1; display: flex; flex-direction: column; min-width: 0; }
         .mentor-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px; border-bottom: 1px solid var(--border); }
         .mentor-meta { font-size: 11px; color: var(--muted); padding: 0 10px 8px; }
+        .mentor-meta-line { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+        .mentor-meta-text { color: var(--muted); }
+        .mentor-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 7px;
+            border-radius: 999px;
+            border: 1px solid var(--border-strong);
+            background: var(--surface-alt);
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.2px;
+            color: #c7d6ea;
+        }
+        .mentor-status-badge.good { border-color: #22c55e; color: #86efac; }
+        .mentor-status-badge.warn { border-color: #f59e0b; color: #fcd34d; }
+        .mentor-status-badge.bad { border-color: #ef4444; color: #fca5a5; }
         .mentor-content-wrap { padding: 10px; overflow: auto; }
         .mentor-content details { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; padding: 6px 8px; background: var(--surface-alt); }
         .mentor-content summary { cursor: pointer; font-weight: 700; }
@@ -515,6 +545,7 @@
         .mentor-section-market { border-left-color: #38bdf8 !important; }
         .mentor-section-liquidity { border-left-color: #34d399 !important; }
         .mentor-section-institution { border-left-color: #f59e0b !important; }
+        .mentor-section-iceberg { border-left-color: #14b8a6 !important; }
         .mentor-section-ict { border-left-color: #f97316 !important; }
         .mentor-section-gann { border-left-color: #a78bfa !important; }
         .mentor-section-astro { border-left-color: #c084fc !important; }
@@ -524,6 +555,254 @@
         .mentor-section-story { border-left-color: #eab308 !important; }
         .mentor-section-risk { border-left-color: #fb7185 !important; }
         .mentor-section-actions { border-left-color: #64748b !important; }
+        .mentor-gann-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid var(--border-strong);
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.35px;
+            text-transform: uppercase;
+            background: var(--surface-alt);
+            color: #c7d6ea;
+        }
+        .mentor-gann-pill.gann-off {
+            border-color: #64748b;
+            color: #cbd5e1;
+            background: #1e293b;
+        }
+        .mentor-gann-pill.gann-none {
+            border-color: #d97706;
+            color: #fde68a;
+            background: #3b2a15;
+        }
+        .mentor-gann-pill.gann-buy {
+            border-color: #16a34a;
+            color: #86efac;
+            background: #123022;
+        }
+        .mentor-gann-pill.gann-sell {
+            border-color: #dc2626;
+            color: #fca5a5;
+            background: #3a1519;
+        }
+        .mentor-drawer.mentor-compact .mentor-content details { margin-bottom: 6px; padding: 5px 7px; }
+        .mentor-drawer.mentor-compact .mentor-content summary { font-size: 10px !important; }
+        .mentor-drawer.mentor-compact .mentor-content .mentor-row { margin: 2px 0; gap: 6px; }
+        .mentor-drawer.mentor-compact .mentor-content .mentor-row span { font-size: 9px !important; }
+        .mentor-drawer.mentor-compact .mentor-content .mentor-row strong { font-size: 10px !important; }
+        .mentor-drawer.mentor-compact .mentor-narrative { padding: 6px 8px; margin-bottom: 6px; }
+        .mentor-drawer.mentor-compact .mentor-narrative p { font-size: 9px !important; }
+        .mentor-drawer.mentor-compact .mentor-exec-summary { padding: 6px; gap: 5px; }
+        .mentor-drawer.mentor-compact .mentor-exec-item { font-size: 9px !important; }
+
+        /* Connection Status & Error Handling */
+        .connection-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        .connection-status.good {
+            background: rgba(34, 197, 94, 0.2);
+            border: 1px solid #22c55e;
+            color: #86efac;
+        }
+        .connection-status.warn {
+            background: rgba(245, 158, 11, 0.2);
+            border: 1px solid #f59e0b;
+            color: #fcd34d;
+        }
+        .connection-status.bad {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid #ef4444;
+            color: #fca5a5;
+        }
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse 2s infinite;
+        }
+        .connection-status.bad .status-dot {
+            animation: pulse-fast 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        @keyframes pulse-fast {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.2; }
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(91, 164, 190, 0.3);
+            border-radius: 50%;
+            border-top-color: #5ba4be;
+            animation: spin 0.6s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Error Message */
+        .error-banner {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid #ef4444;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            color: #fca5a5;
+            font-size: 12px;
+            animation: slideDown 0.3s ease-out;
+        }
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .error-banner .error-text { flex: 1; }
+        .error-banner .retry-btn {
+            background: rgba(239, 68, 68, 0.3);
+            border: 1px solid #ef4444;
+            color: #fca5a5;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+        .error-banner .retry-btn:hover {
+            background: rgba(239, 68, 68, 0.4);
+        }
+        .error-banner .close-btn {
+            background: none;
+            border: none;
+            color: #fca5a5;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 0;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        .error-banner .close-btn:hover {
+            opacity: 1;
+        }
+
+        /* Loading State */
+        .loading-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 20px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        /* Performance Dashboard */
+        .perf-btn {
+            background: rgba(59, 130, 246, 0.15);
+            border: 1px solid #3b82f6;
+            color: #93c5fd;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            transition: all 0.2s;
+        }
+        .perf-btn:hover {
+            background: rgba(59, 130, 246, 0.25);
+        }
+        .perf-dashboard {
+            background: rgba(30, 30, 46, 0.95);
+            border: 1px solid #3b82f6;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+        .perf-dashboard.hidden {
+            display: none;
+        }
+        .perf-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #3b82f6;
+            padding-bottom: 8px;
+        }
+        .perf-header h3 {
+            margin: 0;
+            font-size: 13px;
+            color: #93c5fd;
+        }
+        .perf-header .close-btn {
+            background: none;
+            border: none;
+            color: #93c5fd;
+            cursor: pointer;
+            font-size: 18px;
+            padding: 0;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+        .perf-header .close-btn:hover {
+            opacity: 1;
+        }
+        .perf-content {
+            font-size: 11px;
+            color: #cbd5e1;
+        }
+        .perf-section {
+            margin-bottom: 12px;
+        }
+        .perf-section h4 {
+            margin: 0 0 6px 0;
+            color: #3b82f6;
+            font-size: 12px;
+        }
+        .action-btn {
+            background: rgba(59, 130, 246, 0.2);
+            border: 1px solid #3b82f6;
+            color: #93c5fd;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            margin-right: 6px;
+            margin-bottom: 6px;
+            transition: all 0.2s;
+        }
+        .action-btn:hover {
+            background: rgba(59, 130, 246, 0.3);
+        }
 
     </style>
 </head>
@@ -556,6 +835,35 @@
                 <div class="badge">Phase: <span id="phase">--</span></div>
                 <div class="badge">News: <span id="news-status">--</span></div>
                 <div class="badge" id="volatilityBar">VOL: NORMAL</div>
+                <div class="connection-status good" id="connectionStatus">
+                    <span class="status-dot"></span>Backend Connected
+                </div>
+                <button id="perfDashBtn" class="badge perf-btn" title="View performance metrics">📊 Perf</button>
+            </div>
+            <div id="errorBannerContainer"></div>
+            <div id="perfDashboard" class="perf-dashboard hidden">
+                <div class="perf-header">
+                    <h3>Performance Dashboard</h3>
+                    <button id="perfDashClose" class="close-btn">×</button>
+                </div>
+                <div class="perf-content">
+                    <div class="perf-section">
+                        <h4>Request Metrics</h4>
+                        <div id="perfMetrics" style="font-size: 12px; font-family: monospace; max-height: 300px; overflow-y: auto;">
+                            <p>No metrics yet</p>
+                        </div>
+                    </div>
+                    <div class="perf-section">
+                        <h4>Cache Status</h4>
+                        <div id="cacheStatus" style="font-size: 12px; font-family: monospace;">
+                            <p>No cache info</p>
+                        </div>
+                    </div>
+                    <div class="perf-section">
+                        <button id="clearCacheBtn" class="action-btn">Clear All Caches</button>
+                        <button id="refreshMetricsBtn" class="action-btn">Refresh Metrics</button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -619,6 +927,8 @@
                         <div class="badge">PhaseBadge: <span id="chartPhaseBadge">--</span></div>
                         <div class="badge">NewsBadge: <span id="chartNewsBadge">--</span></div>
                         <div class="badge">Source: <span id="chartDataSource">--</span></div>
+                        <div class="badge">Gann: <span id="chartGannSignal">--</span></div>
+                        <div class="badge">GannScore: <span id="chartGannScore">--</span></div>
                     </div>
                     <div id="chartState"></div>
                     <div id="chartWrap">
@@ -777,21 +1087,22 @@
                         <h3>Orderflow Summary</h3>
                         <button class="panel-close-btn" onclick="toggleMicroPanel('summary', false)" aria-label="Close Orderflow Summary Panel">✕ Close</button>
                     </div>
+                    <div class="time-sub" style="margin-bottom:8px;">Hover labels for metric meanings.</div>
                     <div class="row-list">
-                        <div><span>Regime</span><strong id="summaryRegime">--</strong></div>
-                        <div><span>Alert Level</span><strong id="summaryAlert">--</strong></div>
-                        <div><span>Signal Strength</span><strong id="summarySignalStrength">--</strong></div>
-                        <div><span>Buy Aggression</span><strong id="summaryBuyAgg">--</strong></div>
-                        <div><span>Sell Aggression</span><strong id="summarySellAgg">--</strong></div>
-                        <div><span>Delta</span><strong id="summaryDelta">--</strong></div>
-                        <div><span>Cumulative Delta</span><strong id="summaryCvd">--</strong></div>
-                        <div><span>Imbalance</span><strong id="summaryImbalance">--</strong></div>
-                        <div><span>DOM Spread</span><strong id="summarySpread">--</strong></div>
-                        <div><span>Iceberg Count</span><strong id="summaryIceberg">--</strong></div>
-                        <div><span>Absorption</span><strong id="summaryAbsorption">--</strong></div>
-                        <div><span>Confidence</span><strong id="summaryConfidence">--</strong></div>
+                        <div><span title="Current orderflow operating mode used by backend logic.">Regime</span><strong id="summaryRegime">--</strong></div>
+                        <div><span title="Signal urgency level derived from flow and threshold checks.">Alert Level</span><strong id="summaryAlert">--</strong></div>
+                        <div><span title="Composite directional strength score from orderflow inputs.">Signal Strength</span><strong id="summarySignalStrength">--</strong></div>
+                        <div><span title="Percent of aggressive buy-side participation in the active window.">Buy Aggression</span><strong id="summaryBuyAgg">--</strong></div>
+                        <div><span title="Percent of aggressive sell-side participation in the active window.">Sell Aggression</span><strong id="summarySellAgg">--</strong></div>
+                        <div><span title="Net aggressive volume (buy volume minus sell volume).">Delta</span><strong id="summaryDelta">--</strong></div>
+                        <div><span title="Running sum of delta; shows sustained directional pressure.">Cumulative Delta</span><strong id="summaryCvd">--</strong></div>
+                        <div><span title="Directional side currently dominating flow (BUY/SELL/NEUTRAL).">Imbalance</span><strong id="summaryImbalance">--</strong></div>
+                        <div><span title="Best ask minus best bid from DOM snapshot.">DOM Spread</span><strong id="summarySpread">--</strong></div>
+                        <div><span title="Count of detected iceberg-style absorption events.">Iceberg Count</span><strong id="summaryIceberg">--</strong></div>
+                        <div><span title="Whether absorption behavior is bullish, bearish, or neutral.">Absorption</span><strong id="summaryAbsorption">--</strong></div>
+                        <div><span title="Backend confidence score for this summary context.">Confidence</span><strong id="summaryConfidence">--</strong></div>
                     </div>
-                    <div class="badge" style="margin-top:8px;display:block;">Narrative: <span id="summaryNarrative">--</span></div>
+                    <div class="badge" style="margin-top:8px;display:block;" title="Human-readable explanation of the current orderflow state.">Narrative: <span id="summaryNarrative">--</span></div>
                 </div>
 
                 <div id="microTimeSalesPanel" class="panel micro-float micro-timesales" aria-label="Time and Sales Floating Panel">
@@ -946,10 +1257,14 @@
                                 <div><span>Basis Status</span><strong id="opsOqBasisStatus">--</strong></div>
                                 <div><span>Offset Status</span><strong id="opsOqOffsetStatus">--</strong></div>
                                 <div><span>Offset Deviation</span><strong id="opsOqOffsetDeviation">--</strong></div>
+                                <div><span>Offset Difference</span><strong id="opsOqOffsetDifference">--</strong></div>
+                                <div><span>Broker XAUUSD Price</span><strong id="opsOqBrokerXauusd">--</strong></div>
+                                <div><span>Broker Quote (Selected)</span><strong id="opsOqBrokerQuote">--</strong></div>
                                 <div><span>Quality Score</span><strong id="opsOqQualityScore">--</strong></div>
                                 <div><span>Quality Grade</span><strong id="opsOqQualityGrade">--</strong></div>
                                 <div><span>Signal Candidates</span><strong id="opsOqSignalCount">--</strong></div>
                                 <div><span>Hard Block</span><strong id="opsOqHardBlock">--</strong></div>
+                                <div><span>Broker Symbols (All)</span><strong id="opsOqBrokerMulti">--</strong></div>
                                 <div><span>Reasons</span><strong id="opsOqReasons">--</strong></div>
                             </div>
                         </div>
@@ -963,6 +1278,8 @@
                     </div>
                     <div class="row">
                         <button id="opsProbeBtn">Run Feed Probe</button>
+                        <button id="opsGannOnBtn">GANN ON</button>
+                        <button id="opsGannOffBtn">GANN OFF</button>
                         <button id="opsReconnectBtn" onclick="window.reconnectExecutionBrowserSafe && window.reconnectExecutionBrowserSafe()">Reconnect Browser</button>
                         <button id="opsKillSwitchBtn">Kill Switch</button>
                         <button id="opsRestartExecBtn">Restart Execution</button>
@@ -990,6 +1307,7 @@
                 <strong>AI Mentor</strong>
                 <div class="row" style="margin:0;">
                     <button id="mentorRefreshBtn">Refresh</button>
+                    <button id="mentorCompactBtn">Compact</button>
                     <button onclick="toggleMentor(false)">Close</button>
                 </div>
             </div>
@@ -1004,11 +1322,11 @@
     <script>
         (function () {
             const existingBase = String(window.AQ_API_BASE || "").trim();
-            window.AQ_API_BASE = (existingBase || "http://127.0.0.1:8001").replace(/:8000(?=\/|$)/, ":8001");
+            window.AQ_API_BASE = existingBase || "http://127.0.0.1:8000";
             const port = String(window.location.port || "");
             const prefix = port === "8080" ? "" : "/frontend";
             const scripts = ["api.js", "chart.js", "mentor.js"];
-            const scriptVersion = "aq-v20260303";
+            const scriptVersion = "aq-v20260310";
 
             const load = (index) => {
                 if (index >= scripts.length) return;

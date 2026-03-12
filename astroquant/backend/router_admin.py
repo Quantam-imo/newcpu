@@ -41,6 +41,7 @@ class PropRulesRequest(BaseModel):
 class EngineControlsRequest(BaseModel):
 	ict_enabled: bool = True
 	iceberg_enabled: bool = True
+	gann_enabled: bool = True
 	astro_enabled: bool = True
 	confluence_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
 	confidence_threshold: float = Field(default=55.0, ge=0.0, le=100.0)
@@ -127,6 +128,7 @@ def build_admin_router(runner, prop_engine, admin_token: str, default_role: str 
 		runner.engine_enable_flags = {
 			"ICT": bool(engine_cfg.get("ict_enabled", 1)),
 			"ICEBERG": bool(engine_cfg.get("iceberg_enabled", 1)),
+			"GANN": bool(engine_cfg.get("gann_enabled", 1)),
 			"ASTRO": bool(engine_cfg.get("astro_enabled", 1)),
 		}
 		runner.min_confidence_threshold = float(engine_cfg.get("confidence_threshold") or 55.0)
@@ -394,6 +396,7 @@ def build_admin_router(runner, prop_engine, admin_token: str, default_role: str 
 		store.upsert_singleton("engine_controls", {
 			"ict_enabled": True,
 			"iceberg_enabled": True,
+			"gann_enabled": True,
 			"astro_enabled": False,
 			"confluence_threshold": 0.5,
 			"confidence_threshold": 75.0 if phase == "PHASE1" else (77.0 if phase == "PHASE2" else 72.0),

@@ -1,6 +1,6 @@
 const AQ_DEFAULT_ADMIN_API_ORIGIN = ["8000", "8001"].includes(String(window.location.port || ""))
   ? window.location.origin
-  : "http://127.0.0.1:8001";
+  : "http://127.0.0.1:8000";
 const AQ_API_BASE = window.AQ_API_BASE || AQ_DEFAULT_ADMIN_API_ORIGIN;
 
 function getCreds() {
@@ -20,7 +20,37 @@ function adminFetch(path, options = {}) {
     "x-admin-user": creds.user,
     ...(options.headers || {}),
   };
-  return fetch(`${AQ_API_BASE}${path}`, { ...options, headers });
+  
+  // Priority 1: Try relative URL (same origin)
+  const targets = [path];
+  
+  // Priority 2: Fallback origins (absolute URLs)
+  const priorityOrigins = [
+    window.location.origin,
+    AQ_API_BASE,
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+  ]
+    .filter((v, i, arr) => v && arr.indexOf(v) === i);
+  
+  for (const origin of priorityOrigins) {
+    if (origin !== window.location.origin) {
+      targets.push(`${origin}${path}`);
+    }
+  }
+  
+  let lastError = null;
+  for (const target of targets) {
+    try {
+      return fetch(target, { ...options, headers });
+    } catch (error) {
+      lastError = error;
+      console.debug(`adminFetch fallback: ${target} failed`, error);
+    }
+  }
+  
+  console.warn("adminFetch failed on all targets:", targets);
+  return Promise.reject(lastError || new Error("all adminFetch attempts failed"));
 }
 
 function setValue(id, value) {
@@ -60,6 +90,7 @@ async function refreshState() {
   window._engineToggles = {
     ict_enabled: Boolean(engine.ict_enabled),
     iceberg_enabled: Boolean(engine.iceberg_enabled),
+    gann_enabled: Boolean(engine.gann_enabled),
     astro_enabled: Boolean(engine.astro_enabled),
   };
   setValue("engineConfluence", engine.confluence_threshold);
@@ -95,9 +126,18 @@ function selectedAdminPropAccounts() {
     .filter((node) => node.checked)
     .map((node) => String(node.value || "").toUpperCase())
     .filter(Boolean);
-  const primary = String(document.getElementById("adminPrimaryAccount")?.value || "50K").toUpperCase();
-  if (!values.includes(primary)) values.push(primary);
-  return values;
+  return Array.from(new Set(values));
+}
+
+function syncPrimaryAccountSelection() {
+  const primaryEl = document.getElementById("adminPrimaryAccount");
+  if (!primaryEl) return;
+  const checked = selectedAdminPropAccounts();
+  if (checked.length <= 0) return;
+  const current = String(primaryEl.value || "50K").toUpperCase();
+  if (!checked.includes(current)) {
+    primaryEl.value = checked[0];
+  }
 }
 
 async function refreshDynamicPropState() {
@@ -110,6 +150,7 @@ async function refreshDynamicPropState() {
   const active = Array.isArray(state?.active_accounts) ? state.active_accounts.map((item) => String(item).toUpperCase()) : [];
   const profile = state?.primary_profile || {};
   const strictRisk = Number(state?.portfolio?.strict_risk_pct || 0) * 100;
+  const accountSize = Number(profile?.account_size || 0);
 
   setValue("adminPrimaryAccount", primary);
   setValue("adminAccountMode", mode);
@@ -119,14 +160,22 @@ async function refreshDynamicPropState() {
 
   setText(
     "dynamicPropMeta",
-    `Primary ${primary} ${mode} | Active: ${active.join(", ") || "--"} | Daily Max: ${Number(profile.daily_max_loss || 0).toFixed(2)} | Total Max: ${Number(profile.total_max_loss || 0).toFixed(2)} | Risk/Trade: ${strictRisk.toFixed(2)}%`,
+    `Primary ${primary} ${mode} | Account Size: ${accountSize > 0 ? accountSize.toFixed(0) : "--"} | Active: ${active.join(", ") || "--"} | Daily Max: ${Number(profile.daily_max_loss || 0).toFixed(2)} | Total Max: ${Number(profile.total_max_loss || 0).toFixed(2)} | Risk/Trade: ${strictRisk.toFixed(2)}%`,
   );
 }
 
 async function applyDynamicPropEngine() {
-  const primary = String(document.getElementById("adminPrimaryAccount")?.value || "50K").toUpperCase();
+  const primaryEl = document.getElementById("adminPrimaryAccount");
+  let primary = String(primaryEl?.value || "50K").toUpperCase();
   const mode = String(document.getElementById("adminAccountMode")?.value || "STANDARD").toUpperCase();
   const activeAccounts = selectedAdminPropAccounts();
+  if (activeAccounts.length > 0 && !activeAccounts.includes(primary)) {
+    primary = activeAccounts[0];
+    if (primaryEl) primaryEl.value = primary;
+  }
+  if (activeAccounts.length <= 0) {
+    activeAccounts.push(primary);
+  }
   const modeMap = {};
   activeAccounts.forEach((account) => {
     modeMap[account] = mode;
@@ -142,6 +191,16 @@ async function applyDynamicPropEngine() {
     }),
   });
   await refreshDynamicPropState();
+}
+
+async function useAccountPreset(accountKey) {
+  const normalized = String(accountKey || "50K").toUpperCase();
+  const primaryEl = document.getElementById("adminPrimaryAccount");
+  if (primaryEl) primaryEl.value = normalized;
+  Array.from(document.querySelectorAll(".admin-prop-account")).forEach((node) => {
+    node.checked = String(node.value || "").toUpperCase() === normalized;
+  });
+  await applyDynamicPropEngine();
 }
 
 async function saveUser(autoEnabled, banned) {
@@ -179,10 +238,11 @@ async function savePropRules() {
 }
 
 async function saveEngineControls() {
-  const toggles = window._engineToggles || { ict_enabled: true, iceberg_enabled: true, astro_enabled: true };
+  const toggles = window._engineToggles || { ict_enabled: true, iceberg_enabled: true, gann_enabled: true, astro_enabled: true };
   const payload = {
     ict_enabled: Boolean(toggles.ict_enabled),
     iceberg_enabled: Boolean(toggles.iceberg_enabled),
+    gann_enabled: Boolean(toggles.gann_enabled),
     astro_enabled: Boolean(toggles.astro_enabled),
     confluence_threshold: Number(document.getElementById("engineConfluence")?.value || 0.5),
     confidence_threshold: Number(document.getElementById("engineConfidence")?.value || 55),
@@ -265,6 +325,10 @@ function bind() {
     window._engineToggles = window._engineToggles || {};
     window._engineToggles.iceberg_enabled = !window._engineToggles.iceberg_enabled;
   });
+  document.getElementById("gannToggleBtn")?.addEventListener("click", () => {
+    window._engineToggles = window._engineToggles || {};
+    window._engineToggles.gann_enabled = !window._engineToggles.gann_enabled;
+  });
   document.getElementById("astroToggleBtn")?.addEventListener("click", () => {
     window._engineToggles = window._engineToggles || {};
     window._engineToggles.astro_enabled = !window._engineToggles.astro_enabled;
@@ -277,6 +341,21 @@ function bind() {
   document.getElementById("loadRiskBtn")?.addEventListener("click", () => loadAudit("/admin/control/risk_violations?limit=100").catch(() => {}));
   document.getElementById("loadRejectedBtn")?.addEventListener("click", () => loadAudit("/admin/control/rejected_trades?limit=100").catch(() => {}));
   document.getElementById("applyDynamicPropBtn")?.addEventListener("click", () => applyDynamicPropEngine().catch(() => {}));
+  document.getElementById("apply20kPresetBtn")?.addEventListener("click", () => useAccountPreset("20K").catch(() => {}));
+
+  document.getElementById("adminPrimaryAccount")?.addEventListener("change", () => {
+    const primary = String(document.getElementById("adminPrimaryAccount")?.value || "").toUpperCase();
+    if (!primary) return;
+    const nodes = Array.from(document.querySelectorAll(".admin-prop-account"));
+    const target = nodes.find((n) => String(n.value || "").toUpperCase() === primary);
+    if (target && !target.checked) target.checked = true;
+  });
+
+  Array.from(document.querySelectorAll(".admin-prop-account")).forEach((node) => {
+    node.addEventListener("change", () => {
+      syncPrimaryAccountSelection();
+    });
+  });
 }
 
 bind();

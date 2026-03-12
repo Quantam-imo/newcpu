@@ -2,6 +2,7 @@ import time
 import json
 import sqlite3
 import datetime
+import threading
 from datetime import datetime, timezone
 from collections import deque
 from engine.signal_manager import SignalManager
@@ -40,11 +41,11 @@ from backend.config import (
 class MultiSymbolRunner:
 
     SYMBOL_MAP = {
-        "XAUUSD": "GC.FUT",
-        "NQ": "NQ.FUT",
-        "EURUSD": "6E.FUT",
-        "BTC": "BTC.FUT",
-        "US30": "YM.FUT",
+        "XAUUSD": "GC.c.1",
+        "NQ": "NQ.c.1",
+        "EURUSD": "6E.c.1",
+        "BTC": "BTC.c.1",
+        "US30": "YM.c.1",
     }
 
     SPOT_SYMBOL_MAP = {
@@ -104,6 +105,13 @@ class MultiSymbolRunner:
         self.spot_fidelity_strict = bool(SPOT_FIDELITY_STRICT)
         self.spot_confirmation_max_bps = float(SPOT_CONFIRMATION_MAX_BPS)
         self.spot_tick_history = {str(symbol).upper(): deque(maxlen=600) for symbol in self.symbols}
+        self.broker_spot_cache = {}
+        self.broker_spot_cache_lock = threading.Lock()
+        self.broker_spot_refresh_pending = set()
+        self.broker_spot_refresh_min_interval_seconds = 1.0
+        self.broker_spot_quote_ttl_seconds = 8.0
+        self.broker_spot_scanner_interval_seconds = 1.5
+        self.broker_spot_scanner_enabled = True
         self.capital = CapitalEngine()
         self.montecarlo = MonteCarlo()
         self.montecarlo_checked = False
@@ -134,12 +142,20 @@ class MultiSymbolRunner:
         self.max_spread_limit = 2.5
         self.auto_trading_enabled = True
         self.disabled_symbols = set()
-        self.engine_enable_flags = {"ICT": True, "ICEBERG": True, "ASTRO": True}
+        self.engine_enable_flags = {"ICT": True, "ICEBERG": True, "GANN": True, "ASTRO": True}
         self.min_confidence_threshold = 55.0
         self.confluence_threshold = 0.5
         self.phase_risk_multipliers = {"PHASE1": 1.0, "PHASE2": 1.0, "FUNDED": 1.0}
         self.strict_challenge_mode = True
-        self.allowed_models_for_challenge = {"ICT", "ICEBERG"}
+        self.allowed_models_for_challenge = {
+            "ICT",
+            "ICEBERG",
+            "ORDERFLOW_IMBALANCE",
+            "LIQUIDITY_TRAP",
+            "GANN",
+            "NEWS",
+            "EXPANSION",
+        }
         self.offset_baselines = {}
         self.offset_baseline_day = {}
         self.offset_smooth_window = {str(symbol).upper(): deque(maxlen=20) for symbol in self.symbols}
@@ -150,6 +166,30 @@ class MultiSymbolRunner:
         self.prop_status_callback = None
 
         self.running = False
+        self._start_broker_spot_scanner()
+
+    def _start_broker_spot_scanner(self):
+        if not bool(self.broker_spot_scanner_enabled):
+            return
+
+        def _loop():
+            while bool(self.broker_spot_scanner_enabled):
+                try:
+                    watch_symbols = set(self.spot_fidelity_symbols) | set(self.SPOT_SYMBOL_MAP.keys())
+                    for canonical in sorted(watch_symbols):
+                        self._schedule_broker_spot_refresh(canonical)
+                except Exception:
+                    pass
+                time.sleep(max(0.5, float(self.broker_spot_scanner_interval_seconds)))
+
+        threading.Thread(target=_loop, daemon=True, name="aq-broker-spot-scanner").start()
+
+    def _is_allowed_execution_model(self, model_name: str | None) -> bool:
+        name = str(model_name or "").upper().strip()
+        if not name:
+            return False
+        # Allow exact model match or prefixed variants like ICT_LIQUIDITY.
+        return any(name == token or name.startswith(f"{token}_") for token in self.allowed_models_for_challenge)
 
     def verify_broker_equity(self):
         snapshot = self.equity_verification_engine.verify(
@@ -196,8 +236,20 @@ class MultiSymbolRunner:
         root = preferred_feed_symbol.split(".")[0] if preferred_feed_symbol else symbol
 
         raw_contracts = []
+        # Enhanced fallback for GC-F and other symbols
         if include_contracts:
-            raw_contracts = self._front_month_contracts(root)
+            if root in {"GC-F", "GC", "GC.FUT"}:
+                raw_contracts = ["GC.FUT", "GC.c.1", "GC.c.0", "GCJ6", "GCJ26"]
+            elif root in {"NQ", "NQ-F", "NQ.FUT"}:
+                raw_contracts = ["NQ.FUT", "NQ.c.1", "NQ.c.0"]
+            elif root in {"6E", "EURUSD", "6E.FUT"}:
+                raw_contracts = ["6E.FUT", "6E.c.1", "6E.c.0"]
+            elif root in {"BTC", "BTC-F", "BTC.FUT"}:
+                raw_contracts = ["BTC.FUT", "BTC.c.1", "BTC.c.0"]
+            elif root in {"YM", "US30", "YM.FUT"}:
+                raw_contracts = ["YM.FUT", "YM.c.1", "YM.c.0"]
+            else:
+                raw_contracts = self._front_month_contracts(root)
 
         candidates = [
             preferred_feed_symbol,
@@ -337,10 +389,12 @@ class MultiSymbolRunner:
 
     def get_spot_price(self, symbol):
         canonical = str(symbol).upper()
-        if canonical in self.spot_fidelity_symbols:
+        if canonical in self.spot_fidelity_symbols or canonical in self.SPOT_SYMBOL_MAP:
             broker_quote = self.get_broker_spot_quote(symbol)
             if broker_quote.get("price") is not None:
                 return float(broker_quote["price"]), broker_quote.get("source")
+            # Avoid unsupported raw-symbol probes on futures datasets for spot aliases.
+            return None, None
 
         dataset = symbol_dataset(symbol)
         candidates = [symbol] + self.SPOT_SYMBOL_MAP.get(symbol, [])
@@ -419,36 +473,109 @@ class MultiSymbolRunner:
 
     def get_broker_spot_quote(self, symbol):
         canonical = str(symbol).upper()
-        candidates = [canonical] + self.SPOT_SYMBOL_MAP.get(canonical, [])
-        snapshot = self.execution.broker_quote_snapshot(expected_symbols=candidates)
-        if not snapshot:
-            return {"price": None, "source": None, "snapshot": None}
+        now = time.time()
+        with self.broker_spot_cache_lock:
+            cached = dict(self.broker_spot_cache.get(canonical) or {})
 
-        if bool(snapshot.get("symbol_mismatch")):
-            return {"price": None, "source": None, "snapshot": snapshot}
+        cached_price = cached.get("price")
+        cached_source = cached.get("source")
+        cached_snapshot = cached.get("snapshot")
+        cached_at = float(cached.get("captured_at") or 0.0)
+        cache_age = (now - cached_at) if cached_at > 0 else None
 
-        price = snapshot.get("mid")
-        if price is None:
-            price = snapshot.get("last")
-        if price is None:
-            return {"price": None, "source": None, "snapshot": snapshot}
+        if cached_price is not None and cache_age is not None and cache_age <= float(self.broker_spot_quote_ttl_seconds):
+            return {
+                "price": float(cached_price),
+                "source": cached_source,
+                "snapshot": cached_snapshot,
+                "cache_age_seconds": cache_age,
+                "stale": False,
+                "from_cache": True,
+            }
 
-        symbol_name = str(snapshot.get("symbol") or canonical)
-        source = f"BROKER:{symbol_name}"
-        self._record_spot_tick(canonical, float(price), source)
-        return {
-            "price": float(price),
-            "source": source,
-            "snapshot": snapshot,
-        }
+        self._schedule_broker_spot_refresh(canonical)
+
+        if cached_price is not None:
+            return {
+                "price": float(cached_price),
+                "source": cached_source,
+                "snapshot": cached_snapshot,
+                "cache_age_seconds": cache_age,
+                "stale": True,
+                "from_cache": True,
+            }
+
+        return {"price": None, "source": None, "snapshot": cached_snapshot, "stale": True, "from_cache": False}
+
+    def _schedule_broker_spot_refresh(self, canonical):
+        key = str(canonical or "").upper().strip()
+        if not key:
+            return
+
+        now = time.time()
+        with self.broker_spot_cache_lock:
+            current = dict(self.broker_spot_cache.get(key) or {})
+            last_attempt = float(current.get("last_attempt_at") or 0.0)
+            if (now - last_attempt) < float(self.broker_spot_refresh_min_interval_seconds):
+                return
+            if key in self.broker_spot_refresh_pending:
+                return
+            self.broker_spot_refresh_pending.add(key)
+            current["last_attempt_at"] = now
+            self.broker_spot_cache[key] = current
+
+        def _worker(target_key):
+            try:
+                playwright = getattr(self.execution, "playwright", None)
+                if getattr(playwright, "page", None) is None:
+                    with self.broker_spot_cache_lock:
+                        current = dict(self.broker_spot_cache.get(target_key) or {})
+                        current["snapshot"] = None
+                        current["captured_at"] = time.time()
+                        current["source"] = None
+                        self.broker_spot_cache[target_key] = current
+                    return
+
+                candidates = [target_key] + self.SPOT_SYMBOL_MAP.get(target_key, [])
+                snapshot = self.execution.broker_quote_snapshot(expected_symbols=candidates)
+                price = None
+                source = None
+                if snapshot and not bool(snapshot.get("symbol_mismatch")):
+                    price = snapshot.get("mid")
+                    if price is None:
+                        price = snapshot.get("last")
+                    if price is not None:
+                        symbol_name = str(snapshot.get("symbol") or target_key)
+                        source = f"BROKER:{symbol_name}"
+                        try:
+                            self._record_spot_tick(target_key, float(price), source)
+                        except Exception:
+                            pass
+
+                with self.broker_spot_cache_lock:
+                    current = dict(self.broker_spot_cache.get(target_key) or {})
+                    current["snapshot"] = snapshot
+                    current["captured_at"] = time.time()
+                    current["source"] = source
+                    if price is not None:
+                        current["price"] = float(price)
+                    self.broker_spot_cache[target_key] = current
+            except Exception:
+                pass
+            finally:
+                with self.broker_spot_cache_lock:
+                    self.broker_spot_refresh_pending.discard(target_key)
+
+        threading.Thread(target=_worker, args=(key,), daemon=True).start()
 
     def get_spot_candles(self, symbol, lookback_minutes=240, record_limit=2400):
         canonical = str(symbol).upper()
-        if canonical in self.spot_fidelity_symbols:
+        if canonical in self.spot_fidelity_symbols or canonical in self.SPOT_SYMBOL_MAP:
             broker_quote = self.get_broker_spot_quote(canonical)
             broker_candles = self._spot_candles_from_ticks(canonical, lookback_minutes=lookback_minutes)
             if broker_quote.get("price") is not None and len(broker_candles) >= 5:
                 return broker_quote.get("source") or "BROKER", broker_candles[-max(100, min(int(record_limit or 2400), 4000)):]
+            return None, []
 
         dataset = symbol_dataset(symbol)
         candidates = [symbol] + self.SPOT_SYMBOL_MAP.get(symbol, [])
@@ -1306,9 +1433,11 @@ class MultiSymbolRunner:
                 continue
             if "ASTRO" in model_name and not bool(self.engine_enable_flags.get("ASTRO", True)):
                 continue
+            if "GANN" in model_name and not bool(self.engine_enable_flags.get("GANN", True)):
+                continue
 
             if self.strict_challenge_mode:
-                if not any(token in model_name for token in self.allowed_models_for_challenge):
+                if not self._is_allowed_execution_model(model_name):
                     continue
 
             confidence_value = float(signal.get("confidence", 0.0) or 0.0)
