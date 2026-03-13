@@ -2,66 +2,78 @@
   "XAUUSD": {
     "active_symbol": null,
     "resolved_at": 1773250515,
-    "last_probe_at": 1773276122,
-    "last_status": "UNRESOLVED",
+    "last_probe_at": 1773279893,
+    "last_status": "MISS",
     "sample_count": 240,
-    "attempts": 22240,
-    "consecutive_failures": 1,
+    "attempts": 22266,
+    "consecutive_failures": 73,
     "ttl_seconds": 14400,
     "candidates_tried": [
-      "GC.c.1"
+      "GC.c.1",
+      "GC.c.0",
+      "GC.FUT",
+      "GCJ6",
+      "GCJ26"
     ]
   },
   "NQ": {
     "active_symbol": null,
     "resolved_at": 1773250355,
-    "last_probe_at": 1773276131,
-    "last_status": "UNRESOLVED",
+    "last_probe_at": 1773279892,
+    "last_status": "MISS",
     "sample_count": 219,
-    "attempts": 1746,
-    "consecutive_failures": 1,
+    "attempts": 1748,
+    "consecutive_failures": 5,
     "ttl_seconds": 14400,
     "candidates_tried": [
-      "NQ.c.1"
+      "NQ.c.1",
+      "NQ.c.0",
+      "NQ.FUT"
     ]
   },
   "EURUSD": {
     "active_symbol": null,
     "resolved_at": 1773250355,
-    "last_probe_at": 1773276137,
-    "last_status": "UNRESOLVED",
+    "last_probe_at": 1773279892,
+    "last_status": "MISS",
     "sample_count": 41,
-    "attempts": 381,
-    "consecutive_failures": 1,
+    "attempts": 383,
+    "consecutive_failures": 5,
     "ttl_seconds": 14400,
     "candidates_tried": [
-      "6E.c.1"
+      "6E.c.1",
+      "6E.c.0",
+      "6E.FUT"
     ]
   },
   "BTC": {
     "active_symbol": null,
     "resolved_at": 1773250358,
-    "last_probe_at": 1773276148,
-    "last_status": "UNRESOLVED",
+    "last_probe_at": 1773279892,
+    "last_status": "MISS",
     "sample_count": 37,
-    "attempts": 391,
-    "consecutive_failures": 1,
+    "attempts": 393,
+    "consecutive_failures": 5,
     "ttl_seconds": 14400,
     "candidates_tried": [
-      "BTC.c.1"
+      "BTC.c.1",
+      "BTC.c.0",
+      "BTC.FUT"
     ]
   },
   "US30": {
     "active_symbol": null,
     "resolved_at": 1773250359,
-    "last_probe_at": 1773276155,
-    "last_status": "UNRESOLVED",
+    "last_probe_at": 1773279892,
+    "last_status": "MISS",
     "sample_count": 182,
-    "attempts": 380,
-    "consecutive_failures": 1,
+    "attempts": 382,
+    "consecutive_failures": 5,
     "ttl_seconds": 14400,
     "candidates_tried": [
-      "YM.c.1"
+      "YM.c.1",
+      "YM.c.0",
+      "YM.FUT"
     ]
   },
   "GC-F": {
