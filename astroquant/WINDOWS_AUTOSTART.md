@@ -13,6 +13,21 @@ This setup starts AstroQuant automatically when Windows starts:
 - `astroquant/watchdog_astroquant.ps1`
 - `astroquant/stop_astroquant.bat`
 - `astroquant/install_autostart_task.ps1`
+- `astroquant/auto_setup_windows.bat`
+
+## 0) Fully Automatic Setup (Fastest)
+
+After you pull latest code on Windows, run this once as Administrator:
+
+```bat
+auto_setup_windows.bat
+```
+
+This does everything automatically:
+
+1. Installs Task Scheduler autostart task
+2. Starts AstroQuant immediately
+3. Enables start on every logon
 
 ## 1) One-Time Path Check
 
@@ -36,7 +51,7 @@ Expected result:
 - Engine starts via `POST /engine/start`
 - Watchdog starts minimized and writes logs to `logs/watchdog.log`
 
-## 3) One-Click Task Scheduler Install (Recommended)
+## 3) One-Click Task Scheduler Install (Manual Alternative)
 
 Run PowerShell as Administrator in `astroquant` folder:
 

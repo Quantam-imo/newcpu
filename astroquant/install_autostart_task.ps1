@@ -19,9 +19,12 @@ $trigger = New-ScheduledTaskTrigger -AtLogOn
 $trigger.Delay = $triggerDelay
 
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+$currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$principal = New-ScheduledTaskPrincipal -UserId $currentUser -RunLevel Highest -LogonType InteractiveToken
 
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -RunLevel Highest -Force | Out-Null
+Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
 
 Write-Host "Task '$TaskName' installed successfully."
 Write-Host "Startup script: $BatchPath"
 Write-Host "Trigger delay: $DelaySeconds seconds"
+Write-Host "User: $currentUser"
