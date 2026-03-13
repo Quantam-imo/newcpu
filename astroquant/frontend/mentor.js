@@ -128,6 +128,17 @@ function fmtPrice(v) {
     return n.toFixed(2);
 }
 
+function fmtObj(v) {
+    if (!v || typeof v !== "object" || Array.isArray(v)) return fmt(v);
+    const rows = [];
+    for (const [key, value] of Object.entries(v)) {
+        if (value === null || value === undefined || value === "") continue;
+        if (typeof value === "object") continue;
+        rows.push(`${key}:${fmt(value)}`);
+    }
+    return rows.length ? rows.join(" | ") : "--";
+}
+
 function row(label, value) {
     const isPrice = /price|last|open|high|low|support|resistance|target|poc|range/i.test(String(label || ""));
     return `<div class="mentor-row"><span>${fmt(label)}</span><strong class="${isPrice ? "mentor-live-price" : ""}">${fmt(value)}</strong></div>`;
@@ -180,7 +191,24 @@ function gannStatusPill(gann) {
 function normalizeMentorData(raw, symbol) {
     const payload = raw || {};
     if (payload.context && payload.probability && !Array.isArray(payload.gann)) {
-        return payload;
+        const gannRaw = (payload.gann && typeof payload.gann === "object") ? payload.gann : {};
+        const signals = (gannRaw.signals && typeof gannRaw.signals === "object") ? gannRaw.signals : {};
+        const enrichedGann = {
+            ...gannRaw,
+            square_of_9: gannRaw.square_of_9 ?? signals.square_of_9,
+            price_time: gannRaw.price_time ?? signals.price_time,
+            vector: gannRaw.vector ?? signals.vector,
+            octave: gannRaw.octave ?? signals.octave,
+            planet_alignment: gannRaw.planet_alignment ?? signals.planet_alignment,
+            spiral: gannRaw.spiral ?? signals.spiral,
+            spiral_vector: gannRaw.spiral_vector ?? signals.spiral_vector,
+            angle: gannRaw.angle ?? signals.angle,
+            angle_lines: gannRaw.angle_lines ?? signals.angle_lines,
+        };
+        return {
+            ...payload,
+            gann: enrichedGann,
+        };
     }
 
     const market = payload.market || {};
@@ -266,6 +294,15 @@ function normalizeMentorData(raw, symbol) {
             price_time_alignment: gannRaw.price_time_alignment,
             support: gannRaw.support,
             resistance: gannRaw.resistance,
+            square_of_9: gannRaw.square_of_9,
+            price_time: gannRaw.price_time,
+            vector: gannRaw.vector,
+            octave: gannRaw.octave,
+            planet_alignment: gannRaw.planet_alignment,
+            spiral: gannRaw.spiral,
+            spiral_vector: gannRaw.spiral_vector,
+            angle: gannRaw.angle,
+            angle_lines: gannRaw.angle_lines,
         },
         astro: {
             harmonic_window: astroRows.length > 0,
@@ -418,6 +455,15 @@ function renderMentorContext(data, sectionOverrides = null) {
         row("Vibration", gann.vibration),
         row("Time Vibration", gann.time_vibration),
         row("Price-Time Align", gann.price_time_alignment ? "YES" : "NO"),
+        row("Price-Time", fmtObj(gann.price_time)),
+        row("Square of 9", fmtObj(gann.square_of_9)),
+        row("Angle", fmtObj(gann.angle)),
+        row("Angle Lines", fmtObj(gann.angle_lines)),
+        row("Vector", fmtObj(gann.vector)),
+        row("Octave", fmtObj(gann.octave)),
+        row("Planet Align", fmtObj(gann.planet_alignment)),
+        row("Spiral", fmtObj(gann.spiral)),
+        row("Spiral Vector", fmtObj(gann.spiral_vector)),
         row("Support", fmtPrice(gann.support)),
         row("Resistance", fmtPrice(gann.resistance)),
         row("Target 100", fmtPrice(gann.target_100)),

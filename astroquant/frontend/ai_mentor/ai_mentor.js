@@ -7,6 +7,12 @@ async function loadMentorV3() {
 	const i = d.institution || {};
 	const ict = d.ict || {};
 	const g = d.gann || {};
+	const gs = (g.signals && typeof g.signals === "object") ? g.signals : {};
+	const angle = g.angle || gs.angle || {};
+	const square9 = g.square_of_9 || gs.square_of_9 || {};
+	const priceTime = g.price_time || gs.price_time || {};
+	const octave = g.octave || gs.octave || {};
+	const planet = g.planet_alignment || gs.planet_alignment || {};
 	const a = d.astro || {};
 	const n = d.news || {};
 	const s = d.session || {};
@@ -21,6 +27,11 @@ async function loadMentorV3() {
 		`Deg ${g.degree ?? "--"}`,
 		`Vib ${g.vibration ?? "--"}`,
 		`C144 ${g.cycle_144 ? "Y" : "N"}`,
+		`A9 ${square9.level ?? "--"}`,
+		`PT ${priceTime.aligned ? "Y" : "N"}`,
+		`Ang ${angle.angle ?? "--"}`,
+		`Oct ${octave.zone ?? "--"}`,
+		`Plan ${planet.score ?? "--"}`,
 	].join(" | ");
 	const gClass = g.enabled === false
 		? "gann-off"

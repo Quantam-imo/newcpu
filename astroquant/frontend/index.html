@@ -365,6 +365,33 @@
             border: 1px dashed var(--border);
             display: none;
         }
+        #chartGannText {
+            min-height: 18px;
+            margin-bottom: 8px;
+            padding: 6px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            line-height: 1.35;
+            color: #dbeafe;
+            background: #0f132a;
+            border: 1px solid #334155;
+            display: none;
+        }
+        #chartGannText.gann-buy {
+            border-color: #16a34a;
+            color: #bbf7d0;
+            background: #062312;
+        }
+        #chartGannText.gann-sell {
+            border-color: #dc2626;
+            color: #fecaca;
+            background: #2a0d0d;
+        }
+        #chartGannText.gann-none {
+            border-color: #475569;
+            color: #cbd5e1;
+            background: #0f172a;
+        }
         .badge {
             border: 1px solid var(--border-strong);
             background: var(--surface-alt);
@@ -931,6 +958,7 @@
                         <div class="badge">GannScore: <span id="chartGannScore">--</span></div>
                     </div>
                     <div id="chartState"></div>
+                    <div id="chartGannText"></div>
                     <div id="chartWrap">
                         <div id="chartVpOverlay"></div>
                         <div id="chartTvHud">--</div>

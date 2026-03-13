@@ -1388,7 +1388,7 @@ function setLineGroupFromPrices(store, rows, color, titleBuilder) {
 	}
 }
 
-function renderOverlayPriceLines(overlays) {
+function renderOverlayPriceLines(overlays, meta) {
 	setLineGroupFromPrices(liquidityLines, overlays?.liquidity || [], "#38bdf8", row => `Liquidity ${row.strength || ""}`);
 
 	clearPriceLines(orderBlockLines);
@@ -1405,7 +1405,15 @@ function renderOverlayPriceLines(overlays) {
 	}
 
 	setLineGroupFromPrices(icebergLines, overlays?.iceberg || [], "#f97316", row => `Iceberg ${row.absorption_strength || ""}`);
-	setLineGroupFromPrices(gannLines, overlays?.gann_lines || [], "#a78bfa", row => row.label || "Gann");
+	const rawGannRows = Array.isArray(overlays?.gann_lines) ? overlays.gann_lines : [];
+	const gannMeta = (meta && typeof meta === "object") ? (meta.gann || {}) : {};
+	const gannSignals = (gannMeta.signals && typeof gannMeta.signals === "object") ? gannMeta.signals : {};
+	const angleLines = (gannSignals.angle_lines && typeof gannSignals.angle_lines === "object") ? gannSignals.angle_lines : {};
+	const fallbackRows = Object.entries(angleLines)
+		.map(([label, price]) => ({ label: `Gann ${label}`, price: Number(price) }))
+		.filter(row => Number.isFinite(row.price));
+	const gannRows = rawGannRows.length ? rawGannRows : fallbackRows;
+	setLineGroupFromPrices(gannLines, gannRows, "#a78bfa", row => row.label || "Gann");
 }
 
 function renderTradeLines(meta, candles) {
@@ -1524,6 +1532,14 @@ function buildMarkers(payload) {
 
 function updateChartMeta(payload, timeframe, candles) {
 	const meta = payload?.meta || {};
+	const fmtCompact = (value) => {
+		if (value === null || value === undefined || value === "") return "--";
+		if (typeof value === "number") {
+			if (!Number.isFinite(value)) return "--";
+			return Math.abs(value) >= 100 ? value.toFixed(2) : value.toFixed(3);
+		}
+		return String(value);
+	};
 	document.getElementById("chartInstrument").innerText = selectedSymbol();
 	document.getElementById("chartTf").innerText = timeframe || "--";
 	const liveFromMeta = Number(meta?.live_quote?.price);
@@ -1548,6 +1564,10 @@ function updateChartMeta(payload, timeframe, candles) {
 	document.getElementById("chartNewsBadge").innerText = meta.news || "--";
 	document.getElementById("chartDataSource").innerText = meta.data_source || "--";
 	const gannMeta = meta.gann || {};
+	const gannSignals = (gannMeta.signals && typeof gannMeta.signals === "object") ? gannMeta.signals : {};
+	const gannCross = gannMeta.cross || gannSignals.cross || "--";
+	const gannKeyDegree = gannMeta.key_degree || gannSignals.key_degree || "--";
+	const gannPtAligned = (gannMeta.price_time_alignment != null) ? gannMeta.price_time_alignment : (gannSignals.price_time_alignment || false);
 	const gannEnabled = gannMeta.enabled !== false;
 	const gannDetected = Boolean(gannMeta.detected);
 	const gannDir = String(gannMeta.direction || "").toUpperCase();
@@ -1559,6 +1579,41 @@ function updateChartMeta(payload, timeframe, candles) {
 			: "NONE");
 	document.getElementById("chartGannSignal").innerText = gannSignalText;
 	document.getElementById("chartGannScore").innerText = gannMeta.score != null ? String(gannMeta.score) : "--";
+	const gannSignalEl = document.getElementById("chartGannSignal");
+	if (gannSignalEl) gannSignalEl.title = `Cross: ${gannCross} | KeyDegree: ${gannKeyDegree} | PT: ${gannPtAligned ? "YES" : "NO"}`;
+	const gannScoreEl = document.getElementById("chartGannScore");
+	if (gannScoreEl) gannScoreEl.title = `Cross: ${gannCross} | KeyDegree: ${gannKeyDegree}`;
+
+	const gannTextEl = document.getElementById("chartGannText");
+	if (gannTextEl) {
+		const square9 = (gannSignals.square_of_9 && typeof gannSignals.square_of_9 === "object") ? gannSignals.square_of_9 : {};
+		const angle = (gannSignals.angle && typeof gannSignals.angle === "object") ? gannSignals.angle : {};
+		const priceTime = (gannSignals.price_time && typeof gannSignals.price_time === "object") ? gannSignals.price_time : {};
+		const vector = (gannSignals.vector && typeof gannSignals.vector === "object") ? gannSignals.vector : {};
+		const octave = (gannSignals.octave && typeof gannSignals.octave === "object") ? gannSignals.octave : {};
+		const planet = (gannSignals.planet_alignment && typeof gannSignals.planet_alignment === "object") ? gannSignals.planet_alignment : {};
+		const spiralVector = (gannSignals.spiral_vector && typeof gannSignals.spiral_vector === "object") ? gannSignals.spiral_vector : {};
+
+		gannTextEl.classList.remove("gann-buy", "gann-sell", "gann-none");
+		if (!gannEnabled) {
+			gannTextEl.style.display = "block";
+			gannTextEl.classList.add("gann-none");
+			gannTextEl.innerText = "GANN engine is OFF.";
+		} else if (!gannDetected) {
+			gannTextEl.style.display = "block";
+			gannTextEl.classList.add("gann-none");
+			gannTextEl.innerText = `GANN waiting: Cross ${fmtCompact(gannCross)} | Key Degree ${fmtCompact(gannKeyDegree)} | Price-Time ${gannPtAligned ? "Aligned" : "Not aligned"}.`;
+		} else {
+			const tone = gannDir === "SELL" ? "gann-sell" : "gann-buy";
+			gannTextEl.style.display = "block";
+			gannTextEl.classList.add(tone);
+			gannTextEl.innerText = [
+				`GANN ${gannDir || "SIGNAL"}${gannConf ? ` ${gannConf}%` : ""} | Score ${fmtCompact(gannMeta.score)} | Cross ${fmtCompact(gannCross)} | Degree ${fmtCompact(gannSignals.degree)} | Key ${fmtCompact(gannKeyDegree)}.`,
+				`Square9 ${fmtCompact(square9.level)} (${fmtCompact(square9.bias)}) | Angle ${fmtCompact(angle.angle)} (${angle.aligned ? "aligned" : "offset"}) | Price-Time ${priceTime.aligned ? "aligned" : "offset"}.`,
+				`Vector ${fmtCompact(vector.direction)} (${fmtCompact(vector.angle_deg)}deg) | Octave ${fmtCompact(octave.zone)} | Planet score ${fmtCompact(planet.score)} | Spiral resonance ${fmtCompact(spiralVector.score)}.`,
+			].join(" ");
+		}
+	}
 
 	const state = document.getElementById("chartState");
 	if (state) {
@@ -1956,7 +2011,7 @@ async function loadInstitutionalChart() {
 	atrLowerSeries.setData(sanitizeLineRows(payload?.overlays?.atr_band?.lower || []));
 	cumDeltaSeries.setData(sanitizeLineRows(payload?.overlays?.cumulative_delta || []));
 
-	renderOverlayPriceLines(payload?.overlays || {});
+	renderOverlayPriceLines(payload?.overlays || {}, payload?.meta || {});
 	renderVolumeProfile(candles);
 	renderTradeLines(payload?.meta || {}, candles);
 	setSeriesMarkersCompat(candlesSeries, buildMarkers(payload));
