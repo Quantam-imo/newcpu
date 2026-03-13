@@ -5,11 +5,16 @@ import requests
 class TelegramEngine:
 
     def __init__(self):
-        self.token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-        self.chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+        self.token = ""
+        self.chat_id = ""
         self.last_error = None
 
+    def _refresh_credentials(self):
+        self.token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+        self.chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+
     def status(self):
+        self._refresh_credentials()
         configured = bool(self.token and self.chat_id)
         if not configured:
             return {
@@ -30,6 +35,7 @@ class TelegramEngine:
         }
 
     def send(self, message):
+        self._refresh_credentials()
         if not self.token or not self.chat_id:
             self.last_error = "telegram credentials missing"
             return False

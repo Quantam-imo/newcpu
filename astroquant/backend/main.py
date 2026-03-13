@@ -40,7 +40,7 @@ from backend.config import (
 from backend.governance.dynamic_prop_engine import DynamicPropEngine
 from backend.governance.prop_governance import PropConfig, PropGovernance
 from backend.integration.broker_sync import fetch_equity_from_browser
-from backend.integration.telegram_notify import build_daily_summary, daily_metrics_from_journal, send_daily_summary
+from backend.integration.telegram_notify import build_daily_summary, daily_journal_rows, daily_metrics_from_journal, send_daily_summary
 from backend.journal.ai_trade_journal import init_journal, recent_trades
 from backend.reports.monthly_report import generate_monthly_report
 from backend.router_admin import build_admin_router
@@ -119,6 +119,17 @@ SYMBOL_LOT_CAPS = {
     "BTC": 0.05,
     "BTCUSD": 0.05,
 }
+# Estimated USD value per 1.0 price point for 1.0 lot.
+# These are conservative defaults and can be tuned per broker contract specs.
+SYMBOL_POINT_VALUE_USD = {
+    "XAUUSD": 100.0,
+    "EURUSD": 100000.0,
+    "NQ": 20.0,
+    "US30": 10.0,
+    "BTC": 1.0,
+    "BTCUSD": 1.0,
+}
+MIN_EXECUTION_RR_DEFAULT = 1.20
 ADMIN_CONTROL_STORE = AdminControlStore("data/admin_control.db")
 APP_STARTED_AT = time.time()
 JOURNAL_EXPORT_DIR = BASE_DIR / "reports" / "journal_dayend"
@@ -210,6 +221,70 @@ def _enforce_symbol_lot_cap(symbol: str | None, requested_lot: float) -> dict:
     }
 
 
+def _symbol_point_value_usd(symbol: str | None) -> tuple[str, float]:
+    raw = str(symbol or "XAUUSD").strip().upper()
+    canonical = str(_canonical_symbol(raw) or raw).upper()
+    if canonical == "BTCUSD":
+        canonical = "BTC"
+    point_value = float(SYMBOL_POINT_VALUE_USD.get(canonical, SYMBOL_POINT_VALUE_USD.get(raw, 1.0)) or 1.0)
+    return canonical, max(0.0001, point_value)
+
+
+def _compute_rr_metrics(entry_price: float | None, sl_value: float | None, tp_value: float | None) -> dict:
+    metrics = {
+        "risk_distance": None,
+        "reward_distance": None,
+        "rr": None,
+    }
+    if entry_price is None or sl_value is None or tp_value is None:
+        return metrics
+
+    risk_distance = abs(float(entry_price) - float(sl_value))
+    reward_distance = abs(float(tp_value) - float(entry_price))
+    metrics.update(
+        {
+            "risk_distance": round(risk_distance, 6),
+            "reward_distance": round(reward_distance, 6),
+            "rr": round(reward_distance / risk_distance, 6) if risk_distance > 0 else None,
+        }
+    )
+    return metrics
+
+
+def _adaptive_stop_distance(symbol: str | None, entry_price: float | None, timeframe_minutes: int = 1) -> float:
+    entry = float(entry_price) if entry_price is not None else None
+    if entry is None or entry <= 0:
+        return 0.0
+
+    raw = str(symbol or "XAUUSD").strip().upper()
+    canonical = str(_canonical_symbol(raw) or raw)
+    resolved = str(runner.SYMBOL_MAP.get(canonical, canonical))
+    key = f"{resolved}:{int(max(1, timeframe_minutes))}"
+
+    with CHART_CANDLE_CACHE_LOCK:
+        cached = list(CHART_CANDLE_CACHE.get(key, []) or [])
+
+    ranges = []
+    for row in cached[-40:]:
+        try:
+            high = float(row.get("high"))
+            low = float(row.get("low"))
+        except Exception:
+            continue
+        if high > 0 and low > 0 and high >= low:
+            ranges.append(high - low)
+
+    if ranges:
+        ranges_sorted = sorted(ranges)
+        median_range = ranges_sorted[len(ranges_sorted) // 2]
+        avg_range = sum(ranges) / float(len(ranges))
+        base = max(0.0001, (median_range * 0.8) + (avg_range * 0.2))
+    else:
+        base = max(0.0005, entry * 0.001)
+
+    return max(0.0001, float(base))
+
+
 def _risk_based_lot_plan(
     symbol: str | None,
     entry_price: float | None,
@@ -238,12 +313,16 @@ def _risk_based_lot_plan(
         effective_risk_fraction = max(0.0001, min(0.03, float(risk_percent) / 100.0))
 
     stop_distance = None
+    risk_per_lot_usd = None
     raw_lot = None
     risk_amount = round(account * effective_risk_fraction, 2)
     if entry is not None and sl is not None:
         stop_distance = abs(float(entry) - float(sl))
         if stop_distance > 0.0:
-            raw_lot = risk_amount / stop_distance
+            _, point_value_usd = _symbol_point_value_usd(symbol)
+            risk_per_lot_usd = stop_distance * point_value_usd
+            if risk_per_lot_usd > 0.0:
+                raw_lot = risk_amount / risk_per_lot_usd
 
     requested = float(requested_lot) if requested_lot is not None else (float(raw_lot) if raw_lot is not None else 0.01)
     requested = max(0.01, round(requested, 4))
@@ -259,6 +338,8 @@ def _risk_based_lot_plan(
         "entry_price": entry,
         "sl_price": sl,
         "stop_distance": round(stop_distance, 6) if stop_distance is not None else None,
+        "point_value_usd_per_point": round(_symbol_point_value_usd(symbol)[1], 6),
+        "risk_per_lot_usd": round(risk_per_lot_usd, 6) if risk_per_lot_usd is not None else None,
         "raw_lot": round(float(raw_lot), 4) if raw_lot is not None else None,
         "lot": float(capped.get("effective_lot") or requested),
         "lot_meta": capped,
@@ -417,7 +498,35 @@ def _journal_dayend_worker():
             _export_journal_day(last_seen_day)
         except Exception:
             pass
+        try:
+            _send_daily_telegram_report(report_day=last_seen_day)
+        except Exception:
+            pass
         last_seen_day = now_day
+
+
+def _send_daily_telegram_report(report_day: date | None = None):
+    target_day = report_day or datetime.now(timezone.utc).date()
+    metrics = daily_metrics_from_journal(target_day=target_day)
+    journal_rows = daily_journal_rows(target_day=target_day, limit=8)
+    summary_text = build_daily_summary(
+        equity=runner.state.balance,
+        pnl=metrics["pnl"],
+        trades=metrics["trades"],
+        win_rate=metrics["win_rate"],
+        phase=prop_engine.phase,
+        volatility_mode=prop_engine.volatility_mode,
+        report_day=target_day,
+        journal_rows=journal_rows,
+    )
+    send_result = send_daily_summary(summary_text)
+    return {
+        "day": str(target_day),
+        "metrics": metrics,
+        "journal_rows": journal_rows,
+        "summary": summary_text,
+        "telegram": send_result,
+    }
 
 
 def _start_journal_dayend_worker():
@@ -1758,6 +1867,7 @@ def execution_test_order(
     partial_ratio: float = Query(default=0.5),
     partial_target_rr: float = Query(default=1.0),
     partial_ttl_seconds: int = Query(default=10800),
+    min_rr: float = Query(default=MIN_EXECUTION_RR_DEFAULT),
     execute: bool = Query(default=False),
     confirm: str | None = Query(default=None),
 ):
@@ -1814,19 +1924,8 @@ def execution_test_order(
     sl_value = float(sl) if sl is not None else None
     tp_value = float(tp) if tp is not None else None
 
-    rr_metrics = {
-        "risk_distance": None,
-        "reward_distance": None,
-        "rr": None,
-    }
-    if sl_value is not None and tp_value is not None:
-        risk_distance = abs(float(expected_entry) - float(sl_value))
-        reward_distance = abs(float(tp_value) - float(expected_entry))
-        rr_metrics = {
-            "risk_distance": round(risk_distance, 6),
-            "reward_distance": round(reward_distance, 6),
-            "rr": round(reward_distance / risk_distance, 6) if risk_distance > 0 else None,
-        }
+    min_rr_value = max(0.2, min(5.0, float(min_rr or MIN_EXECUTION_RR_DEFAULT)))
+    rr_metrics = _compute_rr_metrics(expected_entry, sl_value, tp_value)
 
     lot_plan = _risk_based_lot_plan(
         symbol=symbol,
@@ -1841,14 +1940,36 @@ def execution_test_order(
         lot = float(lot_plan.get("lot") or lot)
 
     if execute and expected_entry is not None and (sl_value is None or tp_value is None):
-        # Provide conservative defaults for explicit manual live tests.
-        default_offset = max(0.0005, float(expected_entry) * 0.001)
+        # Use adaptive stop from recent volatility where possible.
+        default_offset = _adaptive_stop_distance(symbol=symbol, entry_price=expected_entry, timeframe_minutes=1)
+        rr_target = max(min_rr_value, 1.5)
         if side == "BUY":
             sl_value = sl_value if sl_value is not None else float(expected_entry) - default_offset
-            tp_value = tp_value if tp_value is not None else float(expected_entry) + (default_offset * 1.5)
+            tp_value = tp_value if tp_value is not None else float(expected_entry) + (default_offset * rr_target)
         else:
             sl_value = sl_value if sl_value is not None else float(expected_entry) + default_offset
-            tp_value = tp_value if tp_value is not None else float(expected_entry) - (default_offset * 1.5)
+            tp_value = tp_value if tp_value is not None else float(expected_entry) - (default_offset * rr_target)
+
+    rr_metrics = _compute_rr_metrics(expected_entry, sl_value, tp_value)
+
+    if execute:
+        rr_value = rr_metrics.get("rr")
+        if rr_value is None:
+            return {
+                "status": "blocked",
+                "reason": "rr_unavailable",
+                "required": f"min_rr_{min_rr_value:.2f}",
+                "rr_metrics": rr_metrics,
+                "order_panel": panel,
+            }
+        if float(rr_value) < float(min_rr_value):
+            return {
+                "status": "blocked",
+                "reason": "rr_below_minimum",
+                "required_min_rr": round(min_rr_value, 4),
+                "rr_metrics": rr_metrics,
+                "order_panel": panel,
+            }
 
     signal = {
         "model": "MANUAL_TEST",
@@ -3897,17 +4018,8 @@ def download_report():
 
 @app.post("/notify/daily_summary")
 def notify_daily_summary():
-    metrics = daily_metrics_from_journal()
-    summary_text = build_daily_summary(
-        equity=runner.state.balance,
-        pnl=metrics["pnl"],
-        trades=metrics["trades"],
-        win_rate=metrics["win_rate"],
-        phase=prop_engine.phase,
-        volatility_mode=prop_engine.volatility_mode,
-    )
-    send_result = send_daily_summary(summary_text)
-    return {"metrics": metrics, "summary": summary_text, "telegram": send_result}
+    payload = _send_daily_telegram_report()
+    return payload
 
 
 @app.get("/telegram/status")
