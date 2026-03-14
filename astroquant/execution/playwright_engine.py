@@ -1864,6 +1864,13 @@ class PlaywrightExecutionEngine:
 		if requested_price is None:
 			requested_price = expected_entry
 
+		baseline_position = None
+		if manual_test_mode:
+			try:
+				baseline_position = self._read_position(page, target_symbol=expected_symbol_raw)
+			except Exception:
+				baseline_position = None
+
 		volume_set = self._set_volume(page, lot_size)
 		if not volume_set and not manual_test_mode:
 			return {"status": "Rejected", "reason": "Volume selector not found"}
@@ -1932,6 +1939,27 @@ class PlaywrightExecutionEngine:
 
 		executed_price = float(position_data.get("entry_price"))
 		if manual_test_mode:
+			missing_protection = (
+				(expected_sl is not None and not bool((protection_setup or {}).get("sl_set")))
+				or (expected_tp is not None and not bool((protection_setup or {}).get("tp_set")))
+			)
+			if missing_protection:
+				diagnostics = self._fill_diagnostics(page)
+				return {
+					"status": "SUBMITTED_NO_CONFIRM",
+					"reason": "Protection parameters not confirmed on panel",
+					"requested_price": button_price if button_price is not None else requested_price,
+					"button_price": button_price,
+					"submit_clicked": submit_clicked,
+					"confirm_clicked": bool(confirm_clicked),
+					"confirm_selector": confirm_selector,
+					"active_symbol": active_symbol_raw,
+					"volume_set": bool(volume_set),
+					"protection_setup": protection_setup,
+					"position_data": position_data,
+					"diagnostics": diagnostics,
+				}
+
 			position_symbol = str((position_data or {}).get("symbol") or "").strip()
 			if expected_symbol_norm and position_symbol and not self._symbol_matches(position_symbol, expected_symbol_raw):
 				diagnostics = self._fill_diagnostics(page)
@@ -1951,6 +1979,42 @@ class PlaywrightExecutionEngine:
 					"diagnostics": diagnostics,
 				}
 
+			baseline_volume = None
+			current_volume = None
+			try:
+				if isinstance(baseline_position, dict):
+					b = baseline_position.get("volume")
+					baseline_volume = float(b) if b is not None else None
+			except Exception:
+				baseline_volume = None
+			try:
+				c = (position_data or {}).get("volume")
+				current_volume = float(c) if c is not None else None
+			except Exception:
+				current_volume = None
+
+			if submit_clicked and baseline_volume is not None and current_volume is not None:
+				if current_volume <= (baseline_volume + 1e-9):
+					diagnostics = self._fill_diagnostics(page)
+					return {
+						"status": "SUBMITTED_NO_CONFIRM",
+						"reason": "Position volume did not increase after submit",
+						"requested_price": button_price if button_price is not None else requested_price,
+						"button_price": button_price,
+						"submit_clicked": submit_clicked,
+						"confirm_clicked": bool(confirm_clicked),
+						"confirm_selector": confirm_selector,
+						"active_symbol": active_symbol_raw,
+						"position_symbol": position_symbol,
+						"baseline_volume": baseline_volume,
+						"current_volume": current_volume,
+						"volume_set": bool(volume_set),
+						"protection_setup": protection_setup,
+						"diagnostics": diagnostics,
+					}
+
+			partial_plan = self._start_partial_watch(signal, position_data)
+
 			return {
 				"status": "EXECUTED",
 				"model": signal.get("model"),
@@ -1969,6 +2033,7 @@ class PlaywrightExecutionEngine:
 				"verification_mode": "manual_relaxed",
 				"execution_source": "PLAYWRIGHT",
 				"protection_setup": protection_setup,
+				"partial_plan": partial_plan,
 			}
 
 		if self._is_partial_fill(page, lot_size):
