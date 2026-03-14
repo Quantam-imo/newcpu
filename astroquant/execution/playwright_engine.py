@@ -935,7 +935,7 @@ class PlaywrightExecutionEngine:
 
 		try:
 			rows = page.evaluate(
-				"""
+				r"""
 				(selectors, maxItems) => {
 				  const out = [];
 				  const seen = new Set();
