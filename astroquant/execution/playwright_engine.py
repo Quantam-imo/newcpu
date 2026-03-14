@@ -2055,7 +2055,7 @@ class PlaywrightExecutionEngine:
 		if self.execution_guard.is_halted():
 			return {"status": "Rejected", "reason": "Execution HALTED"}
 
-		if self.force_fixed_lot and self.fixed_lot_size > 0:
+		if not manual_test_mode and self.force_fixed_lot and self.fixed_lot_size > 0:
 			lot_size = float(self.fixed_lot_size)
 
 		if lot_size <= 0:

@@ -129,6 +129,8 @@ SYMBOL_POINT_VALUE_USD = {
     "BTCUSD": 1.0,
 }
 MIN_EXECUTION_RR_DEFAULT = 1.20
+TEST_ORDER_MIN_LOT = 0.01
+TEST_ORDER_MAX_LOT = 0.50
 ADMIN_CONTROL_STORE = AdminControlStore("data/admin_control.db")
 APP_STARTED_AT = time.time()
 JOURNAL_EXPORT_DIR = BASE_DIR / "reports" / "journal_dayend"
@@ -1869,7 +1871,7 @@ def execution_size_preview(
 @app.post("/execution/test_order")
 def execution_test_order(
     direction: str = Query(default="BUY"),
-    lot_size: float = Query(default=0.2),
+    lot_size: float = Query(default=TEST_ORDER_MIN_LOT),
     symbol: str = Query(default="XAUUSD"),
     entry_price: float | None = Query(default=None),
     sl: float | None = Query(default=None),
@@ -1897,7 +1899,8 @@ def execution_test_order(
     if side not in {"BUY", "SELL"}:
         return {"status": "error", "reason": "direction_must_be_buy_or_sell"}
 
-    lot_meta = _enforce_symbol_lot_cap(symbol, float(lot_size or 0.01))
+    requested_test_lot = max(TEST_ORDER_MIN_LOT, min(TEST_ORDER_MAX_LOT, float(lot_size or TEST_ORDER_MIN_LOT)))
+    lot_meta = _enforce_symbol_lot_cap(symbol, requested_test_lot)
     lot = float(lot_meta.get("effective_lot") or 0.01)
 
     panel = _run_playwright_task(
