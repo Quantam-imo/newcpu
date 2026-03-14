@@ -1,18 +1,18 @@
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = 'Stop'
 
 param(
-    [string]$TaskName = "AstroQuant Auto Start",
+    [string]$TaskName = 'AstroQuant Auto Start',
     [int]$DelaySeconds = 20
 )
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$BatchPath = Join-Path $ScriptDir "start_astroquant.bat"
+$BatchPath = Join-Path $ScriptDir 'start_astroquant.bat'
 
 if (-not (Test-Path $BatchPath)) {
-    throw "start_astroquant.bat not found at $BatchPath"
+    throw ('start_astroquant.bat not found at ' + $BatchPath)
 }
 
-$triggerDelay = "PT${DelaySeconds}S"
+$triggerDelay = 'PT{0}S' -f $DelaySeconds
 
 $action = New-ScheduledTaskAction -Execute $BatchPath
 $trigger = New-ScheduledTaskTrigger -AtLogOn
@@ -24,7 +24,7 @@ $principal = New-ScheduledTaskPrincipal -UserId $currentUser -RunLevel Highest -
 
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
 
-Write-Host "Task '$TaskName' installed successfully."
-Write-Host "Startup script: $BatchPath"
-Write-Host "Trigger delay: $DelaySeconds seconds"
-Write-Host "User: $currentUser"
+Write-Host ('Task ''{0}'' installed successfully.' -f $TaskName)
+Write-Host ('Startup script: {0}' -f $BatchPath)
+Write-Host ('Trigger delay: {0} seconds' -f $DelaySeconds)
+Write-Host ('User: {0}' -f $currentUser)
