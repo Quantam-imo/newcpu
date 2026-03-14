@@ -20,7 +20,6 @@ echo [INFO] Workspace directory: %WORKSPACE_DIR%
 REM --- Bootstrap venv if missing ---
 set "VENV_DIR=%WORKSPACE_DIR%\.venv"
 set "PYTHON_EXE=%VENV_DIR%\Scripts\python.exe"
-set "PIP_EXE=%VENV_DIR%\Scripts\pip.exe"
 set "REQS=%WORKSPACE_DIR%\requirements.txt"
 
 if not exist "%PYTHON_EXE%" (
@@ -40,15 +39,21 @@ if not exist "%PYTHON_EXE%" (
   echo [OK] Virtual environment created.
 )
 
-if not exist "%PIP_EXE%" (
-  echo [ERROR] pip not found in .venv. Please delete .venv and re-run.
+if not exist "%PYTHON_EXE%" (
+  echo [ERROR] Python not found in .venv. Please delete .venv and re-run.
   pause
   exit /b 1
 )
 
 if exist "%REQS%" (
   echo [INFO] Installing/verifying Python dependencies ...
-  "%PIP_EXE%" install --quiet -r "%REQS%"
+  "%PYTHON_EXE%" -m pip install --upgrade pip
+  if !ERRORLEVEL! NEQ 0 (
+    echo [ERROR] pip upgrade failed.
+    pause
+    exit /b 1
+  )
+  "%PYTHON_EXE%" -m pip install --quiet -r "%REQS%"
   if !ERRORLEVEL! NEQ 0 (
     echo [ERROR] pip install failed. Check internet connection and retry.
     pause
