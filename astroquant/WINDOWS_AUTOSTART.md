@@ -114,3 +114,6 @@ This sends `/engine/stop`, then stops watchdog and backend processes.
    - Playwright disconnected/stale -> auto reconnect via `/execution/reconnect?force=true`
    - Telegram inactive -> auto recovery test via `/telegram/test`
 - Watchdog sends Telegram recovery alerts when recovery actions occur (if Telegram is configured).
+- Circuit-breakers are enabled per component to prevent endless restart loops:
+   - repeated recovery failures in a short window open a temporary cooldown
+   - recovery attempts resume automatically after cooldown expires

@@ -22,6 +22,23 @@ $TelegramTestUrl = "$BaseUrl/telegram/test"
 $Global:AlertCooldownSec = 300
 $Global:LastAlertAt = [datetime]::MinValue
 
+# Circuit-breaker policy: if a component needs too many recoveries in a short window,
+# watchdog pauses further recovery attempts for that component.
+$Global:RecoveryPolicy = @{
+    "Backend"   = @{ WindowSec = 900; MaxAttempts = 4; CooldownSec = 900 }
+    "Engine"    = @{ WindowSec = 900; MaxAttempts = 6; CooldownSec = 600 }
+    "Playwright"= @{ WindowSec = 600; MaxAttempts = 6; CooldownSec = 600 }
+    "Telegram"  = @{ WindowSec = 600; MaxAttempts = 8; CooldownSec = 300 }
+}
+
+$Global:RecoveryState = @{}
+foreach ($component in $Global:RecoveryPolicy.Keys) {
+    $Global:RecoveryState[$component] = @{
+        Attempts = @()
+        CooldownUntil = [datetime]::MinValue
+    }
+}
+
 if (-not (Test-Path $LogDir)) {
     New-Item -ItemType Directory -Path $LogDir | Out-Null
 }
@@ -54,6 +71,49 @@ function Send-RecoveryAlert {
     }
 }
 
+function Test-RecoveryAllowed {
+    param([string]$Component)
+
+    if (-not $Global:RecoveryPolicy.ContainsKey($Component)) {
+        return @{ Allowed = $true; Reason = "no_policy" }
+    }
+
+    $policy = $Global:RecoveryPolicy[$Component]
+    $state = $Global:RecoveryState[$Component]
+    $now = Get-Date
+
+    if ($now -lt $state.CooldownUntil) {
+        $remaining = [int][math]::Ceiling(($state.CooldownUntil - $now).TotalSeconds)
+        return @{ Allowed = $false; Reason = ("cooldown_active_" + $remaining + "s") }
+    }
+
+    $windowSec = [int]$policy.WindowSec
+    $cutoff = $now.AddSeconds(-$windowSec)
+    $state.Attempts = @($state.Attempts | Where-Object { $_ -gt $cutoff })
+
+    if ($state.Attempts.Count -ge [int]$policy.MaxAttempts) {
+        $state.CooldownUntil = $now.AddSeconds([int]$policy.CooldownSec)
+        $state.Attempts = @()
+        $Global:RecoveryState[$Component] = $state
+        return @{ Allowed = $false; Reason = ("circuit_open_" + [int]$policy.CooldownSec + "s") }
+    }
+
+    $Global:RecoveryState[$Component] = $state
+    return @{ Allowed = $true; Reason = "ok" }
+}
+
+function Register-RecoveryAttempt {
+    param([string]$Component)
+
+    if (-not $Global:RecoveryState.ContainsKey($Component)) {
+        return
+    }
+
+    $state = $Global:RecoveryState[$Component]
+    $state.Attempts += (Get-Date)
+    $Global:RecoveryState[$Component] = $state
+}
+
 function Ensure-Backend {
     if (-not (Test-Path $PythonExe)) {
         if (Test-Path $AltPythonExe) {
@@ -73,7 +133,14 @@ function Ensure-Backend {
         return $false
     }
 
+    $gate = Test-RecoveryAllowed -Component "Backend"
+    if (-not $gate.Allowed) {
+        Write-Log "WARN" "Backend recovery blocked by circuit-breaker ($($gate.Reason))."
+        return $false
+    }
+
     Write-Log "WARN" "Backend process missing. Restarting uvicorn."
+    Register-RecoveryAttempt -Component "Backend"
     Start-Process -FilePath "cmd.exe" -ArgumentList "/k", "`"$PythonExe`" -m uvicorn backend.main:app --host $HostIp --port $Port --log-level info" -WorkingDirectory $AstroQuantDir | Out-Null
     Start-Sleep -Seconds 4
     return $true
@@ -83,6 +150,12 @@ function Ensure-Engine {
     param([bool]$ForceAlert = $false)
 
     try {
+        $gate = Test-RecoveryAllowed -Component "Engine"
+        if (-not $gate.Allowed) {
+            Write-Log "WARN" "Engine recovery blocked by circuit-breaker ($($gate.Reason))."
+            return
+        }
+
         $resp = Invoke-RestMethod -Method Post -Uri $EngineStartUrl -TimeoutSec 10
         $statusText = ""
         if ($null -ne $resp -and $resp.PSObject.Properties.Name -contains "status") {
@@ -91,6 +164,7 @@ function Ensure-Engine {
         Write-Log "INFO" "Engine start check sent to /engine/start (status='$statusText')"
 
         if ($ForceAlert -or ($statusText -eq "Engine Started")) {
+            Register-RecoveryAttempt -Component "Engine"
             Send-RecoveryAlert -Event "Engine Restart" -Detail "Engine start requested by watchdog."
         }
     }
@@ -117,7 +191,14 @@ function Ensure-Playwright {
             return
         }
 
+        $gate = Test-RecoveryAllowed -Component "Playwright"
+        if (-not $gate.Allowed) {
+            Write-Log "WARN" "Playwright recovery blocked by circuit-breaker ($($gate.Reason))."
+            return
+        }
+
         Write-Log "WARN" "Playwright unhealthy (connected=$connected status=$statusText heartbeat=$heartbeatState). Reconnecting."
+        Register-RecoveryAttempt -Component "Playwright"
         $reconnectResp = Invoke-RestMethod -Method Post -Uri $ExecutionReconnectUrl -TimeoutSec 20
         $reconnectStatus = ""
         if ($null -ne $reconnectResp -and $reconnectResp.PSObject.Properties.Name -contains "status") {
@@ -147,9 +228,16 @@ function Ensure-Telegram {
             return
         }
 
+        $gate = Test-RecoveryAllowed -Component "Telegram"
+        if (-not $gate.Allowed) {
+            Write-Log "WARN" "Telegram recovery blocked by circuit-breaker ($($gate.Reason))."
+            return
+        }
+
         Write-Log "WARN" "Telegram inactive (reason='$reason'). Sending watchdog recovery test."
         $msg = "AstroQuant watchdog: Telegram recovery check"
         $payload = @{ message = $msg } | ConvertTo-Json -Depth 3
+        Register-RecoveryAttempt -Component "Telegram"
         $testResp = Invoke-RestMethod -Method Post -Uri $TelegramTestUrl -Body $payload -ContentType "application/json" -TimeoutSec 10
         $ok = $false
         if ($null -ne $testResp -and $testResp.PSObject.Properties.Name -contains "ok") {
