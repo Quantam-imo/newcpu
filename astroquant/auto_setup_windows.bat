@@ -7,53 +7,28 @@ REM 2) Starts AstroQuant immediately
 
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%.") do set "ASTROQUANT_DIR=%%~fI"
+set "INSTALL_PS1=%ASTROQUANT_DIR%\install_autostart_task.ps1"
+set "START_BAT=%ASTROQUANT_DIR%\start_astroquant.bat"
 
 cd /d "%ASTROQUANT_DIR%"
 
-echo [INFO] Repairing install_autostart_task.ps1 (self-heal) ...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = Join-Path '%ASTROQUANT_DIR%' 'install_autostart_task.ps1'; $content = @'
-$ErrorActionPreference = 'Stop'
-
-param(
-    [string]$TaskName = 'AstroQuant Auto Start',
-    [int]$DelaySeconds = 20
+if not exist "%INSTALL_PS1%" (
+  echo [ERROR] Missing installer script: %INSTALL_PS1%
+  pause
+  exit /b 1
 )
 
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$BatchPath = Join-Path $ScriptDir 'start_astroquant.bat'
-
-if (-not (Test-Path $BatchPath)) {
-    throw ('start_astroquant.bat not found at ' + $BatchPath)
-}
-
-$triggerDelay = 'PT{0}S' -f $DelaySeconds
-
-$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument ('/c "{0}"' -f $BatchPath)
-$trigger = New-ScheduledTaskTrigger -AtLogOn
-$trigger.Delay = $triggerDelay
-
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-$currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-$principal = New-ScheduledTaskPrincipal -UserId $currentUser -RunLevel Highest -LogonType InteractiveToken
-
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
-
-Write-Host ('Task ''{0}'' installed successfully.' -f $TaskName)
-Write-Host ('Startup script: {0}' -f $BatchPath)
-Write-Host ('Trigger delay: {0} seconds' -f $DelaySeconds)
-Write-Host ('User: {0}' -f $currentUser)
-'@; Set-Content -Path $p -Value $content -Encoding UTF8"
-if %ERRORLEVEL% NEQ 0 (
-  echo [ERROR] Failed to repair install_autostart_task.ps1.
+if not exist "%START_BAT%" (
+  echo [ERROR] Missing startup script: %START_BAT%
   pause
   exit /b 1
 )
 
 echo [INFO] Installing Task Scheduler autostart task ...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%ASTROQUANT_DIR%\install_autostart_task.ps1" -TaskName "AstroQuant Auto Start" -DelaySeconds 20
+powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALL_PS1%" -TaskName "AstroQuant Auto Start" -DelaySeconds 20
 if %ERRORLEVEL% NEQ 0 (
   echo [ERROR] Task installation failed.
-  echo [HINT] Re-run this file using Administrator privileges.
+  echo [HINT] Check install_autostart_task.ps1 syntax and run as Administrator.
   pause
   exit /b 1
 )
