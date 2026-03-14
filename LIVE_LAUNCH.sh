@@ -13,6 +13,7 @@ CDP_PORT=9222
 CDP_URL="ws://127.0.0.1:${CDP_PORT}"
 BROKER_URL="https://manager.maven.markets/app/trade"
 LOG_DIR="$ROOT_DIR/logs"
+STRICT_PREFLIGHT_SCRIPT="$ROOT_DIR/preflight_strict.sh"
 
 # Colors for output
 RED='\033[0;31m'
@@ -343,7 +344,7 @@ read -p "Press ENTER when browser is ready and logged into the broker..."
 header "Verifying Browser Connection"
 
 info "Checking browser state..."
-EXEC_STATUS=$(curl -s http://127.0.0.1:8000/status/execution | "$PYTHON_BIN" -c "import json, sys; data=json.load(sys.stdin); print(data['browser_title'];" 2>/dev/null || echo "UNKNOWN")
+EXEC_STATUS=$(curl -s http://127.0.0.1:8000/status/execution | "$PYTHON_BIN" -c "import json, sys; data=json.load(sys.stdin); print(data.get('browser_title', 'UNKNOWN'))" 2>/dev/null || echo "UNKNOWN")
 
 if [[ "$EXEC_STATUS" == *"Just a moment"* ]] || [[ "$EXEC_STATUS" == "UNKNOWN" ]]; then
     warn "Browser still showing challenge or DOM not loaded"
@@ -353,7 +354,23 @@ if [[ "$EXEC_STATUS" == *"Just a moment"* ]] || [[ "$EXEC_STATUS" == "UNKNOWN" ]
 fi
 
 # ============================================================================
-# 8. Calibrate Selectors
+# 8. Strict Preflight Gate
+# ============================================================================
+header "Strict Preflight Gate"
+
+if [[ ! -x "$STRICT_PREFLIGHT_SCRIPT" ]]; then
+    chmod +x "$STRICT_PREFLIGHT_SCRIPT"
+fi
+
+info "Running strict preflight checks (feed key + CDP + execution live checks)..."
+if ! bash "$STRICT_PREFLIGHT_SCRIPT" http://127.0.0.1:8000 2>&1 | tee -a "$LOG_FILE"; then
+    error "Strict preflight failed. Blocking launch until issues are fixed."
+    exit 1
+fi
+success "Strict preflight passed"
+
+# ============================================================================
+# 9. Calibrate Selectors
 # ============================================================================
 header "Calibrating Selectors"
 
@@ -370,7 +387,7 @@ cd "$ROOT_DIR"
 success "Selector calibration completed"
 
 # ============================================================================
-# 9. Final System Check
+# 10. Final System Check
 # ============================================================================
 header "Final System Readiness Check"
 
@@ -378,7 +395,7 @@ info "Running comprehensive health check..."
 bash "$ROOT_DIR/health_check.sh" 2>&1 | tee -a "$LOG_FILE"
 
 # ============================================================================
-# 10. Summary & Next Steps
+# 11. Summary & Next Steps
 # ============================================================================
 header "Live Trading Setup Complete!"
 

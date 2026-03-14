@@ -72,9 +72,17 @@ nano .env  # or use your editor
 # Run health check
 ./health_check.sh
 
+# Run strict launch gate (must pass)
+./preflight_strict.sh
+
 # Expected output: "✓ All critical tests passed!" 
 # If issues: Follow remediation steps shown
 ```
+
+`preflight_strict.sh` blocks launch unless all of these are true:
+- `DATABENTO_API_KEY` is present and non-placeholder
+- CDP endpoint is configured and reachable via `/json/version`
+- `/status/execution` indicates live execution connectivity
 
 ### 4. Start Backend (1 minute)
 
