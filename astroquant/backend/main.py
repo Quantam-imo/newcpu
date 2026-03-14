@@ -39,7 +39,6 @@ from backend.config import (
 )
 from backend.governance.dynamic_prop_engine import DynamicPropEngine
 from backend.governance.prop_governance import PropConfig, PropGovernance
-from backend.integration.broker_sync import fetch_equity_from_browser
 from backend.integration.telegram_notify import build_daily_summary, daily_journal_rows, daily_metrics_from_journal, send_daily_summary
 from backend.journal.ai_trade_journal import init_journal, recent_trades
 from backend.reports.monthly_report import generate_monthly_report
@@ -140,16 +139,28 @@ TIMEOUT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=64, thread_
 PLAYWRIGHT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="aq-playwright")
 
 
-def _run_playwright_task(func, fallback=None, timeout_seconds: float = 12.0):
-    timeout_s = max(0.1, float(timeout_seconds or 0.1))
-    future = PLAYWRIGHT_EXECUTOR.submit(func)
+def _dispatch_playwright_task(func, timeout_seconds: float | None = None):
+    timeout_s = None if timeout_seconds is None else max(0.1, float(timeout_seconds or 0.1))
+
+    def _wrapped():
+        runner.execution.playwright.mark_dispatch_thread()
+        return func()
+
+    future = PLAYWRIGHT_EXECUTOR.submit(_wrapped)
     try:
         return future.result(timeout=timeout_s)
-    except concurrent.futures.TimeoutError:
+    except concurrent.futures.TimeoutError as exc:
         try:
             future.cancel()
         except Exception:
             pass
+        raise TimeoutError("playwright task timed out") from exc
+
+
+def _run_playwright_task(func, fallback=None, timeout_seconds: float = 12.0):
+    try:
+        return _dispatch_playwright_task(func, timeout_seconds=timeout_seconds)
+    except TimeoutError:
         return fallback
     except Exception:
         return fallback
@@ -169,6 +180,9 @@ def _set_execution_paused(paused: bool, reason: str | None = None) -> dict:
         snapshot = dict(EXECUTION_CONTROL_STATE)
     runner.auto_trading_enabled = not bool(paused)
     return snapshot
+
+
+runner.execution.set_task_dispatcher(_dispatch_playwright_task)
 
 
 def _symbol_lot_cap(symbol: str | None) -> tuple[str, float]:
@@ -1574,7 +1588,7 @@ async def lifespan(app: FastAPI):
         global runtime_browser_engine
         if runtime_browser_engine is not None:
             try:
-                runtime_browser_engine.close()
+                _run_playwright_task(lambda: runtime_browser_engine.close(), fallback=None, timeout_seconds=8.0)
             except Exception:
                 pass
             runtime_browser_engine = None
@@ -4076,12 +4090,13 @@ def broker_equity(data: dict):
 
 @app.post("/broker/sync_equity_from_page")
 def sync_equity_from_page_endpoint():
-    page = runner.execution.playwright.page
-    if page is None:
-        return {"status": "ignored", "reason": "browser page unavailable"}
-    equity = fetch_equity_from_browser(page)
+    equity = _run_playwright_task(
+        lambda: runner.execution.broker_equity_snapshot(),
+        fallback=None,
+        timeout_seconds=4.0,
+    )
     if equity is None:
-        return {"status": "ignored", "reason": "equity selector unavailable"}
+        return {"status": "ignored", "reason": "browser page unavailable"}
     runner.state.balance = equity
     prop_status_result = prop_engine.update_equity(equity)
     _handle_phase_event(prop_status_result)

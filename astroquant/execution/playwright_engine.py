@@ -215,6 +215,8 @@ class PlaywrightExecutionEngine:
 		self.order_in_progress = False
 		self.last_trade_time = None
 		self.page = None
+		self.task_dispatcher = None
+		self._dispatch_thread_ident = None
 		self.last_error = None
 		self.slippage_limit = 0.5
 		self.fill_tolerance = 0.95
@@ -409,6 +411,22 @@ class PlaywrightExecutionEngine:
 	def set_page(self, page):
 		self.page = page
 
+	def set_task_dispatcher(self, dispatcher):
+		self.task_dispatcher = dispatcher
+
+	def mark_dispatch_thread(self):
+		self._dispatch_thread_ident = threading.get_ident()
+
+	def _run_thread_affine(self, func, timeout_seconds=None):
+		if self._dispatch_thread_ident is not None and threading.get_ident() == self._dispatch_thread_ident:
+			return func()
+		if callable(self.task_dispatcher):
+			return self.task_dispatcher(func, timeout_seconds=timeout_seconds)
+		return func()
+
+	def _should_dispatch(self):
+		return callable(self.task_dispatcher) and threading.get_ident() != self._dispatch_thread_ident
+
 	def set_reconnect_handler(self, handler):
 		self.reconnect_handler = handler
 
@@ -480,6 +498,12 @@ class PlaywrightExecutionEngine:
 		return False
 
 	def login_if_needed(self, username=None, password=None):
+		if self._should_dispatch():
+			return self._run_thread_affine(
+				lambda: self.login_if_needed(username=username, password=password),
+				timeout_seconds=12.0,
+			)
+
 		page = self.page
 		if page is None:
 			if not self._attempt_reconnect():
@@ -559,6 +583,9 @@ class PlaywrightExecutionEngine:
 			return False
 
 	def broker_positions_snapshot(self):
+		if self._should_dispatch():
+			return self._run_thread_affine(self.broker_positions_snapshot, timeout_seconds=4.0)
+
 		page = self.page
 		if page is None:
 			return None
@@ -574,6 +601,9 @@ class PlaywrightExecutionEngine:
 		return [position]
 
 	def broker_equity_snapshot(self):
+		if self._should_dispatch():
+			return self._run_thread_affine(self.broker_equity_snapshot, timeout_seconds=4.0)
+
 		page = self.page
 		if page is None:
 			return None
@@ -598,6 +628,12 @@ class PlaywrightExecutionEngine:
 		return None
 
 	def broker_quote_snapshot(self, expected_symbols=None):
+		if self._should_dispatch():
+			return self._run_thread_affine(
+				lambda: self.broker_quote_snapshot(expected_symbols=expected_symbols),
+				timeout_seconds=4.0,
+			)
+
 		page = self.page
 		if page is None:
 			if not self._attempt_reconnect():
@@ -675,6 +711,9 @@ class PlaywrightExecutionEngine:
 		}
 
 	def order_panel_snapshot(self):
+		if self._should_dispatch():
+			return self._run_thread_affine(self.order_panel_snapshot, timeout_seconds=4.0)
+
 		page = self.page
 		if page is None:
 			return {
@@ -720,6 +759,9 @@ class PlaywrightExecutionEngine:
 		}
 
 	def calibrate_selectors(self, save: bool = True):
+		if self._should_dispatch():
+			return self._run_thread_affine(lambda: self.calibrate_selectors(save=save), timeout_seconds=20.0)
+
 		page = self.page
 		if page is None:
 			return {"ok": False, "reason": "page_unavailable"}
@@ -766,6 +808,47 @@ class PlaywrightExecutionEngine:
 	def _normalize_symbol(self, value):
 		text = str(value or "").upper().replace("/", "").strip()
 		return re.sub(r"[^A-Z0-9]", "", text)
+
+	def _symbol_matches(self, actual, expected):
+		actual_norm = self._normalize_symbol(actual)
+		expected_norm = self._normalize_symbol(expected)
+		if not expected_norm:
+			return True
+		if not actual_norm:
+			return False
+		if actual_norm == expected_norm:
+			return True
+
+		# Broker symbols can vary across BTC aliases.
+		btc_aliases = {"BTC", "BTCUSD", "BTCUSDT"}
+		if actual_norm in btc_aliases and expected_norm in btc_aliases:
+			return True
+		return False
+
+	def _ensure_open_positions_panel(self, page):
+		selectors = [
+			"[data-testid='open-positions-tab']",
+			"[data-testid*='open-positions'][data-testid*='tab']",
+			"button:has-text('Open Positions')",
+		]
+		for selector in selectors:
+			try:
+				loc = page.locator(selector)
+				if loc.count() <= 0:
+					continue
+				tab = loc.first
+				try:
+					tab.click(timeout=900)
+				except Exception:
+					try:
+						tab.click(timeout=900, force=True)
+					except Exception:
+						continue
+				time.sleep(0.08)
+				return True
+			except Exception:
+				continue
+		return False
 
 	def _active_order_symbol(self, page):
 		raw = self._first_visible_text(page, [
@@ -831,6 +914,12 @@ class PlaywrightExecutionEngine:
 		return False
 
 	def discover_broker_symbols(self, page, limit=300, include_quotes=True):
+		if self._should_dispatch():
+			return self._run_thread_affine(
+				lambda: self.discover_broker_symbols(page, limit=limit, include_quotes=include_quotes),
+				timeout_seconds=15.0,
+			)
+
 		max_items = max(10, min(int(limit or 300), 2000))
 		nodes = [
 			"[data-testid='instrument-symbol-name-wrapper']",
@@ -938,7 +1027,51 @@ class PlaywrightExecutionEngine:
 		except Exception:
 			return False
 
+	def _open_position_rows(self, page):
+		self._ensure_open_positions_panel(page)
+		selectors = [
+			"[data-testid='open-positions-desktop-list-row']",
+			"[data-testid*='open-positions'][data-testid*='row']",
+			"[data-testid*='open-position'][data-testid*='row']",
+			"[data-testid*='position'][data-testid*='row']",
+			"[data-testid='position-row']",
+			"[data-testid='positions-row']",
+		]
+		for selector in selectors:
+			try:
+				loc = page.locator(selector)
+				if int(loc.count()) > 0:
+					return loc
+			except Exception:
+				continue
+		return None
+
+	def _row_symbol_text(self, row):
+		selectors = [
+			"[data-testid='instrument-symbol-name-wrapper']",
+			"[data-testid='position-symbol']",
+			"[data-testid*='position-symbol']",
+			"[data-testid='symbol-name']",
+		]
+		for selector in selectors:
+			try:
+				loc = row.locator(selector)
+				if int(loc.count()) <= 0:
+					continue
+				text = str(loc.first.inner_text() or "").strip()
+				if text:
+					return text
+			except Exception:
+				continue
+		return None
+
 	def close_position_immediately(self, page, symbol=None, max_rows=20):
+		if self._should_dispatch():
+			return self._run_thread_affine(
+				lambda: self.close_position_immediately(page, symbol=symbol, max_rows=max_rows),
+				timeout_seconds=12.0,
+			)
+
 		target_norm = self._normalize_symbol(symbol)
 
 		def _click_button(btn):
@@ -956,21 +1089,30 @@ class PlaywrightExecutionEngine:
 
 		closed_any = False
 		try:
-			rows = page.locator("[data-testid='open-positions-desktop-list-row']")
+			rows = self._open_position_rows(page)
+			if rows is None:
+				raise RuntimeError("open_position_rows_not_found")
 			count = min(int(rows.count()), max(1, int(max_rows)))
 			for i in range(count):
 				row = rows.nth(i)
-				row_symbol = None
-				try:
-					row_symbol = str(row.locator("[data-testid='instrument-symbol-name-wrapper']").first.inner_text() or "").strip()
-				except Exception:
-					row_symbol = None
-				if target_norm and self._normalize_symbol(row_symbol) not in {target_norm}:
+				row_symbol = self._row_symbol_text(row)
+				if target_norm and not self._symbol_matches(row_symbol, target_norm):
 					continue
-				btn = row.locator("[data-testid='close-position-button']")
-				if btn.count() <= 0:
-					btn = row.locator("[data-testid*='close-position']")
-				if btn.count() <= 0:
+				btn = None
+				for selector in [
+					"[data-testid='close-position-button']",
+					"[data-testid*='close-position']",
+					"button:has-text('Close')",
+					"button:has-text('Close Position')",
+				]:
+					try:
+						candidate = row.locator(selector)
+						if candidate.count() > 0:
+							btn = candidate
+							break
+					except Exception:
+						continue
+				if btn is None or btn.count() <= 0:
 					continue
 				try:
 					_click_button(btn.first)
@@ -989,6 +1131,8 @@ class PlaywrightExecutionEngine:
 			"[data-testid='position-close-button']",
 			"[data-testid='close-position-button']",
 			"[data-testid*='close-position']",
+			"button:has-text('Close Position')",
+			"button:has-text('Close')",
 		]
 		for selector in selectors:
 			try:
@@ -1012,11 +1156,19 @@ class PlaywrightExecutionEngine:
 			return False
 
 	def close_position_fraction(self, page, symbol=None, fraction=0.5):
+		if self._should_dispatch():
+			return self._run_thread_affine(
+				lambda: self.close_position_fraction(page, symbol=symbol, fraction=fraction),
+				timeout_seconds=15.0,
+			)
+
 		target_norm = self._normalize_symbol(symbol)
 		fraction = max(0.01, min(0.99, float(fraction or 0.5)))
 
 		try:
-			rows = page.locator("[data-testid='open-positions-desktop-list-row']")
+			rows = self._open_position_rows(page)
+			if rows is None:
+				return {"ok": False, "reason": "positions_unavailable"}
 			count = int(rows.count())
 		except Exception:
 			return {"ok": False, "reason": "positions_unavailable"}
@@ -1024,14 +1176,15 @@ class PlaywrightExecutionEngine:
 		selected = None
 		selected_symbol = None
 		selected_volume = None
+		fallback_row = None
+		fallback_symbol = None
 		for i in range(min(count, 25)):
 			row = rows.nth(i)
-			row_symbol = None
-			try:
-				row_symbol = str(row.locator("[data-testid='instrument-symbol-name-wrapper']").first.inner_text() or "").strip()
-			except Exception:
-				row_symbol = None
-			if target_norm and self._normalize_symbol(row_symbol) not in {target_norm}:
+			row_symbol = self._row_symbol_text(row)
+			if fallback_row is None:
+				fallback_row = row
+				fallback_symbol = row_symbol
+			if target_norm and not self._symbol_matches(row_symbol, target_norm):
 				continue
 			selected = row
 			selected_symbol = row_symbol
@@ -1043,11 +1196,21 @@ class PlaywrightExecutionEngine:
 			break
 
 		if selected is None:
-			return {"ok": False, "reason": "symbol_not_found", "symbol": symbol}
+			# Brokers may expose BTC symbols with slight naming variants (BTC/BTCUSD/BTCUSDT).
+			# If only one row is open, use it as a safe fallback for partial close automation.
+			if target_norm and count == 1 and fallback_row is not None:
+				selected = fallback_row
+				selected_symbol = fallback_symbol
+			else:
+				return {"ok": False, "reason": "symbol_not_found", "symbol": symbol}
 
 		btn = selected.locator("[data-testid='close-position-button']")
 		if btn.count() <= 0:
 			btn = selected.locator("[data-testid*='close-position']")
+		if btn.count() <= 0:
+			btn = selected.locator("button:has-text('Close Position')")
+		if btn.count() <= 0:
+			btn = selected.locator("button:has-text('Close')")
 		if btn.count() <= 0:
 			return {"ok": False, "reason": "close_button_not_found", "symbol": selected_symbol}
 
@@ -1456,6 +1619,12 @@ class PlaywrightExecutionEngine:
 		return False, None
 
 	def recover_from_selector_failure(self, force_reconnect=False):
+		if self._should_dispatch():
+			return self._run_thread_affine(
+				lambda: self.recover_from_selector_failure(force_reconnect=force_reconnect),
+				timeout_seconds=12.0,
+			)
+
 		health = self.execution_guard.health_snapshot()
 		execution_halted = str(health.get("execution_status") or "").upper() == "HALTED"
 		if not self.selector_halted and not force_reconnect and not execution_halted:
@@ -1481,8 +1650,9 @@ class PlaywrightExecutionEngine:
 
 		return {"ok": False, "reason": "Selectors still unavailable", "dom_ok": dom_ok, "quote_ok": quote_ok}
 
-	def _read_position(self, page, target_symbol=None):
+	def _read_position(self, page, target_symbol=None, fallback_entry_price=None):
 		target_norm = self._normalize_symbol(target_symbol)
+		self._ensure_open_positions_panel(page)
 		entry_price = self._first_available_price(page, [
 			"[data-testid='position-entry-price']",
 			"[data-testid*='entry-price']",
@@ -1516,23 +1686,20 @@ class PlaywrightExecutionEngine:
 		])
 
 		source = "primary"
+		selected_row = None
+		selected_symbol = None
 		if entry_price is None:
 			try:
-				row = page.locator("[data-testid='open-positions-desktop-list-row']")
+				row = self._open_position_rows(page)
+				if row is None:
+					raise RuntimeError("open_position_rows_not_found")
 				if row.count() > 0:
-					selected_row = None
-					selected_symbol = None
 					count = int(row.count())
 					for i in range(min(count, 30)):
 						candidate = row.nth(i)
-						cand_symbol = None
-						try:
-							s_text = candidate.locator("[data-testid='instrument-symbol-name-wrapper']").first.inner_text()
-							cand_symbol = str(s_text or "").strip()
-						except Exception:
-							cand_symbol = None
+						cand_symbol = self._row_symbol_text(candidate)
 						cand_norm = self._normalize_symbol(cand_symbol)
-						if target_norm and cand_norm and cand_norm == target_norm:
+						if target_norm and cand_norm and self._symbol_matches(cand_norm, target_norm):
 							selected_row = candidate
 							selected_symbol = cand_symbol
 							break
@@ -1554,6 +1721,25 @@ class PlaywrightExecutionEngine:
 			except Exception:
 				pass
 
+		# Some broker layouts hide entry price in position rows. If a row exists,
+		# use a safe fallback price so fill detection can still proceed.
+		if entry_price is None and selected_row is not None:
+			try:
+				entry_price = float(fallback_entry_price) if fallback_entry_price is not None else None
+			except Exception:
+				entry_price = None
+			if entry_price is None or entry_price <= 0.0:
+				entry_price = self._first_available_price(
+					page,
+					[
+						*self.selector_aliases.get("buy_price", []),
+						*self.selector_aliases.get("sell_price", []),
+						*self.selector_aliases.get("quote", []),
+					],
+				)
+			if entry_price is not None and float(entry_price) > 0.0:
+				source = "open_positions_row_fallback"
+
 		if entry_price is None:
 			return None
 
@@ -1574,6 +1760,8 @@ class PlaywrightExecutionEngine:
 				return 0
 
 		position_selectors = {
+			"open_positions_row_exact": "[data-testid='open-positions-desktop-list-row']",
+			"open_positions_row_wild": "[data-testid*='open-position'][data-testid*='row']",
 			"position_row": "[data-testid*='position-row']",
 			"position_entry_price": "[data-testid*='entry-price']",
 			"position_volume": "[data-testid*='position-volume']",
@@ -1581,6 +1769,7 @@ class PlaywrightExecutionEngine:
 			"positions_tab": "[data-testid='open-positions-tab']",
 			"confirm_button": "[data-testid='order-panel-confirm-button']",
 			"overlay_backdrop": ".cdk-overlay-backdrop.cdk-overlay-backdrop-showing",
+			"order_reject_banner": "[data-testid*='reject'], [data-testid*='error'], [data-testid*='notification']",
 		}
 		counts = {key: _count(selector) for key, selector in position_selectors.items()}
 
@@ -1636,14 +1825,14 @@ class PlaywrightExecutionEngine:
 		expected_symbol_raw = str(signal.get("symbol") or "").strip()
 		expected_symbol_norm = self._normalize_symbol(expected_symbol_raw)
 		active_symbol_raw, active_symbol_norm = self._active_order_symbol(page)
-		if expected_symbol_norm and active_symbol_norm and expected_symbol_norm != active_symbol_norm:
+		if expected_symbol_norm and active_symbol_norm and not self._symbol_matches(active_symbol_norm, expected_symbol_norm):
 			switched = False
 			if manual_test_mode:
 				switched = self._try_switch_symbol(page, expected_symbol_raw)
 				if switched:
 					time.sleep(0.4)
 					active_symbol_raw, active_symbol_norm = self._active_order_symbol(page)
-			if expected_symbol_norm != active_symbol_norm:
+			if not self._symbol_matches(active_symbol_norm, expected_symbol_norm):
 				reason = f"Symbol mismatch (expected={expected_symbol_raw}, active={active_symbol_raw})"
 				if not manual_test_mode:
 					self.emergency_halt(reason)
@@ -1689,24 +1878,44 @@ class PlaywrightExecutionEngine:
 			return {"status": "Rejected", "reason": "Invalid direction"}
 
 		confirm_clicked, confirm_selector = self._confirm_order_if_present(page)
+		submit_clicked = bool(clicked)
 
 		fill_timeout = 15.0 if manual_test_mode else None
 		filled, position_data = self.execution_guard.wait_for_fill(
-			lambda: self._read_position(page, target_symbol=expected_symbol_raw),
+			lambda: self._read_position(
+				page,
+				target_symbol=expected_symbol_raw,
+				fallback_entry_price=(button_price if button_price is not None else expected_entry),
+			),
 			timeout_seconds=fill_timeout,
 		)
 		if not filled or not position_data:
 			diagnostics = self._fill_diagnostics(page)
 			if manual_test_mode:
+				partial_plan = {"enabled": False, "reason": "fill_unconfirmed"}
+				if submit_clicked:
+					provisional_entry = button_price if button_price is not None else (expected_entry if expected_entry is not None else requested_price)
+					provisional_position = {
+						"symbol": active_symbol_raw or expected_symbol_raw,
+						"entry_price": provisional_entry,
+						"volume": float(lot_size or 0.0),
+					}
+					try:
+						partial_plan = self._start_partial_watch(signal, provisional_position)
+					except Exception as exc:
+						partial_plan = {"enabled": False, "reason": f"partial_watch_error: {exc}"}
 				return {
 					"status": "SUBMITTED_NO_CONFIRM",
 					"reason": "Fill confirmation timeout",
-					"requested_price": requested_price,
+					"requested_price": button_price if button_price is not None else requested_price,
 					"button_price": button_price,
+					"submit_clicked": submit_clicked,
 					"confirm_clicked": bool(confirm_clicked),
 					"confirm_selector": confirm_selector,
 					"active_symbol": active_symbol_raw,
 					"volume_set": bool(volume_set),
+					"protection_setup": protection_setup,
+					"partial_plan": partial_plan,
 					"diagnostics": diagnostics,
 				}
 			self.emergency_halt("Order timeout - no fill confirmation")
@@ -1721,6 +1930,7 @@ class PlaywrightExecutionEngine:
 				"lot_size": lot_size,
 				"requested_price": requested_price,
 				"button_price": button_price,
+				"submit_clicked": submit_clicked,
 				"entry_price": executed_price,
 				"fill_price": executed_price,
 				"position_data": position_data,
@@ -1794,6 +2004,12 @@ class PlaywrightExecutionEngine:
 		return False
 
 	def execute(self, signal, lot_size, page=None):
+		if self._should_dispatch():
+			return self._run_thread_affine(
+				lambda: self.execute(signal, lot_size, page=page),
+				timeout_seconds=max(15.0, float(self.timeout_seconds or 10) + 10.0),
+			)
+
 		manual_test_mode = str((signal or {}).get("model") or "").upper() == "MANUAL_TEST"
 		if not isinstance(signal, dict):
 			return {"status": "Rejected", "reason": "Invalid signal payload"}

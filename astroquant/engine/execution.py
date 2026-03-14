@@ -9,6 +9,9 @@ class ExecutionEngine:
 	def set_page(self, page):
 		self.playwright.set_page(page)
 
+	def set_task_dispatcher(self, dispatcher):
+		self.playwright.set_task_dispatcher(dispatcher)
+
 	def set_reconnect_handler(self, handler):
 		self.playwright.set_reconnect_handler(handler)
 
