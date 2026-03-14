@@ -68,13 +68,6 @@ echo [INFO] Using Python: %PYTHON_EXE%
 
 cd /d "%ASTROQUANT_DIR%"
 
-echo [INFO] Checking for existing backend on %BASE_URL% ...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $r = Invoke-WebRequest -UseBasicParsing -Uri '%BASE_URL%/status' -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }"
-if %ERRORLEVEL% EQU 0 (
-  echo [OK] Existing backend is already healthy.
-  goto backend_ready
-)
-
 echo [INFO] Stopping stale AstroQuant backend processes if present ...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine -like '*uvicorn backend.main:app*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }"
 timeout /t 2 /nobreak >nul
