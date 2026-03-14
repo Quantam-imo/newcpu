@@ -25,7 +25,7 @@ if not exist "%START_BAT%" (
 )
 
 echo [INFO] Installing Task Scheduler autostart task ...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALL_PS1%" -TaskName "AstroQuant Auto Start" -DelaySeconds 20
+powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALL_PS1%"
 if %ERRORLEVEL% NEQ 0 (
   echo [ERROR] Task installation failed.
   echo [HINT] Check install_autostart_task.ps1 syntax and run as Administrator.

@@ -1,5 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
+# Fixed defaults to avoid PowerShell argument binding/parser issues on some Windows hosts.
 $TaskName = 'AstroQuant Auto Start'
 $DelaySeconds = 20
 
