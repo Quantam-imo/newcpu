@@ -14,7 +14,7 @@ if (-not (Test-Path $BatchPath)) {
 
 $triggerDelay = 'PT{0}S' -f $DelaySeconds
 
-$action = New-ScheduledTaskAction -Execute $BatchPath
+$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument ('/c "{0}"' -f $BatchPath)
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 $trigger.Delay = $triggerDelay
 

@@ -15,7 +15,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = Join-Path '%ASTROQU
 $ErrorActionPreference = 'Stop'
 
 param(
-  [string]$TaskName = 'AstroQuant Auto Start',
+    [string]$TaskName = 'AstroQuant Auto Start',
     [int]$DelaySeconds = 20
 )
 
@@ -23,12 +23,12 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BatchPath = Join-Path $ScriptDir 'start_astroquant.bat'
 
 if (-not (Test-Path $BatchPath)) {
-  throw ('start_astroquant.bat not found at ' + $BatchPath)
+    throw ('start_astroquant.bat not found at ' + $BatchPath)
 }
 
 $triggerDelay = 'PT{0}S' -f $DelaySeconds
 
-$action = New-ScheduledTaskAction -Execute $BatchPath
+$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument ('/c "{0}"' -f $BatchPath)
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 $trigger.Delay = $triggerDelay
 

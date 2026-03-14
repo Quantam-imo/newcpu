@@ -4,6 +4,7 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $AstroQuantDir = (Resolve-Path $ScriptDir).Path
 $WorkspaceDir = (Resolve-Path (Join-Path $AstroQuantDir "..")).Path
 $PythonExe = Join-Path $WorkspaceDir ".venv\Scripts\python.exe"
+$AltPythonExe = Join-Path (Join-Path $WorkspaceDir "..") ".venv\Scripts\python.exe"
 $LogDir = Join-Path $WorkspaceDir "logs"
 $LogFile = Join-Path $LogDir "watchdog.log"
 
@@ -52,8 +53,13 @@ function Send-RecoveryAlert {
 
 function Ensure-Backend {
     if (-not (Test-Path $PythonExe)) {
-        Write-Log "ERROR" "Python executable not found at $PythonExe"
-        return $false
+        if (Test-Path $AltPythonExe) {
+            $script:PythonExe = $AltPythonExe
+        }
+        else {
+            Write-Log "ERROR" "Python executable not found at $PythonExe or $AltPythonExe"
+            return $false
+        }
     }
 
     $running = Get-CimInstance Win32_Process | Where-Object {

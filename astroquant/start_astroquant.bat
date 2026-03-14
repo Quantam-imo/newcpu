@@ -8,6 +8,7 @@ set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%.") do set "ASTROQUANT_DIR=%%~fI"
 set "WORKSPACE_DIR=%ASTROQUANT_DIR%\.."
 set "PYTHON_EXE=%WORKSPACE_DIR%\.venv\Scripts\python.exe"
+set "ALT_PYTHON_EXE=%WORKSPACE_DIR%\..\.venv\Scripts\python.exe"
 set "HOST=127.0.0.1"
 set "PORT=8000"
 set "BASE_URL=http://%HOST%:%PORT%"
@@ -19,10 +20,15 @@ echo [INFO] AstroQuant directory: %ASTROQUANT_DIR%
 echo [INFO] Workspace directory: %WORKSPACE_DIR%
 
 if not exist "%PYTHON_EXE%" (
-  echo [ERROR] Python not found: %PYTHON_EXE%
-  echo [HINT] Create venv at %WORKSPACE_DIR%\.venv first.
-  pause
-  exit /b 1
+  if exist "%ALT_PYTHON_EXE%" (
+    set "PYTHON_EXE=%ALT_PYTHON_EXE%"
+  ) else (
+    echo [ERROR] Python not found.
+    echo [HINT] Checked: %PYTHON_EXE%
+    echo [HINT] Checked: %ALT_PYTHON_EXE%
+    pause
+    exit /b 1
+  )
 )
 
 cd /d "%ASTROQUANT_DIR%"
