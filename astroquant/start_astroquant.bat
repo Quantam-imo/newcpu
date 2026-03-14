@@ -17,20 +17,48 @@ if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 echo [INFO] AstroQuant directory: %ASTROQUANT_DIR%
 echo [INFO] Workspace directory: %WORKSPACE_DIR%
 
-REM Locate Python: prefer workspace .venv, fall back to system python
-set "PYTHON_EXE=%WORKSPACE_DIR%\.venv\Scripts\python.exe"
+REM --- Bootstrap venv if missing ---
+set "VENV_DIR=%WORKSPACE_DIR%\.venv"
+set "PYTHON_EXE=%VENV_DIR%\Scripts\python.exe"
+set "PIP_EXE=%VENV_DIR%\Scripts\pip.exe"
+set "REQS=%WORKSPACE_DIR%\requirements.txt"
+
 if not exist "%PYTHON_EXE%" (
-  for /f "delims=" %%P in ('where python 2^>nul') do (
-    set "PYTHON_EXE=%%P"
-    goto python_found
+  echo [INFO] No .venv found. Creating virtual environment ...
+  where python >nul 2>&1
+  if !ERRORLEVEL! NEQ 0 (
+    echo [ERROR] Python not found on PATH. Install Python 3.11+ and re-run.
+    pause
+    exit /b 1
   )
-  echo [ERROR] Python not found.
-  echo [HINT] Expected venv at: %PYTHON_EXE%
-  echo [HINT] Run:  python -m venv .venv  inside %WORKSPACE_DIR%
+  python -m venv "%VENV_DIR%"
+  if !ERRORLEVEL! NEQ 0 (
+    echo [ERROR] Failed to create .venv
+    pause
+    exit /b 1
+  )
+  echo [OK] Virtual environment created.
+)
+
+if not exist "%PIP_EXE%" (
+  echo [ERROR] pip not found in .venv. Please delete .venv and re-run.
   pause
   exit /b 1
 )
-:python_found
+
+if exist "%REQS%" (
+  echo [INFO] Installing/verifying Python dependencies ...
+  "%PIP_EXE%" install --quiet -r "%REQS%"
+  if !ERRORLEVEL! NEQ 0 (
+    echo [ERROR] pip install failed. Check internet connection and retry.
+    pause
+    exit /b 1
+  )
+  echo [OK] Dependencies ready.
+) else (
+  echo [WARN] requirements.txt not found at %REQS% - skipping dep check.
+)
+
 echo [INFO] Using Python: %PYTHON_EXE%
 
 cd /d "%ASTROQUANT_DIR%"
