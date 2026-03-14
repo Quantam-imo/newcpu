@@ -108,4 +108,9 @@ This sends `/engine/stop`, then stops watchdog and backend processes.
 - Keep `ORDER_EXECUTION_MODE=confirm-token` for safety until fully validated.
 - Review watchdog logs in `logs/watchdog.log`.
 - If dashboard does not load, check backend window output first.
-- Watchdog sends Telegram alert when it restarts backend/engine (if Telegram is configured).
+- Watchdog recovery coverage:
+   - backend process crash -> auto restart
+   - engine not running -> auto start via `/engine/start`
+   - Playwright disconnected/stale -> auto reconnect via `/execution/reconnect?force=true`
+   - Telegram inactive -> auto recovery test via `/telegram/test`
+- Watchdog sends Telegram recovery alerts when recovery actions occur (if Telegram is configured).

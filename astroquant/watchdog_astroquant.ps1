@@ -12,8 +12,11 @@ $HostIp = "127.0.0.1"
 $Port = 8000
 $BaseUrl = "http://$HostIp`:$Port"
 $StatusUrl = "$BaseUrl/status"
+$ExecutionStatusUrl = "$BaseUrl/status/execution"
 $EngineStartUrl = "$BaseUrl/engine/start"
 $EngineStopUrl = "$BaseUrl/engine/stop"
+$ExecutionReconnectUrl = "$BaseUrl/execution/reconnect?force=true"
+$TelegramStatusUrl = "$BaseUrl/telegram/status"
 $TelegramTestUrl = "$BaseUrl/telegram/test"
 
 $Global:AlertCooldownSec = 300
@@ -96,6 +99,76 @@ function Ensure-Engine {
     }
 }
 
+function Ensure-Playwright {
+    try {
+        $exec = Invoke-RestMethod -Method Get -Uri $ExecutionStatusUrl -TimeoutSec 10
+        $connected = $false
+        $statusText = ""
+        $heartbeatState = ""
+
+        if ($null -ne $exec) {
+            $connected = [bool]$exec.connected
+            $statusText = [string]($exec.execution_status)
+            $heartbeatState = [string]($exec.browser_heartbeat_status)
+        }
+
+        $needsReconnect = (-not $connected) -or ($statusText -in @("DISCONNECTED", "HALTED", "ERROR")) -or ($heartbeatState -eq "STALE")
+        if (-not $needsReconnect) {
+            return
+        }
+
+        Write-Log "WARN" "Playwright unhealthy (connected=$connected status=$statusText heartbeat=$heartbeatState). Reconnecting."
+        $reconnectResp = Invoke-RestMethod -Method Post -Uri $ExecutionReconnectUrl -TimeoutSec 20
+        $reconnectStatus = ""
+        if ($null -ne $reconnectResp -and $reconnectResp.PSObject.Properties.Name -contains "status") {
+            $reconnectStatus = [string]$reconnectResp.status
+        }
+        Write-Log "INFO" "Playwright reconnect response status='$reconnectStatus'"
+        Send-RecoveryAlert -Event "Playwright Reconnect" -Detail ("Reconnect triggered (status=" + $reconnectStatus + ")")
+    }
+    catch {
+        Write-Log "WARN" "Playwright recovery failed: $($_.Exception.Message)"
+    }
+}
+
+function Ensure-Telegram {
+    try {
+        $tg = Invoke-RestMethod -Method Get -Uri $TelegramStatusUrl -TimeoutSec 10
+        $configured = [bool]$tg.configured
+        $active = [bool]$tg.active
+        $reason = [string]($tg.reason)
+
+        if (-not $configured) {
+            Write-Log "INFO" "Telegram not configured; skipping recovery."
+            return
+        }
+
+        if ($active) {
+            return
+        }
+
+        Write-Log "WARN" "Telegram inactive (reason='$reason'). Sending watchdog recovery test."
+        $msg = "AstroQuant watchdog: Telegram recovery check"
+        $payload = @{ message = $msg } | ConvertTo-Json -Depth 3
+        $testResp = Invoke-RestMethod -Method Post -Uri $TelegramTestUrl -Body $payload -ContentType "application/json" -TimeoutSec 10
+        $ok = $false
+        if ($null -ne $testResp -and $testResp.PSObject.Properties.Name -contains "ok") {
+            $ok = [bool]$testResp.ok
+        }
+
+        if ($ok) {
+            Write-Log "INFO" "Telegram recovery test succeeded."
+            Send-RecoveryAlert -Event "Telegram Recovery" -Detail "Telegram was inactive and recovered by watchdog test send."
+        }
+        else {
+            Write-Log "WARN" "Telegram recovery test failed."
+        }
+    }
+    catch {
+        Write-Log "WARN" "Telegram health check failed: $($_.Exception.Message)"
+    }
+}
+
 Write-Log "INFO" "Watchdog started. Monitoring AstroQuant every 60 seconds."
 
 while ($true) {
@@ -110,6 +183,8 @@ while ($true) {
             if ($status.StatusCode -eq 200) {
                 Write-Log "INFO" "Backend healthy (200)."
                 Ensure-Engine -ForceAlert:$backendRestarted
+                Ensure-Playwright
+                Ensure-Telegram
             }
             else {
                 Write-Log "WARN" "Backend status code was $($status.StatusCode)."
