@@ -6,9 +6,7 @@ REM Starts backend, starts trading engine via API, opens dashboard, and launches
 
 set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%.") do set "ASTROQUANT_DIR=%%~fI"
-set "WORKSPACE_DIR=%ASTROQUANT_DIR%\.."
-set "PYTHON_EXE=%WORKSPACE_DIR%\.venv\Scripts\python.exe"
-set "ALT_PYTHON_EXE=%WORKSPACE_DIR%\..\.venv\Scripts\python.exe"
+for %%I in ("%ASTROQUANT_DIR%\..") do set "WORKSPACE_DIR=%%~fI"
 set "HOST=127.0.0.1"
 set "PORT=8000"
 set "BASE_URL=http://%HOST%:%PORT%"
@@ -19,17 +17,21 @@ if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 echo [INFO] AstroQuant directory: %ASTROQUANT_DIR%
 echo [INFO] Workspace directory: %WORKSPACE_DIR%
 
+REM Locate Python: prefer workspace .venv, fall back to system python
+set "PYTHON_EXE=%WORKSPACE_DIR%\.venv\Scripts\python.exe"
 if not exist "%PYTHON_EXE%" (
-  if exist "%ALT_PYTHON_EXE%" (
-    set "PYTHON_EXE=%ALT_PYTHON_EXE%"
-  ) else (
-    echo [ERROR] Python not found.
-    echo [HINT] Checked: %PYTHON_EXE%
-    echo [HINT] Checked: %ALT_PYTHON_EXE%
-    pause
-    exit /b 1
+  for /f "delims=" %%P in ('where python 2^>nul') do (
+    set "PYTHON_EXE=%%P"
+    goto python_found
   )
+  echo [ERROR] Python not found.
+  echo [HINT] Expected venv at: %PYTHON_EXE%
+  echo [HINT] Run:  python -m venv .venv  inside %WORKSPACE_DIR%
+  pause
+  exit /b 1
 )
+:python_found
+echo [INFO] Using Python: %PYTHON_EXE%
 
 cd /d "%ASTROQUANT_DIR%"
 
@@ -45,7 +47,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Pr
 timeout /t 2 /nobreak >nul
 
 echo [INFO] Launching backend on %BASE_URL% ...
-start "AstroQuant Backend" cmd /k "\"%PYTHON_EXE%\" -m uvicorn backend.main:app --host %HOST% --port %PORT% --log-level info"
+start "AstroQuant Backend" cmd /k ""%PYTHON_EXE%" -m uvicorn backend.main:app --host %HOST% --port %PORT% --log-level info"
 
 set /a TRIES=0
 :wait_backend
