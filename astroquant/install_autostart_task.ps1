@@ -1,9 +1,7 @@
-param(
-    [string]$TaskName = 'AstroQuant Auto Start',
-    [int]$DelaySeconds = 20
-)
-
 $ErrorActionPreference = 'Stop'
+
+$TaskName = 'AstroQuant Auto Start'
+$DelaySeconds = 20
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $BatchPath = Join-Path $ScriptDir 'start_astroquant.bat'
