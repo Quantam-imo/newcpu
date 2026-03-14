@@ -1688,6 +1688,7 @@ class PlaywrightExecutionEngine:
 		source = "primary"
 		selected_row = None
 		selected_symbol = None
+		target_matched = False
 		if entry_price is None:
 			try:
 				row = self._open_position_rows(page)
@@ -1702,8 +1703,9 @@ class PlaywrightExecutionEngine:
 						if target_norm and cand_norm and self._symbol_matches(cand_norm, target_norm):
 							selected_row = candidate
 							selected_symbol = cand_symbol
+							target_matched = True
 							break
-						if selected_row is None:
+						if not target_norm and selected_row is None:
 							selected_row = candidate
 							selected_symbol = cand_symbol
 
@@ -1720,6 +1722,13 @@ class PlaywrightExecutionEngine:
 						source = "open_positions_row"
 			except Exception:
 				pass
+
+		if target_norm:
+			current_symbol_norm = self._normalize_symbol(symbol)
+			if current_symbol_norm and self._symbol_matches(current_symbol_norm, target_norm):
+				target_matched = True
+			if source.startswith("open_positions_row") and not target_matched:
+				return None
 
 		# Some broker layouts hide entry price in position rows. If a row exists,
 		# use a safe fallback price so fill detection can still proceed.
@@ -1923,6 +1932,25 @@ class PlaywrightExecutionEngine:
 
 		executed_price = float(position_data.get("entry_price"))
 		if manual_test_mode:
+			position_symbol = str((position_data or {}).get("symbol") or "").strip()
+			if expected_symbol_norm and position_symbol and not self._symbol_matches(position_symbol, expected_symbol_raw):
+				diagnostics = self._fill_diagnostics(page)
+				return {
+					"status": "SUBMITTED_NO_CONFIRM",
+					"reason": "Position symbol mismatch after submit",
+					"requested_price": button_price if button_price is not None else requested_price,
+					"button_price": button_price,
+					"submit_clicked": submit_clicked,
+					"confirm_clicked": bool(confirm_clicked),
+					"confirm_selector": confirm_selector,
+					"active_symbol": active_symbol_raw,
+					"position_symbol": position_symbol,
+					"expected_symbol": expected_symbol_raw,
+					"volume_set": bool(volume_set),
+					"protection_setup": protection_setup,
+					"diagnostics": diagnostics,
+				}
+
 			return {
 				"status": "EXECUTED",
 				"model": signal.get("model"),
