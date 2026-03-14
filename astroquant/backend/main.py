@@ -130,7 +130,7 @@ SYMBOL_POINT_VALUE_USD = {
 }
 MIN_EXECUTION_RR_DEFAULT = 1.20
 TEST_ORDER_MIN_LOT = 0.01
-TEST_ORDER_MAX_LOT = 0.50
+TEST_ORDER_MAX_LOT = 0.05
 ADMIN_CONTROL_STORE = AdminControlStore("data/admin_control.db")
 APP_STARTED_AT = time.time()
 JOURNAL_EXPORT_DIR = BASE_DIR / "reports" / "journal_dayend"
