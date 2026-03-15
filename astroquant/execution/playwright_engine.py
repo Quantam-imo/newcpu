@@ -291,7 +291,6 @@ class PlaywrightExecutionEngine:
 			],
 			"advanced_order_toggle": [
 				"[data-testid='advanced-order-risk-mode-toggle']",
-				"[data-testid='toggle-input']",
 				"button:has-text('Advanced Order')",
 				"div:has-text('Advanced Order')",
 				".ui-secondary-button__content:has-text('Advanced Order')",
@@ -304,19 +303,26 @@ class PlaywrightExecutionEngine:
 				"[data-testid='advanced-order-risk-mode-toggle']",
 				"[data-testid='advanced-order-risk-mode-toggle'] [data-testid='toggle-input']",
 				"ui-toggle[data-testid='advanced-order-risk-mode-toggle']",
-				"input[data-testid='toggle-input']",
+			],
+			"trailing_stop_toggle": [
+				"[data-testid='checkbox-label']:has-text('Trailing Stop')",
+				".ui-checkbox__label:has-text('Trailing Stop')",
 			],
 			"stop_loss_toggle": [
 				"trade-tp-sl-toggle-header[mode='sl'] [data-testid='tp-sl-toggle-header-element']",
 				"trade-tp-sl-toggle-header[mode='sl'] [data-testid='toggle-input']",
 				"trade-tp-sl-toggle-header[mode='sl'] ui-toggle",
 				"trade-tp-sl-toggle-header[mode='sl']",
+				".ui-toggle__text:has-text('Stop Loss')",
+				"trade-tp-sl-toggle-header:has(.ui-toggle__text:has-text('Stop Loss'))",
 			],
 			"take_profit_toggle": [
 				"trade-tp-sl-toggle-header[mode='tp'] [data-testid='tp-sl-toggle-header-element']",
 				"trade-tp-sl-toggle-header[mode='tp'] [data-testid='toggle-input']",
 				"trade-tp-sl-toggle-header[mode='tp'] ui-toggle",
 				"trade-tp-sl-toggle-header[mode='tp']",
+				".ui-toggle__text:has-text('Take Profit')",
+				"trade-tp-sl-toggle-header:has(.ui-toggle__text:has-text('Take Profit'))",
 			],
 			"stop_loss_input": [
 				"trade-tp-sl-toggle-header[mode='sl'] input:not([data-testid='toggle-input'])",
