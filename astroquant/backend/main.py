@@ -1876,6 +1876,8 @@ def execution_test_order(
     entry_price: float | None = Query(default=None),
     sl: float | None = Query(default=None),
     tp: float | None = Query(default=None),
+    sl_pips: float | None = Query(default=None),
+    tp_pips: float | None = Query(default=None),
     auto_size: bool = Query(default=False),
     risk_percent: float | None = Query(default=None),
     account_size: float | None = Query(default=None),
@@ -1940,6 +1942,14 @@ def execution_test_order(
 
     sl_value = float(sl) if sl is not None else None
     tp_value = float(tp) if tp is not None else None
+
+    # Convert sl_pips/tp_pips to absolute price levels (price-distance from entry)
+    if sl_pips is not None and sl_value is None and expected_entry is not None:
+        pips_dist = max(0.0, float(sl_pips))
+        sl_value = float(expected_entry) - pips_dist if side == "BUY" else float(expected_entry) + pips_dist
+    if tp_pips is not None and tp_value is None and expected_entry is not None:
+        pips_dist = max(0.0, float(tp_pips))
+        tp_value = float(expected_entry) + pips_dist if side == "BUY" else float(expected_entry) - pips_dist
 
     min_rr_value = max(0.2, min(5.0, float(min_rr or MIN_EXECUTION_RR_DEFAULT)))
     rr_metrics = _compute_rr_metrics(expected_entry, sl_value, tp_value)

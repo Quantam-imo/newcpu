@@ -1468,54 +1468,118 @@ class PlaywrightExecutionEngine:
 				field = locator.first
 
 				try:
-					field.click(timeout=1000)
+					field.click(timeout=1500)
+					time.sleep(0.05)
 					page.keyboard.press("Control+A")
-					page.keyboard.type(value_text, delay=8)
-					page.keyboard.press("Enter")
-					time.sleep(0.05)
+					page.keyboard.type(value_text, delay=10)
+					page.keyboard.press("Tab")
+					time.sleep(0.08)
 					return True
 				except Exception:
 					pass
 
 				try:
-					field.fill(value_text)
-					time.sleep(0.05)
+					field.fill(value_text, timeout=1500)
+					time.sleep(0.08)
 					return True
 				except Exception:
 					pass
 
+				# React-compatible: use nativeInputValueSetter to bypass controlled-input protection
 				try:
-					field.evaluate(
+					result = field.evaluate(
 						"""
 						(el, value) => {
 						  const target = el.matches('input,textarea,[contenteditable="true"]')
 						    ? el
 						    : el.querySelector('input,textarea,[contenteditable="true"]') || el;
-						  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
-						    target.focus();
+						  if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return false;
+						  target.focus();
+						  try {
+						    const nativeSetter = Object.getOwnPropertyDescriptor(
+						      window.HTMLInputElement.prototype, 'value'
+						    ).set;
+						    nativeSetter.call(target, String(value));
+						  } catch(e) {
 						    target.value = String(value);
-						    target.dispatchEvent(new Event('input', { bubbles: true }));
-						    target.dispatchEvent(new Event('change', { bubbles: true }));
-						    return true;
 						  }
-						  return false;
+						  target.dispatchEvent(new Event('input',  { bubbles: true }));
+						  target.dispatchEvent(new Event('change', { bubbles: true }));
+						  target.dispatchEvent(new KeyboardEvent('keydown',  { key: 'Tab', bubbles: true }));
+						  target.dispatchEvent(new KeyboardEvent('keyup',    { key: 'Tab', bubbles: true }));
+						  return true;
 						}
 						""",
 						value_text,
 					)
-					time.sleep(0.05)
-					return True
+					time.sleep(0.08)
+					if result:
+						return True
 				except Exception:
-					continue
+					pass
 			except Exception:
 				continue
 		return False
 
+	# Candidate selectors for the SL / TP section toggle / expand button in MatchTrader-style UIs.
+	# Clicking these reveals the collapsed SL/TP input row before we try to fill it.
+	_SL_TOGGLE_SELECTORS = [
+		"[data-testid='mw-order-panel'] [data-testid*='stop-loss'] [data-testid*='toggle']",
+		"[data-testid='mw-order-panel'] [data-testid*='stop-loss']:not(input)",
+		"[data-testid*='stop-loss-toggle']",
+		"[data-testid*='sl-toggle']",
+		"label[for*='stopLoss']",
+		"label[for*='stop-loss']",
+		"[data-testid='mw-order-panel'] .stop-loss-label",
+	]
+	_TP_TOGGLE_SELECTORS = [
+		"[data-testid='mw-order-panel'] [data-testid*='take-profit'] [data-testid*='toggle']",
+		"[data-testid='mw-order-panel'] [data-testid*='take-profit']:not(input)",
+		"[data-testid*='take-profit-toggle']",
+		"[data-testid*='tp-toggle']",
+		"label[for*='takeProfit']",
+		"label[for*='take-profit']",
+		"[data-testid='mw-order-panel'] .take-profit-label",
+	]
+
+	def _try_reveal_sl_tp_inputs(self, page):
+		"""Click SL/TP section toggle buttons if the inputs are collapsed/disabled."""
+		for sel in self._SL_TOGGLE_SELECTORS:
+			try:
+				loc = page.locator(sel)
+				if loc.count() > 0:
+					loc.first.click(timeout=800, force=True)
+					time.sleep(0.12)
+					break
+			except Exception:
+				continue
+		for sel in self._TP_TOGGLE_SELECTORS:
+			try:
+				loc = page.locator(sel)
+				if loc.count() > 0:
+					loc.first.click(timeout=800, force=True)
+					time.sleep(0.12)
+					break
+			except Exception:
+				continue
+
 	def _configure_protection(self, page, signal):
 		sl = signal.get("sl")
 		tp = signal.get("tp")
+		if sl is None and tp is None:
+			return {"sl_requested": None, "tp_requested": None, "sl_set": False, "tp_set": False}
+		# Attempt to reveal collapsed SL/TP sections before filling
+		self._try_reveal_sl_tp_inputs(page)
+		time.sleep(0.15)
 		sl_set = self._set_price_input(page, self.selector_aliases.get("stop_loss_input", []), sl) if sl is not None else False
 		tp_set = self._set_price_input(page, self.selector_aliases.get("take_profit_input", []), tp) if tp is not None else False
+		# Retry once if either failed — toggling may have just finished animating
+		if sl is not None and not sl_set:
+			time.sleep(0.2)
+			sl_set = self._set_price_input(page, self.selector_aliases.get("stop_loss_input", []), sl)
+		if tp is not None and not tp_set:
+			time.sleep(0.2)
+			tp_set = self._set_price_input(page, self.selector_aliases.get("take_profit_input", []), tp)
 		return {
 			"sl_requested": sl,
 			"tp_requested": tp,
