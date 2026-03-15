@@ -431,8 +431,13 @@ class PlaywrightExecutionEngine:
 		self.reconnect_handler = handler
 
 	def emergency_halt(self, reason):
-		self.last_error = str(reason)
-		self.execution_guard.halt(reason)
+		reason_text = str(reason)
+		health = self.execution_guard.health_snapshot()
+		if str(health.get("execution_status") or "").upper() == "HALTED" and str(health.get("last_error") or "") == reason_text:
+			self.last_error = reason_text
+			return
+		self.last_error = reason_text
+		self.execution_guard.halt(reason_text)
 
 	def execution_health(self):
 		snapshot = self.execution_guard.health_snapshot()

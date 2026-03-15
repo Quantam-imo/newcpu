@@ -95,24 +95,31 @@ class PositionReconciliationEngine:
                     "broker_volume": bvol,
                 })
 
+        internal_count = len(internal)
+        broker_only_positions = bool(internal_count == 0 and unexpected_on_broker and not missing_on_broker and not volume_mismatches)
+
         mismatch = bool(missing_on_broker or unexpected_on_broker or volume_mismatches)
-        if mismatch:
+        if broker_only_positions:
+            # During manual/live probes broker can contain positions that are not mirrored
+            # in internal state. Treat this as non-halting telemetry, not a kill condition.
+            self._consecutive_mismatches = 0
+        elif mismatch:
             self._consecutive_mismatches += 1
         else:
             self._consecutive_mismatches = 0
 
-        hard_halt = self._consecutive_mismatches >= self.mismatch_limit
+        hard_halt = (not broker_only_positions) and (self._consecutive_mismatches >= self.mismatch_limit)
         reason = None
         if hard_halt:
             reason = "Position reconciliation mismatch"
 
-        status = "MISMATCH" if mismatch else "OK"
+        status = "BROKER_ONLY" if broker_only_positions else ("MISMATCH" if mismatch else "OK")
         self._last_snapshot = {
             "status": status,
             "hard_halt": hard_halt,
             "reason": reason,
             "timestamp": now,
-            "internal_count": len(internal),
+            "internal_count": internal_count,
             "broker_count": len(broker),
             "missing_on_broker": missing_on_broker,
             "unexpected_on_broker": unexpected_on_broker,
