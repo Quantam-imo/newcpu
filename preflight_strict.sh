@@ -139,6 +139,36 @@ else
   fail "Cannot reach $API_BASE/status/execution"
 fi
 
+if sltp_json=$(curl -fsS --max-time 8 "$API_BASE/execution/debug_sl_tp_dom" 2>/dev/null); then
+  sltp_eval=$(printf '%s' "$sltp_json" | /workspaces/newcpu/.venv/bin/python - <<'PY'
+import json,sys
+try:
+    data=json.load(sys.stdin)
+except Exception:
+    print("BAD_JSON")
+    raise SystemExit(0)
+status=str(data.get("status") or "").lower()
+if status != "ok":
+    print("NOT_OK")
+    raise SystemExit(0)
+inputs=data.get("inputs_found") or []
+print("INPUTS_PRESENT" if len(inputs) > 0 else "NO_INPUTS")
+PY
+)
+
+  if [[ "$sltp_eval" == "INPUTS_PRESENT" ]]; then
+    pass "SL/TP controls detected in current broker UI"
+  elif [[ "$sltp_eval" == "NO_INPUTS" ]]; then
+    fail "SL/TP controls not detected in broker UI (inputs_found=0)"
+  elif [[ "$sltp_eval" == "NOT_OK" ]]; then
+    fail "SL/TP debug endpoint returned non-ok status"
+  else
+    fail "SL/TP debug endpoint returned invalid JSON"
+  fi
+else
+  fail "Cannot reach $API_BASE/execution/debug_sl_tp_dom"
+fi
+
 echo ""
 echo "Summary: $PASS_COUNT passed, $FAIL_COUNT failed"
 

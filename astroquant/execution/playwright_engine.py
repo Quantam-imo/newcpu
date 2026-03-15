@@ -341,6 +341,7 @@ class PlaywrightExecutionEngine:
 		self.retry_backoff_seconds = 0.9
 		self.fixed_lot_size = float(os.getenv("EXECUTION_FIXED_LOT", "0.2") or 0.2)
 		self.force_fixed_lot = str(os.getenv("EXECUTION_FORCE_FIXED_LOT", "true") or "true").strip().lower() in {"1", "true", "yes", "on"}
+		self.require_protection_controls = str(os.getenv("EXECUTION_REQUIRE_PROTECTION_CONTROLS", "true") or "true").strip().lower() in {"1", "true", "yes", "on"}
 		self._load_selector_profile()
 
 	def _merge_selector_values(self, key, values):
@@ -2153,6 +2154,23 @@ class PlaywrightExecutionEngine:
 			return {"status": "Rejected", "reason": "Volume selector not found"}
 
 		protection_setup = self._configure_protection(page, signal)
+		requested_protection = bool(expected_sl is not None or expected_tp is not None)
+
+		# Hard gate for live safety: if SL/TP controls are not present in current DOM,
+		# do not submit any order that requested protection.
+		if requested_protection and self.require_protection_controls:
+			sl_missing_controls = bool(expected_sl is not None and not bool((protection_setup or {}).get("sl_available")))
+			tp_missing_controls = bool(expected_tp is not None and not bool((protection_setup or {}).get("tp_available")))
+			if sl_missing_controls or tp_missing_controls:
+				return {
+					"status": "Rejected",
+					"reason": "Protection controls unavailable on panel; order blocked before submit",
+					"active_symbol": active_symbol_raw,
+					"volume_set": bool(volume_set),
+					"protection_setup": protection_setup,
+					"protection_required": True,
+					"safety_gate": "pre_submit_protection_controls",
+				}
 
 		button_price = None
 		if direction == "BUY":
@@ -2215,58 +2233,64 @@ class PlaywrightExecutionEngine:
 			return {"status": "Rejected", "reason": "Execution timeout", "diagnostics": diagnostics}
 
 		executed_price = float(position_data.get("entry_price"))
-		if manual_test_mode:
-			if (
-				(expected_sl is not None and not bool((protection_setup or {}).get("sl_set")))
-				or (expected_tp is not None and not bool((protection_setup or {}).get("tp_set")))
-			):
-				post_fill_protection = self._configure_protection_after_fill(
-					page,
-					signal,
-					target_symbol=expected_symbol_raw,
-				)
-				protection_setup = {
-					**(protection_setup or {}),
-					"post_fill": post_fill_protection,
-					"sl_set": bool((protection_setup or {}).get("sl_set")) or bool((post_fill_protection or {}).get("sl_set")),
-					"tp_set": bool((protection_setup or {}).get("tp_set")) or bool((post_fill_protection or {}).get("tp_set")),
-					"sl_available": bool((protection_setup or {}).get("sl_available")) or bool((post_fill_protection or {}).get("sl_available")),
-					"tp_available": bool((protection_setup or {}).get("tp_available")) or bool((post_fill_protection or {}).get("tp_available")),
-				}
 
-			requested_protection = bool(expected_sl is not None or expected_tp is not None)
-			protection_set_ok = (
-				(expected_sl is None or bool((protection_setup or {}).get("sl_set")))
-				and (expected_tp is None or bool((protection_setup or {}).get("tp_set")))
+		# After fill, make one more attempt from position context in case broker only
+		# exposes SL/TP editors post-submit.
+		if requested_protection and (
+			(expected_sl is not None and not bool((protection_setup or {}).get("sl_set")))
+			or (expected_tp is not None and not bool((protection_setup or {}).get("tp_set")))
+		):
+			post_fill_protection = self._configure_protection_after_fill(
+				page,
+				signal,
+				target_symbol=expected_symbol_raw,
 			)
+			protection_setup = {
+				**(protection_setup or {}),
+				"post_fill": post_fill_protection,
+				"sl_set": bool((protection_setup or {}).get("sl_set")) or bool((post_fill_protection or {}).get("sl_set")),
+				"tp_set": bool((protection_setup or {}).get("tp_set")) or bool((post_fill_protection or {}).get("tp_set")),
+				"sl_available": bool((protection_setup or {}).get("sl_available")) or bool((post_fill_protection or {}).get("sl_available")),
+				"tp_available": bool((protection_setup or {}).get("tp_available")) or bool((post_fill_protection or {}).get("tp_available")),
+			}
 
-			# Safety-first for manual/live probes: never leave a newly opened trade unprotected.
-			# If SL/TP was requested but not actually set, force-close the position immediately.
-			if requested_protection and not protection_set_ok:
+		protection_set_ok = (
+			(expected_sl is None or bool((protection_setup or {}).get("sl_set")))
+			and (expected_tp is None or bool((protection_setup or {}).get("tp_set")))
+		)
+		protection_available_ok = (
+			(expected_sl is None or bool((protection_setup or {}).get("sl_available")))
+			and (expected_tp is None or bool((protection_setup or {}).get("tp_available")))
+		)
+
+		if requested_protection and (not protection_set_ok or (self.require_protection_controls and not protection_available_ok)):
+			auto_closed = False
+			try:
+				auto_closed = bool(self.close_position_immediately(page, symbol=expected_symbol_raw, max_rows=30))
+			except Exception:
 				auto_closed = False
-				try:
-					auto_closed = bool(self.close_position_immediately(page, symbol=expected_symbol_raw, max_rows=30))
-				except Exception:
-					auto_closed = False
-				time.sleep(0.2)
-				diagnostics = self._fill_diagnostics(page)
-				return {
-					"status": "Rejected",
-					"reason": "Protection not set; position auto-closed for safety",
-					"requested_price": button_price if button_price is not None else requested_price,
-					"button_price": button_price,
-					"submit_clicked": submit_clicked,
-					"confirm_clicked": bool(confirm_clicked),
-					"confirm_selector": confirm_selector,
-					"active_symbol": active_symbol_raw,
-					"volume_set": bool(volume_set),
-					"protection_setup": protection_setup,
-					"position_data": position_data,
-					"auto_close_attempted": True,
-					"auto_closed": bool(auto_closed),
-					"diagnostics": diagnostics,
-				}
+			time.sleep(0.2)
+			diagnostics = self._fill_diagnostics(page)
+			if not manual_test_mode:
+				self.emergency_halt("Protection not set after execution")
+			return {
+				"status": "Rejected",
+				"reason": "Protection not set after execution; position auto-closed for safety",
+				"requested_price": button_price if button_price is not None else requested_price,
+				"button_price": button_price,
+				"submit_clicked": submit_clicked,
+				"confirm_clicked": bool(confirm_clicked),
+				"confirm_selector": confirm_selector,
+				"active_symbol": active_symbol_raw,
+				"volume_set": bool(volume_set),
+				"protection_setup": protection_setup,
+				"position_data": position_data,
+				"auto_close_attempted": True,
+				"auto_closed": bool(auto_closed),
+				"diagnostics": diagnostics,
+			}
 
+		if manual_test_mode:
 			missing_protection = (
 				(
 					expected_sl is not None
@@ -2351,7 +2375,7 @@ class PlaywrightExecutionEngine:
 						"diagnostics": diagnostics,
 					}
 
-			partial_plan = self._start_partial_watch(signal, position_data)
+			partial_plan = self._start_partial_watch(signal, position_data) if protection_set_ok else {"enabled": False, "reason": "protection_not_confirmed"}
 
 			return {
 				"status": "EXECUTED",
@@ -2397,7 +2421,7 @@ class PlaywrightExecutionEngine:
 			self.emergency_halt(verify_reason)
 			return {"status": "Rejected", "reason": verify_reason}
 
-		partial_plan = self._start_partial_watch(signal, position_data)
+		partial_plan = self._start_partial_watch(signal, position_data) if protection_set_ok else {"enabled": False, "reason": "protection_not_confirmed"}
 
 		return {
 			"status": "EXECUTED",
