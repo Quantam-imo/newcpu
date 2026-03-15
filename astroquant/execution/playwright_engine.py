@@ -1634,7 +1634,32 @@ class PlaywrightExecutionEngine:
 		sl = signal.get("sl")
 		tp = signal.get("tp")
 		if sl is None and tp is None:
-			return {"sl_requested": None, "tp_requested": None, "sl_set": False, "tp_set": False}
+			return {
+				"sl_requested": None,
+				"tp_requested": None,
+				"sl_available": False,
+				"tp_available": False,
+				"sl_set": False,
+				"tp_set": False,
+			}
+
+		sl_inputs_available = False
+		tp_inputs_available = False
+		for sel in self.selector_aliases.get("stop_loss_input", []):
+			try:
+				if page.locator(sel).count() > 0:
+					sl_inputs_available = True
+					break
+			except Exception:
+				continue
+		for sel in self.selector_aliases.get("take_profit_input", []):
+			try:
+				if page.locator(sel).count() > 0:
+					tp_inputs_available = True
+					break
+			except Exception:
+				continue
+
 		# Attempt to reveal collapsed SL/TP sections before filling
 		self._try_reveal_sl_tp_inputs(page)
 		time.sleep(0.15)
@@ -1650,8 +1675,94 @@ class PlaywrightExecutionEngine:
 		return {
 			"sl_requested": sl,
 			"tp_requested": tp,
+			"sl_available": bool(sl_inputs_available),
+			"tp_available": bool(tp_inputs_available),
 			"sl_set": bool(sl_set),
 			"tp_set": bool(tp_set),
+		}
+
+	def _configure_protection_after_fill(self, page, signal, target_symbol=None):
+		"""Attempt SL/TP apply from open-position context when order panel has no inputs."""
+		sl = signal.get("sl")
+		tp = signal.get("tp")
+		if sl is None and tp is None:
+			return {
+				"sl_requested": None,
+				"tp_requested": None,
+				"sl_available": False,
+				"tp_available": False,
+				"sl_set": False,
+				"tp_set": False,
+				"source": "post_fill",
+			}
+
+		try:
+			self._ensure_open_positions_panel(page)
+		except Exception:
+			pass
+
+		try:
+			rows = self._open_position_rows(page)
+			if rows is not None and rows.count() > 0:
+				target_norm = self._normalize_symbol(target_symbol)
+				selected = None
+				for i in range(min(int(rows.count()), 30)):
+					candidate = rows.nth(i)
+					cand_symbol = self._row_symbol_text(candidate)
+					if target_norm and not self._symbol_matches(cand_symbol, target_norm):
+						continue
+					selected = candidate
+					break
+				if selected is not None:
+					try:
+						selected.click(timeout=1200)
+					except Exception:
+						try:
+							selected.click(timeout=1200, force=True)
+						except Exception:
+							pass
+					time.sleep(0.1)
+		except Exception:
+			pass
+
+		# Broader selectors in case SL/TP editors only exist in position row/dialog.
+		fallback_sl_selectors = [
+			"[data-testid*='position-sl'] input",
+			"[data-testid*='stop-loss'] input",
+			"input[name*='stopLoss']",
+			"input[name*='stop_loss']",
+			"input[placeholder*='SL']",
+			"input[placeholder*='Stop']",
+		]
+		fallback_tp_selectors = [
+			"[data-testid*='position-tp'] input",
+			"[data-testid*='take-profit'] input",
+			"input[name*='takeProfit']",
+			"input[name*='take_profit']",
+			"input[placeholder*='TP']",
+			"input[placeholder*='Take']",
+		]
+
+		sl_available = any(page.locator(sel).count() > 0 for sel in fallback_sl_selectors)
+		tp_available = any(page.locator(sel).count() > 0 for sel in fallback_tp_selectors)
+
+		sl_set = self._set_price_input(page, fallback_sl_selectors, sl) if sl is not None else False
+		tp_set = self._set_price_input(page, fallback_tp_selectors, tp) if tp is not None else False
+		if sl is not None and not sl_set:
+			time.sleep(0.15)
+			sl_set = self._set_price_input(page, fallback_sl_selectors, sl)
+		if tp is not None and not tp_set:
+			time.sleep(0.15)
+			tp_set = self._set_price_input(page, fallback_tp_selectors, tp)
+
+		return {
+			"sl_requested": sl,
+			"tp_requested": tp,
+			"sl_available": bool(sl_available),
+			"tp_available": bool(tp_available),
+			"sl_set": bool(sl_set),
+			"tp_set": bool(tp_set),
+			"source": "post_fill",
 		}
 
 	def _dismiss_overlay_backdrop(self, page):
@@ -1816,16 +1927,14 @@ class PlaywrightExecutionEngine:
 		symbol = self._first_visible_text(page, [
 			"[data-testid='position-symbol']",
 			"[data-testid*='position-symbol']",
-			"[data-testid='quotation-symbol']",
-			"[data-testid='instrument-symbol']",
-			"[data-testid='instrument-symbol-name-wrapper']",
+			"[data-testid='open-position-symbol']",
 		])
 
 		source = "primary"
 		selected_row = None
 		selected_symbol = None
 		target_matched = False
-		if entry_price is None:
+		if entry_price is None or target_norm:
 			try:
 				row = self._open_position_rows(page)
 				if row is None:
@@ -1846,15 +1955,16 @@ class PlaywrightExecutionEngine:
 							selected_symbol = cand_symbol
 
 					if selected_row is not None:
-						if symbol is None:
-							symbol = selected_symbol or symbol
+						if selected_symbol:
+							symbol = selected_symbol
 						if volume is None:
 							try:
 								v_text = selected_row.locator("[data-testid='open-position-volume']").first.inner_text()
 								volume = self._parse_price(v_text)
 							except Exception:
 								pass
-						entry_price = self._first_available_price(page, self.selector_aliases.get("quote", []))
+						if entry_price is None:
+							entry_price = self._first_available_price(page, self.selector_aliases.get("quote", []))
 						source = "open_positions_row"
 			except Exception:
 				pass
@@ -2106,9 +2216,35 @@ class PlaywrightExecutionEngine:
 
 		executed_price = float(position_data.get("entry_price"))
 		if manual_test_mode:
-			missing_protection = (
+			if (
 				(expected_sl is not None and not bool((protection_setup or {}).get("sl_set")))
 				or (expected_tp is not None and not bool((protection_setup or {}).get("tp_set")))
+			):
+				post_fill_protection = self._configure_protection_after_fill(
+					page,
+					signal,
+					target_symbol=expected_symbol_raw,
+				)
+				protection_setup = {
+					**(protection_setup or {}),
+					"post_fill": post_fill_protection,
+					"sl_set": bool((protection_setup or {}).get("sl_set")) or bool((post_fill_protection or {}).get("sl_set")),
+					"tp_set": bool((protection_setup or {}).get("tp_set")) or bool((post_fill_protection or {}).get("tp_set")),
+					"sl_available": bool((protection_setup or {}).get("sl_available")) or bool((post_fill_protection or {}).get("sl_available")),
+					"tp_available": bool((protection_setup or {}).get("tp_available")) or bool((post_fill_protection or {}).get("tp_available")),
+				}
+
+			missing_protection = (
+				(
+					expected_sl is not None
+					and bool((protection_setup or {}).get("sl_available"))
+					and not bool((protection_setup or {}).get("sl_set"))
+				)
+				or (
+					expected_tp is not None
+					and bool((protection_setup or {}).get("tp_available"))
+					and not bool((protection_setup or {}).get("tp_set"))
+				)
 			)
 			if missing_protection:
 				diagnostics = self._fill_diagnostics(page)
