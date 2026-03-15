@@ -290,12 +290,42 @@ class PlaywrightExecutionEngine:
 				"[data-testid='checkbox-input']",
 			],
 			"advanced_order_toggle": [
+				"[data-testid='advanced-order-risk-mode-toggle']",
+				"[data-testid='toggle-input']",
 				"button:has-text('Advanced Order')",
+				"div:has-text('Advanced Order')",
 				".ui-secondary-button__content:has-text('Advanced Order')",
+				".trade-advanced-order-volume-selector__volume-label",
+				"[class*='advanced-order'] [class*='volume-label']",
 				"[data-testid*='advanced-order']",
 				"[class*='secondary-button'] [data-testid='icon-link'][xlink\\:href*='squares-plus']",
 			],
+			"advanced_order_risk_toggle": [
+				"[data-testid='advanced-order-risk-mode-toggle']",
+				"[data-testid='advanced-order-risk-mode-toggle'] [data-testid='toggle-input']",
+				"ui-toggle[data-testid='advanced-order-risk-mode-toggle']",
+				"input[data-testid='toggle-input']",
+			],
+			"stop_loss_toggle": [
+				"trade-tp-sl-toggle-header[mode='sl'] [data-testid='tp-sl-toggle-header-element']",
+				"trade-tp-sl-toggle-header[mode='sl'] [data-testid='toggle-input']",
+				"trade-tp-sl-toggle-header[mode='sl'] ui-toggle",
+				"trade-tp-sl-toggle-header[mode='sl']",
+			],
+			"take_profit_toggle": [
+				"trade-tp-sl-toggle-header[mode='tp'] [data-testid='tp-sl-toggle-header-element']",
+				"trade-tp-sl-toggle-header[mode='tp'] [data-testid='toggle-input']",
+				"trade-tp-sl-toggle-header[mode='tp'] ui-toggle",
+				"trade-tp-sl-toggle-header[mode='tp']",
+			],
 			"stop_loss_input": [
+				"trade-tp-sl-toggle-header[mode='sl'] input:not([data-testid='toggle-input'])",
+				"trade-tp-sl-toggle-header[mode='sl'] + * input",
+				"[data-testid*='advanced-order'][data-testid*='stop-loss'] input",
+				"[class*='advanced-order'] [data-testid*='stop-loss'] input",
+				"[class*='advanced-order'] input[name*='stopLoss']",
+				"[class*='advanced-order'] input[placeholder*='SL']",
+				"[class*='advanced-order'] input[placeholder*='Stop']",
 				"[data-testid='mw-order-panel'] [data-testid*='stop-loss'] input",
 				"[data-testid='mw-order-panel'] [data-testid='position-sl'] input",
 				"[data-testid*='stop-loss'] input",
@@ -303,6 +333,13 @@ class PlaywrightExecutionEngine:
 				"input[placeholder*='SL']",
 			],
 			"take_profit_input": [
+				"trade-tp-sl-toggle-header[mode='tp'] input:not([data-testid='toggle-input'])",
+				"trade-tp-sl-toggle-header[mode='tp'] + * input",
+				"[data-testid*='advanced-order'][data-testid*='take-profit'] input",
+				"[class*='advanced-order'] [data-testid*='take-profit'] input",
+				"[class*='advanced-order'] input[name*='takeProfit']",
+				"[class*='advanced-order'] input[placeholder*='TP']",
+				"[class*='advanced-order'] input[placeholder*='Take']",
 				"[data-testid='mw-order-panel'] [data-testid*='take-profit'] input",
 				"[data-testid='mw-order-panel'] [data-testid='position-tp'] input",
 				"[data-testid*='take-profit'] input",
@@ -406,6 +443,8 @@ class PlaywrightExecutionEngine:
 			"login_email": ["login_username"],
 			"login_button": ["login_submit"],
 			"advanced_order": ["advanced_order_toggle"],
+			"sl_toggle": ["stop_loss_toggle"],
+			"tp_toggle": ["take_profit_toggle"],
 			"volume": ["volume"],
 			"lot": ["volume"],
 			"quote": ["quote"],
@@ -1735,6 +1774,32 @@ class PlaywrightExecutionEngine:
 					except Exception:
 						loc.first.click(timeout=1000, force=True)
 					time.sleep(0.2)
+					break
+			except Exception:
+				continue
+
+		for sel in self.selector_aliases.get("stop_loss_toggle", []):
+			try:
+				loc = page.locator(sel)
+				if loc.count() > 0:
+					try:
+						loc.first.click(timeout=1000)
+					except Exception:
+						loc.first.click(timeout=1000, force=True)
+					time.sleep(0.15)
+					break
+			except Exception:
+				continue
+
+		for sel in self.selector_aliases.get("take_profit_toggle", []):
+			try:
+				loc = page.locator(sel)
+				if loc.count() > 0:
+					try:
+						loc.first.click(timeout=1000)
+					except Exception:
+						loc.first.click(timeout=1000, force=True)
+					time.sleep(0.15)
 					break
 			except Exception:
 				continue
