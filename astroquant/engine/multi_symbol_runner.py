@@ -192,20 +192,34 @@ class MultiSymbolRunner:
         return any(name == token or name.startswith(f"{token}_") for token in self.allowed_models_for_challenge)
 
     def verify_broker_equity(self):
-        snapshot = self.equity_verification_engine.verify(
-            internal_equity=self.state.balance,
-            broker_equity=self.execution.broker_equity_snapshot(),
-        )
+        try:
+            snapshot = self.equity_verification_engine.verify(
+                internal_equity=self.state.balance,
+                broker_equity=self.execution.broker_equity_snapshot(),
+            )
+        except Exception as exc:
+            snapshot = {
+                "ok": False,
+                "hard_halt": False,
+                "reason": f"equity_verification_unavailable: {exc}",
+            }
         self.last_equity_verification = snapshot
         if snapshot.get("hard_halt"):
             self.execution.emergency_halt(snapshot.get("reason") or "Equity mismatch")
         return snapshot
 
     def reconcile_positions(self):
-        snapshot = self.reconciliation_engine.reconcile(
-            internal_positions=self.positions.get_positions(),
-            broker_positions=self.execution.broker_positions_snapshot(),
-        )
+        try:
+            snapshot = self.reconciliation_engine.reconcile(
+                internal_positions=self.positions.get_positions(),
+                broker_positions=self.execution.broker_positions_snapshot(),
+            )
+        except Exception as exc:
+            snapshot = {
+                "ok": False,
+                "hard_halt": False,
+                "reason": f"position_reconciliation_unavailable: {exc}",
+            }
         self.last_reconciliation = snapshot
         if snapshot.get("hard_halt"):
             self.execution.emergency_halt(snapshot.get("reason") or "Position reconciliation mismatch")
@@ -1084,7 +1098,7 @@ class MultiSymbolRunner:
         return True
 
     def _in_trading_window(self):
-        now = datetime.datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc)
         hour = int(now.hour)
         minute = int(now.minute)
 
@@ -1121,7 +1135,7 @@ class MultiSymbolRunner:
         except Exception:
             return {"status": "UNAVAILABLE", "deviation": None, "baseline": None, "smooth": None}
 
-        now = datetime.datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc)
         if now.hour < 7:
             return {"status": "PRE_LONDON", "deviation": 0.0, "baseline": self.offset_baselines.get(key), "smooth": raw_basis}
 
