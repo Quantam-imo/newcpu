@@ -16,7 +16,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-RestMethod 
 if %ERRORLEVEL% EQU 0 (
   echo [OK] Engine stop requested.
 ) else (
-  echo [WARN] Engine stop API request failed (backend may already be down).
+  echo [WARN] Engine stop API request failed ^(backend may already be down^).
 )
 
 echo [INFO] Stopping watchdog PowerShell process ...

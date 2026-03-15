@@ -2234,6 +2234,39 @@ class PlaywrightExecutionEngine:
 					"tp_available": bool((protection_setup or {}).get("tp_available")) or bool((post_fill_protection or {}).get("tp_available")),
 				}
 
+			requested_protection = bool(expected_sl is not None or expected_tp is not None)
+			protection_set_ok = (
+				(expected_sl is None or bool((protection_setup or {}).get("sl_set")))
+				and (expected_tp is None or bool((protection_setup or {}).get("tp_set")))
+			)
+
+			# Safety-first for manual/live probes: never leave a newly opened trade unprotected.
+			# If SL/TP was requested but not actually set, force-close the position immediately.
+			if requested_protection and not protection_set_ok:
+				auto_closed = False
+				try:
+					auto_closed = bool(self.close_position_immediately(page, symbol=expected_symbol_raw, max_rows=30))
+				except Exception:
+					auto_closed = False
+				time.sleep(0.2)
+				diagnostics = self._fill_diagnostics(page)
+				return {
+					"status": "Rejected",
+					"reason": "Protection not set; position auto-closed for safety",
+					"requested_price": button_price if button_price is not None else requested_price,
+					"button_price": button_price,
+					"submit_clicked": submit_clicked,
+					"confirm_clicked": bool(confirm_clicked),
+					"confirm_selector": confirm_selector,
+					"active_symbol": active_symbol_raw,
+					"volume_set": bool(volume_set),
+					"protection_setup": protection_setup,
+					"position_data": position_data,
+					"auto_close_attempted": True,
+					"auto_closed": bool(auto_closed),
+					"diagnostics": diagnostics,
+				}
+
 			missing_protection = (
 				(
 					expected_sl is not None
