@@ -2190,6 +2190,61 @@ def execution_debug_selectors():
     )
 
 
+@app.get("/execution/debug_sl_tp_dom")
+def execution_debug_sl_tp_dom():
+    """Return the innerHTML of the SL/TP area and disabled-state of all SL/TP inputs."""
+    def _impl():
+        page = runner.execution.playwright.page
+        if page is None:
+            return {"status": "error", "reason": "playwright_page_unavailable"}
+        try:
+            result = page.evaluate(
+                """
+                () => {
+                  const panel = document.querySelector("[data-testid='mw-order-panel']") || document.body;
+                  const inputSelectors = [
+                    "[data-testid*='stop-loss'] input",
+                    "[data-testid*='take-profit'] input",
+                    "input[name*='stopLoss']", "input[name*='stop_loss']",
+                    "input[name*='takeProfit']", "input[name*='take_profit']",
+                    "input[placeholder*='SL']", "input[placeholder*='TP']",
+                    "input[placeholder*='Stop']", "input[placeholder*='Take']",
+                  ];
+                  const found = [];
+                  for (const sel of inputSelectors) {
+                    for (const el of panel.querySelectorAll(sel)) {
+                      const rect = el.getBoundingClientRect();
+                      found.push({
+                        selector: sel,
+                        disabled: el.disabled,
+                        readOnly: el.readOnly,
+                        type: el.type,
+                        name: el.name,
+                        placeholder: el.placeholder,
+                        value: el.value,
+                        visible: rect.width > 0 && rect.height > 0,
+                        parentHTML: (el.closest('[data-testid]') || el.parentElement || el)
+                                      .outerHTML.slice(0, 600),
+                      });
+                    }
+                  }
+                  // Also capture the full panel HTML (truncated)
+                  const panelHTML = panel.outerHTML.slice(0, 4000);
+                  return { inputs_found: found, panel_html_preview: panelHTML };
+                }
+                """
+            )
+            return {"status": "ok", **result}
+        except Exception as exc:
+            return {"status": "error", "reason": str(exc)}
+
+    return _run_playwright_task(
+        _impl,
+        fallback={"status": "error", "reason": "playwright_executor_timeout"},
+        timeout_seconds=10.0,
+    )
+
+
 @app.get("/execution/discover_symbols")
 def execution_discover_symbols(
     limit: int = Query(default=300),

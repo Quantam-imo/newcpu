@@ -1467,6 +1467,24 @@ class PlaywrightExecutionEngine:
 					continue
 				field = locator.first
 
+				# Step 0: Force-remove disabled/readonly via JS before anything else.
+				# Angular/React inputs are often disabled until their toggle is switched;
+				# we remove the constraint at the DOM level so Playwright can interact.
+				try:
+					field.evaluate(
+						"""
+						(el) => {
+						  const t = el.matches('input,textarea') ? el
+						    : el.querySelector('input,textarea') || el;
+						  if (t.disabled)  { t.removeAttribute('disabled');  t.disabled  = false; }
+						  if (t.readOnly)  { t.removeAttribute('readonly');  t.readOnly  = false; }
+						}
+						"""
+					)
+				except Exception:
+					pass
+
+				# Step 1: keyboard approach (most reliable for Angular-style validation)
 				try:
 					field.click(timeout=1500)
 					time.sleep(0.05)
@@ -1478,6 +1496,7 @@ class PlaywrightExecutionEngine:
 				except Exception:
 					pass
 
+				# Step 2: Playwright fill
 				try:
 					field.fill(value_text, timeout=1500)
 					time.sleep(0.08)
@@ -1485,7 +1504,7 @@ class PlaywrightExecutionEngine:
 				except Exception:
 					pass
 
-				# React-compatible: use nativeInputValueSetter to bypass controlled-input protection
+				# Step 3: React/Angular nativeInputValueSetter with full event chain
 				try:
 					result = field.evaluate(
 						"""
@@ -1494,6 +1513,8 @@ class PlaywrightExecutionEngine:
 						    ? el
 						    : el.querySelector('input,textarea,[contenteditable="true"]') || el;
 						  if (!(target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) return false;
+						  if (target.disabled)  { target.removeAttribute('disabled');  target.disabled  = false; }
+						  if (target.readOnly)  { target.removeAttribute('readonly');  target.readOnly  = false; }
 						  target.focus();
 						  try {
 						    const nativeSetter = Object.getOwnPropertyDescriptor(
@@ -1503,10 +1524,11 @@ class PlaywrightExecutionEngine:
 						  } catch(e) {
 						    target.value = String(value);
 						  }
-						  target.dispatchEvent(new Event('input',  { bubbles: true }));
-						  target.dispatchEvent(new Event('change', { bubbles: true }));
-						  target.dispatchEvent(new KeyboardEvent('keydown',  { key: 'Tab', bubbles: true }));
-						  target.dispatchEvent(new KeyboardEvent('keyup',    { key: 'Tab', bubbles: true }));
+						  target.dispatchEvent(new Event('input',   { bubbles: true }));
+						  target.dispatchEvent(new Event('change',  { bubbles: true }));
+						  target.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+						  target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+						  target.dispatchEvent(new KeyboardEvent('keyup',   { key: 'Tab', bubbles: true }));
 						  return true;
 						}
 						""",
@@ -1543,7 +1565,52 @@ class PlaywrightExecutionEngine:
 	]
 
 	def _try_reveal_sl_tp_inputs(self, page):
-		"""Click SL/TP section toggle buttons if the inputs are collapsed/disabled."""
+		"""Expand/enable SL and TP input sections in the order panel.
+
+		MatchTrader/Angular UIs gate SL/TP inputs behind a toggle switch. This method
+		finds those toggles by walking the DOM upward from any disabled SL/TP input
+		and clicking all toggles/checkboxes/switches found in the ancestor chain.
+		"""
+		# JS-based approach: walk up from each disabled SL/TP input and click toggles
+		try:
+			page.evaluate(
+				"""
+				() => {
+				  const panel = document.querySelector("[data-testid='mw-order-panel']") || document.body;
+				  const inputSelectors = [
+				    "[data-testid*='stop-loss'] input",
+				    "[data-testid*='take-profit'] input",
+				    "input[name*='stopLoss']", "input[name*='stop_loss']",
+				    "input[name*='takeProfit']", "input[name*='take_profit']",
+				    "input[placeholder*='SL']", "input[placeholder*='TP']",
+				    "input[placeholder*='Stop']", "input[placeholder*='Take']",
+				  ];
+				  function tryEnableInput(inp) {
+				    // Walk up to 6 levels looking for a toggle/checkbox/switch/label
+				    let parent = inp.parentElement;
+				    for (let i = 0; i < 6 && parent && parent !== document.body; i++) {
+				      const toggles = parent.querySelectorAll(
+				        'mat-slide-toggle, mat-checkbox, [role="switch"], [role="checkbox"], ' +
+				        'input[type="checkbox"], [class*="toggle"], [class*="switch"], ' +
+				        '[data-testid*="toggle"], [data-testid*="switch"], [data-testid*="enable"]'
+				      );
+				      for (const t of toggles) {
+				        if (t !== inp) { try { t.click(); } catch(e) {} }
+				      }
+				      parent = parent.parentElement;
+				    }
+				  }
+				  for (const sel of inputSelectors) {
+				    const inputs = panel.querySelectorAll(sel);
+				    for (const inp of inputs) { tryEnableInput(inp); }
+				  }
+				}
+				"""
+			)
+			time.sleep(0.2)
+		except Exception:
+			pass
+		# Fallback: direct Playwright selector clicks on known toggle patterns
 		for sel in self._SL_TOGGLE_SELECTORS:
 			try:
 				loc = page.locator(sel)
