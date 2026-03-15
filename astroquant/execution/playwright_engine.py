@@ -1855,6 +1855,37 @@ class PlaywrightExecutionEngine:
 				}
 		expected_sl = signal.get("sl")
 		expected_tp = signal.get("tp")
+		direction = str(signal.get("direction", "")).upper()
+		manual_levels_realigned = False
+		if manual_test_mode and direction in {"BUY", "SELL"}:
+			pre_button_price = self._first_available_price(
+				page,
+				self.selector_aliases.get("buy_price", []) if direction == "BUY" else self.selector_aliases.get("sell_price", []),
+			)
+			if pre_button_price is not None and expected_entry is not None:
+				try:
+					entry_val = float(expected_entry)
+					button_val = float(pre_button_price)
+					if entry_val > 0.0 and button_val > 0.0:
+						scale_ratio = max(entry_val, button_val) / max(min(entry_val, button_val), 1e-9)
+						if scale_ratio >= 10.0:
+							risk_distance = abs(float(expected_entry) - float(expected_sl)) if expected_sl is not None else None
+							reward_distance = abs(float(expected_tp) - float(expected_entry)) if expected_tp is not None else None
+
+							expected_entry = float(button_val)
+							signal["entry_price"] = expected_entry
+
+							if risk_distance is not None and risk_distance > 0.0:
+								expected_sl = expected_entry - risk_distance if direction == "BUY" else expected_entry + risk_distance
+								signal["sl"] = expected_sl
+							if reward_distance is not None and reward_distance > 0.0:
+								expected_tp = expected_entry + reward_distance if direction == "BUY" else expected_entry - reward_distance
+								signal["tp"] = expected_tp
+
+							manual_levels_realigned = True
+				except Exception:
+					pass
+
 		valid, message = self.execution_guard.validate_sl_tp(expected_sl, expected_tp, expected_entry)
 		if not valid:
 			self.emergency_halt(message)
@@ -1877,7 +1908,6 @@ class PlaywrightExecutionEngine:
 
 		protection_setup = self._configure_protection(page, signal)
 
-		direction = signal.get("direction", "").upper()
 		button_price = None
 		if direction == "BUY":
 			button_price = self._first_available_price(page, self.selector_aliases.get("buy_price", []))
@@ -1930,6 +1960,7 @@ class PlaywrightExecutionEngine:
 					"confirm_selector": confirm_selector,
 					"active_symbol": active_symbol_raw,
 					"volume_set": bool(volume_set),
+					"manual_levels_realigned": bool(manual_levels_realigned),
 					"protection_setup": protection_setup,
 					"partial_plan": partial_plan,
 					"diagnostics": diagnostics,
@@ -1975,6 +2006,7 @@ class PlaywrightExecutionEngine:
 					"position_symbol": position_symbol,
 					"expected_symbol": expected_symbol_raw,
 					"volume_set": bool(volume_set),
+					"manual_levels_realigned": bool(manual_levels_realigned),
 					"protection_setup": protection_setup,
 					"diagnostics": diagnostics,
 				}
@@ -2009,6 +2041,7 @@ class PlaywrightExecutionEngine:
 						"baseline_volume": baseline_volume,
 						"current_volume": current_volume,
 						"volume_set": bool(volume_set),
+						"manual_levels_realigned": bool(manual_levels_realigned),
 						"protection_setup": protection_setup,
 						"diagnostics": diagnostics,
 					}
@@ -2030,6 +2063,7 @@ class PlaywrightExecutionEngine:
 				"confirm_selector": confirm_selector,
 				"active_symbol": active_symbol_raw,
 				"volume_set": bool(volume_set),
+				"manual_levels_realigned": bool(manual_levels_realigned),
 				"verification_mode": "manual_relaxed",
 				"execution_source": "PLAYWRIGHT",
 				"protection_setup": protection_setup,
