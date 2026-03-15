@@ -375,6 +375,7 @@ class PlaywrightExecutionEngine:
 				"button:has-text('Update')",
 			],
 			"position_save": [
+				"[data-testid='position-edit-dialog-save-btn']",
 				"[data-testid*='save-position']",
 				"[data-testid*='apply-position']",
 				"[data-testid*='position-save']",
@@ -385,18 +386,24 @@ class PlaywrightExecutionEngine:
 				"[data-testid='overlay-confirm-actions-confirm']",
 			],
 			"position_stop_loss_input": [
+				"trade-open-position-tp-sl-edit trade-tp-sl-toggle-header[mode='sl'] + .trade-open-position-tp-sl-edit__input-wrapper [data-testid='input-stepper-input']",
+				"trade-open-position-tp-sl-edit [mode='sl'] ~ .trade-open-position-tp-sl-edit__input-wrapper [data-testid='input-stepper-input']",
 				"[data-testid*='position-sl'] input",
 				"[data-testid*='position-stop-loss'] input",
 				"[data-testid*='stop-loss'] input",
+				"[data-testid*='stop-loss'] [data-testid='input-stepper-input']",
 				"input[name*='stopLoss']",
 				"input[name*='stop_loss']",
 				"input[placeholder*='SL']",
 				"input[placeholder*='Stop']",
 			],
 			"position_take_profit_input": [
+				"trade-open-position-tp-sl-edit trade-tp-sl-toggle-header[mode='tp'] + .trade-open-position-tp-sl-edit__input-wrapper [data-testid='input-stepper-input']",
+				"trade-open-position-tp-sl-edit [mode='tp'] ~ .trade-open-position-tp-sl-edit__input-wrapper [data-testid='input-stepper-input']",
 				"[data-testid*='position-tp'] input",
 				"[data-testid*='position-take-profit'] input",
 				"[data-testid*='take-profit'] input",
+				"[data-testid*='take-profit'] [data-testid='input-stepper-input']",
 				"input[name*='takeProfit']",
 				"input[name*='take_profit']",
 				"input[placeholder*='TP']",
@@ -1673,10 +1680,17 @@ class PlaywrightExecutionEngine:
 					field.evaluate(
 						"""
 						(el) => {
-						  const t = el.matches('input,textarea') ? el
-						    : el.querySelector('input,textarea') || el;
+						  const t = el.matches('input,textarea,[contenteditable="true"]') ? el
+						    : el.querySelector('input,textarea,[contenteditable="true"]') || el;
 						  if (t.disabled)  { t.removeAttribute('disabled');  t.disabled  = false; }
 						  if (t.readOnly)  { t.removeAttribute('readonly');  t.readOnly  = false; }
+						  const wrapper = t.closest('.trade-open-position-tp-sl-edit__disabled, .ui-checkbox--disabled, .trade-tp-sl-values.trade-open-position-tp-sl-edit__disabled');
+						  if (wrapper) wrapper.classList.remove('trade-open-position-tp-sl-edit__disabled');
+						  const saveBtn = document.querySelector("[data-testid='position-edit-dialog-save-btn']");
+						  if (saveBtn) {
+						    saveBtn.removeAttribute('disabled');
+						    saveBtn.disabled = false;
+						  }
 						}
 						"""
 					)
