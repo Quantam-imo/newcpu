@@ -2245,6 +2245,72 @@ def execution_debug_sl_tp_dom():
     )
 
 
+@app.get("/execution/debug_position_dom")
+def execution_debug_position_dom(symbol: str | None = Query(default=None)):
+        """Return open-position row HTML previews plus likely edit/save/SL/TP controls for a target symbol."""
+        def _impl():
+                page = runner.execution.playwright.page
+                if page is None:
+                        return {"status": "error", "reason": "playwright_page_unavailable"}
+                try:
+                        result = page.evaluate(
+                                """
+                                (targetSymbol) => {
+                                    const normalize = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+                                    const target = normalize(targetSymbol);
+                                    const rowSelectors = [
+                                        "[data-testid='open-positions-desktop-list-row']",
+                                        "[data-testid*='open-positions'][data-testid*='row']",
+                                        "[data-testid*='open-position'][data-testid*='row']",
+                                        "[data-testid*='position'][data-testid*='row']",
+                                        "[data-testid='position-row']",
+                                        "[data-testid='positions-row']",
+                                    ];
+                                    let rows = [];
+                                    for (const sel of rowSelectors) {
+                                        rows = Array.from(document.querySelectorAll(sel));
+                                        if (rows.length) break;
+                                    }
+                                    const previews = [];
+                                    for (const row of rows.slice(0, 20)) {
+                                        const symbolNode = row.querySelector("[data-testid='instrument-symbol-name-wrapper'], [data-testid='position-symbol'], [data-testid*='position-symbol'], [data-testid='symbol-name']");
+                                        const symbolText = String(symbolNode?.textContent || '').trim();
+                                        if (target && normalize(symbolText) && normalize(symbolText) !== target) continue;
+                                        const actionNodes = Array.from(row.querySelectorAll('button,[role="button"],[data-testid]')).slice(0, 30).map((node) => ({
+                                            text: String(node.textContent || '').trim().slice(0, 80),
+                                            testid: String(node.getAttribute('data-testid') || ''),
+                                            cls: String(node.className || '').slice(0, 120),
+                                        }));
+                                        previews.push({
+                                            symbol: symbolText,
+                                            row_html_preview: row.outerHTML.slice(0, 2200),
+                                            actions: actionNodes,
+                                        });
+                                    }
+                                    const globalInputs = Array.from(document.querySelectorAll("[data-testid*='position-sl'] input, [data-testid*='position-tp'] input, [data-testid*='stop-loss'] input, [data-testid*='take-profit'] input, input[name*='stopLoss'], input[name*='takeProfit'], input[placeholder*='SL'], input[placeholder*='TP']")).slice(0, 20).map((el) => ({
+                                        disabled: !!el.disabled,
+                                        readOnly: !!el.readOnly,
+                                        name: String(el.getAttribute('name') || ''),
+                                        placeholder: String(el.getAttribute('placeholder') || ''),
+                                        testid: String(el.getAttribute('data-testid') || ''),
+                                        html: (el.closest('[data-testid]') || el.parentElement || el).outerHTML.slice(0, 600),
+                                    }));
+                                    return { rows: previews, global_inputs: globalInputs };
+                                }
+                                """,
+                                symbol,
+                        )
+                        return {"status": "ok", **result}
+                except Exception as exc:
+                        return {"status": "error", "reason": str(exc)}
+
+        return _run_playwright_task(
+                _impl,
+                fallback={"status": "error", "reason": "playwright_executor_timeout"},
+                timeout_seconds=10.0,
+        )
+
+
 @app.get("/execution/discover_symbols")
 def execution_discover_symbols(
     limit: int = Query(default=300),

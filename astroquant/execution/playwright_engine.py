@@ -316,6 +316,43 @@ class PlaywrightExecutionEngine:
 				"button:has-text('Close partially')",
 				"button:has-text('Confirm')",
 			],
+			"position_modify": [
+				"[data-testid*='modify-position']",
+				"[data-testid*='edit-position']",
+				"[data-testid*='position-edit']",
+				"[data-testid*='position-action']",
+				"button:has-text('Modify')",
+				"button:has-text('Edit')",
+				"button:has-text('Update')",
+			],
+			"position_save": [
+				"[data-testid*='save-position']",
+				"[data-testid*='apply-position']",
+				"[data-testid*='position-save']",
+				"button:has-text('Save')",
+				"button:has-text('Apply')",
+				"button:has-text('Update')",
+				"button:has-text('Modify')",
+				"[data-testid='overlay-confirm-actions-confirm']",
+			],
+			"position_stop_loss_input": [
+				"[data-testid*='position-sl'] input",
+				"[data-testid*='position-stop-loss'] input",
+				"[data-testid*='stop-loss'] input",
+				"input[name*='stopLoss']",
+				"input[name*='stop_loss']",
+				"input[placeholder*='SL']",
+				"input[placeholder*='Stop']",
+			],
+			"position_take_profit_input": [
+				"[data-testid*='position-tp'] input",
+				"[data-testid*='position-take-profit'] input",
+				"[data-testid*='take-profit'] input",
+				"input[name*='takeProfit']",
+				"input[name*='take_profit']",
+				"input[placeholder*='TP']",
+				"input[placeholder*='Take']",
+			],
 			"login_username": [
 				"input[type='email']",
 				"input[name='email']",
@@ -370,6 +407,10 @@ class PlaywrightExecutionEngine:
 			"last": ["quote"],
 			"sl": ["stop_loss_input"],
 			"tp": ["take_profit_input"],
+			"position_sl": ["position_stop_loss_input"],
+			"position_tp": ["position_take_profit_input"],
+			"position_edit": ["position_modify"],
+			"position_save": ["position_save"],
 		}
 		if key in self.selector_aliases:
 			return [key]
@@ -1071,6 +1112,111 @@ class PlaywrightExecutionEngine:
 				continue
 		return None
 
+	def _select_position_row(self, page, symbol=None, max_rows=25):
+		target_norm = self._normalize_symbol(symbol)
+		try:
+			rows = self._open_position_rows(page)
+			if rows is None:
+				return None, None
+			count = min(int(rows.count()), max(1, int(max_rows)))
+		except Exception:
+			return None, None
+
+		fallback_row = None
+		fallback_symbol = None
+		for i in range(count):
+			row = rows.nth(i)
+			row_symbol = self._row_symbol_text(row)
+			if fallback_row is None:
+				fallback_row = row
+				fallback_symbol = row_symbol
+			if target_norm and not self._symbol_matches(row_symbol, target_norm):
+				continue
+			return row, row_symbol
+
+		if target_norm and count == 1 and fallback_row is not None:
+			return fallback_row, fallback_symbol
+		if not target_norm:
+			return fallback_row, fallback_symbol
+		return None, None
+
+	def _open_position_modify_editor(self, page, symbol=None):
+		row, row_symbol = self._select_position_row(page, symbol=symbol, max_rows=30)
+		if row is None:
+			return {"opened": False, "reason": "position_row_not_found", "symbol": symbol}
+
+		try:
+			row.scroll_into_view_if_needed(timeout=1200)
+		except Exception:
+			pass
+
+		# First click the row; some brokers expand inline editors/details on row click.
+		try:
+			row.click(timeout=1200)
+		except Exception:
+			try:
+				row.click(timeout=1200, force=True)
+			except Exception:
+				pass
+		time.sleep(0.12)
+
+		for selector in self.selector_aliases.get("position_modify", []):
+			try:
+				candidate = row.locator(selector)
+				if candidate.count() > 0:
+					try:
+						candidate.first.click(timeout=1200)
+					except Exception:
+						candidate.first.click(timeout=1200, force=True)
+					time.sleep(0.15)
+					return {"opened": True, "symbol": row_symbol, "source": "row_button", "selector": selector}
+			except Exception:
+				continue
+
+		for selector in self.selector_aliases.get("position_modify", []):
+			try:
+				candidate = page.locator(selector)
+				if candidate.count() > 0:
+					try:
+						candidate.first.click(timeout=1200)
+					except Exception:
+						candidate.first.click(timeout=1200, force=True)
+					time.sleep(0.15)
+					return {"opened": True, "symbol": row_symbol, "source": "page_button", "selector": selector}
+			except Exception:
+				continue
+
+		# Last resort: JS-click likely edit controls inside the row or its nearest toolbar/details area.
+		try:
+			clicked = bool(row.evaluate(
+				"""
+				(el) => {
+				  const scopes = [el, el.closest('[data-testid*="row"]') || el, el.parentElement || el];
+				  const hints = ['edit', 'modify', 'update', 'protection', 'stop', 'risk'];
+				  for (const scope of scopes) {
+				    if (!scope) continue;
+				    const nodes = scope.querySelectorAll('button,[role="button"],[data-testid],[class]');
+				    for (const node of nodes) {
+				      const text = String(node.textContent || '').toLowerCase();
+				      const testid = String(node.getAttribute('data-testid') || '').toLowerCase();
+				      const cls = String(node.className || '').toLowerCase();
+				      if (hints.some(h => text.includes(h) || testid.includes(h) || cls.includes(h))) {
+				        try { node.click(); return true; } catch(e) {}
+				      }
+				    }
+				  }
+				  return false;
+				}
+				"""
+			))
+			if clicked:
+				time.sleep(0.15)
+				return {"opened": True, "symbol": row_symbol, "source": "row_js_click", "selector": "heuristic"}
+		except Exception:
+			pass
+
+		return {"opened": True, "symbol": row_symbol, "source": "row_click_only", "selector": None}
+
 	def close_position_immediately(self, page, symbol=None, max_rows=20):
 		if self._should_dispatch():
 			return self._run_thread_affine(
@@ -1702,50 +1848,31 @@ class PlaywrightExecutionEngine:
 		except Exception:
 			pass
 
-		try:
-			rows = self._open_position_rows(page)
-			if rows is not None and rows.count() > 0:
-				target_norm = self._normalize_symbol(target_symbol)
-				selected = None
-				for i in range(min(int(rows.count()), 30)):
-					candidate = rows.nth(i)
-					cand_symbol = self._row_symbol_text(candidate)
-					if target_norm and not self._symbol_matches(cand_symbol, target_norm):
-						continue
-					selected = candidate
-					break
-				if selected is not None:
-					try:
-						selected.click(timeout=1200)
-					except Exception:
-						try:
-							selected.click(timeout=1200, force=True)
-						except Exception:
-							pass
-					time.sleep(0.1)
-		except Exception:
-			pass
+		modify_result = self._open_position_modify_editor(page, symbol=target_symbol)
 
-		# Broader selectors in case SL/TP editors only exist in position row/dialog.
+		self._try_reveal_sl_tp_inputs(page)
+		time.sleep(0.12)
+
 		fallback_sl_selectors = [
-			"[data-testid*='position-sl'] input",
-			"[data-testid*='stop-loss'] input",
-			"input[name*='stopLoss']",
-			"input[name*='stop_loss']",
-			"input[placeholder*='SL']",
-			"input[placeholder*='Stop']",
+			*self.selector_aliases.get("position_stop_loss_input", []),
+			*self.selector_aliases.get("stop_loss_input", []),
 		]
 		fallback_tp_selectors = [
-			"[data-testid*='position-tp'] input",
-			"[data-testid*='take-profit'] input",
-			"input[name*='takeProfit']",
-			"input[name*='take_profit']",
-			"input[placeholder*='TP']",
-			"input[placeholder*='Take']",
+			*self.selector_aliases.get("position_take_profit_input", []),
+			*self.selector_aliases.get("take_profit_input", []),
 		]
 
-		sl_available = any(page.locator(sel).count() > 0 for sel in fallback_sl_selectors)
-		tp_available = any(page.locator(sel).count() > 0 for sel in fallback_tp_selectors)
+		def _selector_available(selectors):
+			for sel in selectors:
+				try:
+					if page.locator(sel).count() > 0:
+						return True
+				except Exception:
+					continue
+			return False
+
+		sl_available = _selector_available(fallback_sl_selectors)
+		tp_available = _selector_available(fallback_tp_selectors)
 
 		sl_set = self._set_price_input(page, fallback_sl_selectors, sl) if sl is not None else False
 		tp_set = self._set_price_input(page, fallback_tp_selectors, tp) if tp is not None else False
@@ -1756,6 +1883,45 @@ class PlaywrightExecutionEngine:
 			time.sleep(0.15)
 			tp_set = self._set_price_input(page, fallback_tp_selectors, tp)
 
+		save_clicked = False
+		save_selector = None
+		if (sl_set or tp_set) and self.selector_aliases.get("position_save"):
+			clicked, err = self._click_order_button(page, self.selector_aliases.get("position_save", []))
+			save_clicked = bool(clicked)
+			save_selector = None if not clicked else "position_save"
+			if not clicked:
+				try:
+					self._confirm_order_if_present(page)
+				except Exception:
+					pass
+		else:
+			try:
+				self._confirm_order_if_present(page)
+			except Exception:
+				pass
+
+		time.sleep(0.2)
+		verified_position = None
+		try:
+			verified_position = self._read_position(page, target_symbol=target_symbol)
+		except Exception:
+			verified_position = None
+
+		verified_sl = (verified_position or {}).get("sl") if isinstance(verified_position, dict) else None
+		verified_tp = (verified_position or {}).get("tp") if isinstance(verified_position, dict) else None
+		if sl is not None and verified_sl is not None:
+			try:
+				if abs(float(verified_sl) - float(sl)) <= max(0.5, abs(float(sl)) * 0.0002):
+					sl_set = True
+			except Exception:
+				pass
+		if tp is not None and verified_tp is not None:
+			try:
+				if abs(float(verified_tp) - float(tp)) <= max(0.5, abs(float(tp)) * 0.0002):
+					tp_set = True
+			except Exception:
+				pass
+
 		return {
 			"sl_requested": sl,
 			"tp_requested": tp,
@@ -1764,6 +1930,10 @@ class PlaywrightExecutionEngine:
 			"sl_set": bool(sl_set),
 			"tp_set": bool(tp_set),
 			"source": "post_fill",
+			"modify_result": modify_result,
+			"save_clicked": bool(save_clicked),
+			"save_selector": save_selector,
+			"verified_position": verified_position,
 		}
 
 	def _dismiss_overlay_backdrop(self, page):
