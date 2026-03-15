@@ -289,6 +289,12 @@ class PlaywrightExecutionEngine:
 			"confirm_checkbox": [
 				"[data-testid='checkbox-input']",
 			],
+			"advanced_order_toggle": [
+				"button:has-text('Advanced Order')",
+				".ui-secondary-button__content:has-text('Advanced Order')",
+				"[data-testid*='advanced-order']",
+				"[class*='secondary-button'] [data-testid='icon-link'][xlink\\:href*='squares-plus']",
+			],
 			"stop_loss_input": [
 				"[data-testid='mw-order-panel'] [data-testid*='stop-loss'] input",
 				"[data-testid='mw-order-panel'] [data-testid='position-sl'] input",
@@ -399,6 +405,7 @@ class PlaywrightExecutionEngine:
 		mapping = {
 			"login_email": ["login_username"],
 			"login_button": ["login_submit"],
+			"advanced_order": ["advanced_order_toggle"],
 			"volume": ["volume"],
 			"lot": ["volume"],
 			"quote": ["quote"],
@@ -1718,6 +1725,20 @@ class PlaywrightExecutionEngine:
 		finds those toggles by walking the DOM upward from any disabled SL/TP input
 		and clicking all toggles/checkboxes/switches found in the ancestor chain.
 		"""
+		# Maven layout exposes SL/TP under an "Advanced Order" button.
+		for sel in self.selector_aliases.get("advanced_order_toggle", []):
+			try:
+				loc = page.locator(sel)
+				if loc.count() > 0:
+					try:
+						loc.first.click(timeout=1000)
+					except Exception:
+						loc.first.click(timeout=1000, force=True)
+					time.sleep(0.2)
+					break
+			except Exception:
+				continue
+
 		# JS-based approach: walk up from each disabled SL/TP input and click toggles
 		try:
 			page.evaluate(
