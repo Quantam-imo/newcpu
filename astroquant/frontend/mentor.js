@@ -1,21 +1,41 @@
+// --- No-op for missing performance tracking ---
+function trackPerformance() {}
 const MENTOR_STATE_KEY = "aq_mentor_drawer_open";
 const MENTOR_WIDTH_KEY = "aq_mentor_drawer_width";
 const MENTOR_SECTIONS_KEY = "aq_mentor_sections";
 const MENTOR_COMPACT_KEY = "aq_mentor_compact_mode";
 const AQ_DEFAULT_MENTOR_API_ORIGIN = "http://127.0.0.1:8000";
 
-function resolveMentorApiBase() {
-    const configured = String(window.AQ_API_BASE || "").trim();
-    return configured || AQ_DEFAULT_MENTOR_API_ORIGIN;
+function mentorApiOrigins() {
+    const existing = String(window.AQ_API_BASE || "").trim();
+    if (existing) {
+        return [existing, "http://localhost:8000", "http://127.0.0.1:8000", "http://localhost:8001", "http://127.0.0.1:8001"];
+    }
+    const origins = [];
+    const uniqueOrigins = new Set();
+    const baseOrigins = [
+        String(window.location.origin || "").trim(),
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:8001",
+        "http://127.0.0.1:8001",
+    ];
+    for (const origin of baseOrigins) {
+        if (origin && !uniqueOrigins.has(origin)) {
+            uniqueOrigins.add(origin);
+            origins.push(origin);
+        }
+    }
+    return origins.length ? origins : ["http://127.0.0.1:8000", "http://127.0.0.1:8001"];
 }
 
 const mentorFetch = async (path, options, timeoutMs = 25000) => {
     const startTime = performance.now();
     const pathBase = path.split('?')[0];
     
-    // Check cache first for GET requests
-    if (!options?.method || options?.method === "GET") {
-        const cached = getCachedResponse(path);
+    // Check cache first for GET requests using getCache from api.js if available
+    if ((!options?.method || options?.method === "GET") && typeof getCache === "function") {
+        const cached = getCache(path);
         if (cached) {
             trackPerformance(path, 0, true);
             console.debug(`mentorFetch: Cache hit for ${path}`);

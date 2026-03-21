@@ -271,6 +271,7 @@ if [[ -n "$CHROME_BIN" ]]; then
         --user-data-dir="$CHROME_PROFILE" \
         --no-first-run \
         --disable-sync \
+        --headless=new \
         "https://manager.maven.markets/app/trade" \
         >"$LOG_DIR/chrome.log" 2>&1 &
 
@@ -300,11 +301,13 @@ header "PHASE 5: Backend API Server Startup"
 
 section "Starting FastAPI Backend"
 
-cd "$ASTROQUANT_DIR"
+cd "/workspaces/newcpu"
 info "Working directory: $ASTROQUANT_DIR"
-info "Starting: python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000"
+info "Starting: python -m uvicorn astroquant.backend.main:app --host 127.0.0.1 --port 8000"
 
-"$PYTHON_BIN" -m uvicorn backend.main:app \
+
+export PYTHONPATH=/workspaces/newcpu
+"$PYTHON_BIN" -m uvicorn astroquant.backend.main:app \
     --host 127.0.0.1 \
     --port 8000 \
     --log-level info \

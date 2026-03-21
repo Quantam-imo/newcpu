@@ -1,0 +1,14 @@
+[Unit]
+Description=AstroQuant Celery Worker
+After=network.target astroquant_tradingbot.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/workspaces/newcpu
+ExecStart=/workspaces/newcpu/.venv/bin/celery -A astroquant.backend.tasks.celery_worker worker --loglevel=info
+Restart=always
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

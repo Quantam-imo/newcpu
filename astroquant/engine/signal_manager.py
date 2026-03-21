@@ -1,12 +1,12 @@
-from engine.models.ict_model import ICTModel
-from engine.models.iceberg_model import IcebergModel
-from engine.models.expansion_model import ExpansionModel
-from engine.models.gann_model import GannModel
-from engine.models.news_model import NewsModel
-from engine.models.orderflow_imbalance_model import OrderflowImbalanceModel
-from engine.models.liquidity_trap_model import LiquidityTrapModel
-from engine.orderflow_engine import OrderflowEngine
-from backend.config import SYMBOLS
+from astroquant.engine.models.ict_model import ICTModel
+from astroquant.engine.models.iceberg_model import IcebergModel
+from astroquant.engine.models.expansion_model import ExpansionModel
+from astroquant.engine.models.gann_model import GannModel
+from astroquant.engine.models.news_model import NewsModel
+from astroquant.engine.models.orderflow_imbalance_model import OrderflowImbalanceModel
+from astroquant.engine.models.liquidity_trap_model import LiquidityTrapModel
+from astroquant.engine.orderflow_engine import OrderflowEngine
+from astroquant.backend.config import SYMBOLS
 
 
 class SignalManager:

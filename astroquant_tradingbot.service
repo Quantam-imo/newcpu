@@ -1,0 +1,15 @@
+[Unit]
+Description=AstroQuant Trading Bot Backend
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/workspaces/newcpu
+Environment=PYTHONPATH=/workspaces/newcpu
+ExecStart=/workspaces/newcpu/.venv/bin/uvicorn astroquant.backend.main:app --host 0.0.0.0 --port 8000
+Restart=always
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

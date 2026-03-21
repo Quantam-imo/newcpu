@@ -1,9 +1,9 @@
 import datetime
 import json
-from engine.model_weight_engine import ModelWeightEngine
-from engine.performance_memory_engine import PerformanceMemory
-from engine.frequency_engine import FrequencyEngine
-from backend.journal.ai_trade_journal import init_journal, save_trade, generate_narrative
+from astroquant.engine.model_weight_engine import ModelWeightEngine
+from astroquant.engine.performance_memory_engine import PerformanceMemory
+from astroquant.engine.frequency_engine import FrequencyEngine
+from astroquant.backend.journal.ai_trade_journal import init_journal, save_trade, generate_narrative
 
 
 class JournalEngine:

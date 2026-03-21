@@ -48,10 +48,10 @@ kill_port_listener "${BACKEND_PORT}"
 kill_port_listener "${FRONTEND_PORT}"
 sleep 1
 
-echo "[restart] starting backend (${BACKEND_APP}) from ${BACKEND_ROOT} on :${BACKEND_PORT}"
+echo "[restart] starting backend (${BACKEND_APP}) from ${WORKSPACE_DIR} on :${BACKEND_PORT}"
 (
-  cd "${BACKEND_ROOT}"
-  nohup python3 -m uvicorn "${BACKEND_APP}" --host 0.0.0.0 --port "${BACKEND_PORT}" >"${BACKEND_LOG}" 2>&1 &
+  cd "${WORKSPACE_DIR}"
+  nohup python3 -m uvicorn "astroquant.backend.main:app" --host 0.0.0.0 --port "${BACKEND_PORT}" >"${BACKEND_LOG}" 2>&1 &
 )
 
 echo "[restart] starting frontend on :${FRONTEND_PORT}"

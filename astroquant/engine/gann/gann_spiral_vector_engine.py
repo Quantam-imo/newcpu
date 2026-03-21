@@ -1,6 +1,6 @@
 import math
 
-from engine.gann.gann_spiral_engine import GannSpiralEngine
+from astroquant.engine.gann.gann_spiral_engine import GannSpiralEngine
 
 
 class GannSpiralVectorEngine:

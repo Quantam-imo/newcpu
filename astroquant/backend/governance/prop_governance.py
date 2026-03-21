@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
-from backend.governance.prop_storage import init_db, save_state, load_state
-from backend.engines.volatility_engine import VolatilityEngine
+from astroquant.backend.governance.prop_storage import init_db, save_state, load_state
+from astroquant.backend.engines.volatility_engine import VolatilityEngine
 
 
 @dataclass

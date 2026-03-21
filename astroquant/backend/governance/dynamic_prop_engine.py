@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from core.prop_profiles import (
+from astroquant.core.prop_profiles import (
     profile_for,
     profile_risk_pct,
     supported_account_keys,

@@ -1,5 +1,5 @@
-from engine.orderflow_imbalance_engine import OrderflowImbalanceEngine
-from engine.tape_speed_engine import TapeSpeedEngine
+from astroquant.engine.orderflow_imbalance_engine import OrderflowImbalanceEngine
+from astroquant.engine.tape_speed_engine import TapeSpeedEngine
 
 
 class OrderflowImbalanceModel:

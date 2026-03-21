@@ -1,3 +1,55 @@
+// --- No-op for missing performance tracking ---
+function trackPerformance() {}
+// --- Real-time Databento Live integration ---
+function connectLiveChartWebSocket(symbol) {
+	const wsProto = window.location.protocol === "https:" ? "wss" : "ws";
+	const wsUrl = `${wsProto}://${window.location.hostname}:8000/ws/chart_live/${encodeURIComponent(symbol)}`;
+	const ws = new WebSocket(wsUrl);
+	let candleBuffer = [];
+	ws.onopen = () => {
+		setChartStateMessage("loading", "🔴 Live data connected");
+		// Request full candle history if supported
+		ws.send(JSON.stringify({ action: "get_history", symbol }));
+	};
+	ws.onmessage = (event) => {
+		try {
+			const data = JSON.parse(event.data);
+			if (Array.isArray(data.candles)) {
+				// Full candle history
+				candleBuffer = data.candles;
+				if (candlesSeries) {
+					candlesSeries.setData(candleBuffer);
+				}
+			} else if (data.candle) {
+				// New or updated candle
+				if (candlesSeries) {
+					// Try to update or append
+					const last = candleBuffer[candleBuffer.length - 1];
+					if (last && last.time === data.candle.time) {
+						candleBuffer[candleBuffer.length - 1] = data.candle;
+					} else if (!last || data.candle.time > last.time) {
+						candleBuffer.push(data.candle);
+						if (candleBuffer.length > 400) candleBuffer = candleBuffer.slice(-400);
+					}
+					candlesSeries.setData(candleBuffer);
+				}
+			}
+			if (data.error) {
+				setChartStateMessage("error", "Live feed error: " + data.error);
+			}
+		} catch (e) {
+			console.error("Live WS parse error", e);
+		}
+	};
+	ws.onerror = (e) => {
+		setChartStateMessage("error", "Live WebSocket error");
+		console.error("Live WebSocket error", e);
+	};
+	ws.onclose = () => {
+		setChartStateMessage("error", "Live data disconnected");
+	};
+	return ws;
+}
 let chart;
 let candlesSeries;
 let volumeSeries;
@@ -69,10 +121,12 @@ const toggleIds = [
 	"toggleAstro",
 ];
 
-const AQ_DEFAULT_CHART_API_ORIGIN = ["8000", "8001"].includes(String(window.location.port || ""))
-	? window.location.origin
-	: "http://127.0.0.1:8000";
-const AQ_API_BASE_CHART = window.AQ_API_BASE || AQ_DEFAULT_CHART_API_ORIGIN;
+const AQ_DEFAULT_CHART_API_ORIGIN = "http://127.0.0.1:8000";
+const AQ_API_BASE_CHART = "http://127.0.0.1:8000";
+
+function chartApiOrigins() {
+	return ["http://127.0.0.1:8000"];
+}
 const AQ_CHART_SETTINGS_KEY = "AQ_CHART_SETTINGS_V2";
 const AQ_CHART_DRAWINGS_KEY = "AQ_CHART_DRAWINGS_V1";
 const CHART_AUTO_REFRESH_MS = 3000;
@@ -195,7 +249,8 @@ function readChartSettings() {
 		if (!raw) return {};
 		const parsed = JSON.parse(raw);
 		return (parsed && typeof parsed === "object") ? parsed : {};
-	} catch (_) {
+	} catch (e) {
+		console.error(e);
 		return {};
 	}
 }
@@ -205,7 +260,8 @@ function writeChartSettings(patch) {
 	const next = { ...current, ...(patch || {}) };
 	try {
 		localStorage.setItem(AQ_CHART_SETTINGS_KEY, JSON.stringify(next));
-	} catch (_) {
+	} catch (e) {
+		console.error(e);
 		// ignore quota/private mode failures
 	}
 }
@@ -216,7 +272,8 @@ function readDrawingStore() {
 		if (!raw) return {};
 		const parsed = JSON.parse(raw);
 		return parsed && typeof parsed === "object" ? parsed : {};
-	} catch (_) {
+	} catch (e) {
+		console.error(e);
 		return {};
 	}
 }
@@ -230,7 +287,7 @@ function saveDrawings(symbol, timeframe) {
 		const store = readDrawingStore();
 		store[drawingScopeKey(symbol, timeframe)] = Array.isArray(drawingObjects) ? drawingObjects : [];
 		localStorage.setItem(AQ_CHART_DRAWINGS_KEY, JSON.stringify(store));
-	} catch (_) {}
+	} catch (e) { console.error(e); }
 }
 
 function loadDrawings(symbol, timeframe) {
@@ -259,7 +316,8 @@ function ensureDrawingIds(rows) {
 function cloneDrawingObjects() {
 	try {
 		return JSON.parse(JSON.stringify(Array.isArray(drawingObjects) ? drawingObjects : []));
-	} catch (_) {
+	} catch (e) {
+		console.error(e);
 		return [];
 	}
 }
@@ -511,17 +569,26 @@ function createChartIfNeeded() {
 		lastValueVisible: false,
 	});
 
-	window.addEventListener("resize", () => {
+	// Responsive chart resizing using ResizeObserver
+	function resizeChart() {
 		if (!chart || !container) return;
-		chart.applyOptions({ width: container.clientWidth });
+		chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
 		refreshVpOverlay();
-	});
-	chart.applyOptions({ width: container.clientWidth });
+	}
+	// Use ResizeObserver for container size changes
+	if (window.ResizeObserver) {
+		const ro = new ResizeObserver(resizeChart);
+		ro.observe(container);
+	} else {
+		window.addEventListener("resize", resizeChart);
+	}
+	// Initial sizing
+	resizeChart();
 	try {
 		chart.timeScale()?.subscribeVisibleLogicalRangeChange?.(() => {
 			refreshVpOverlay();
 		});
-	} catch (_) {}
+	} catch (e) { console.error(e); }
 
 	if (typeof chart.subscribeCrosshairMove === "function") {
 		chart.subscribeCrosshairMove((param) => {
@@ -582,7 +649,7 @@ function fitChartView() {
 		chart.timeScale().fitContent();
 		chartInteractionState.userMovedAwayFromRightEdge = false;
 		chartInteractionState.isUserInteracting = false;
-	} catch (_) {}
+	} catch (e) { console.error(e); }
 }
 
 function scrollChartToRealtime() {
@@ -590,7 +657,7 @@ function scrollChartToRealtime() {
 	try {
 		chart.timeScale().scrollToRealTime();
 		chartInteractionState.userMovedAwayFromRightEdge = false;
-	} catch (_) {}
+	} catch (e) { console.error(e); }
 }
 
 function bindChartHotkeys() {
@@ -735,25 +802,28 @@ function chartApiOrigins() {
 async function fetchJson(url, timeoutMs = 30000) {
 	const startTime = performance.now();
 	const isAbsolute = String(url || "").startsWith("http");
-	
-	// Check cache first for GET requests
-	if (!isAbsolute) {
-		const cached = getCachedResponse(url);
+
+	// Check cache first for GET requests using getCache from api.js
+	if (!isAbsolute && typeof getCache === "function") {
+		const cached = getCache(url);
 		if (cached) {
 			trackPerformance(url, 0, true);
 			console.debug(`fetchJson: Cache hit for ${url}`);
 			return cached;
 		}
 	}
-	
-	// Build list of targets to try
+
+	// Always use AQ_API_BASE for /chart/data and similar API calls
 	let targets;
 	if (isAbsolute) {
 		targets = [String(url)];
+	} else if (url.startsWith("/chart/data")) {
+		// Use AQ_API_BASE or fallback to localhost:8000
+		const apiBase = window.AQ_API_BASE || "http://localhost:8000";
+		targets = [`${apiBase}${url}`];
 	} else {
 		// Start with relative URL (same origin as page)
 		targets = [url];
-		
 		// Add absolute URLs from chartApiOrigins fallback
 		const origins = chartApiOrigins();
 		for (const origin of origins) {
@@ -776,18 +846,17 @@ async function fetchJson(url, timeoutMs = 30000) {
 				const jsonData = await res.json();
 				const duration = performance.now() - startTime;
 				trackPerformance(url, duration, false);
-				
+
 				if (target.startsWith("http")) {
 					const origin = new URL(target).origin;
 					if (origin) window.AQ_API_BASE = origin;
 				}
-				
-				// Cache successful JSON responses
-				const urlPath = url.split('?')[0];
-				if (CACHE_CONFIG[urlPath]) {
-					cacheResponse(url, jsonData);
+
+				// Cache successful JSON responses using setCache from api.js
+				if (!isAbsolute && typeof setCache === "function") {
+					setCache(url, jsonData);
 				}
-				
+
 				return jsonData;
 			} catch (parseErr) {
 				throw parseErr;
@@ -960,7 +1029,7 @@ function styleCandlesForRender(candles) {
 
 function clearPriceLines(lines) {
 	for (const line of lines) {
-		try { candlesSeries.removePriceLine(line); } catch (_) {}
+		try { candlesSeries.removePriceLine(line); } catch (e) { console.error(e); }
 	}
 	lines.length = 0;
 }
@@ -1189,7 +1258,7 @@ function renderVolumeProfile(candles) {
 function clearDrawingSeries() {
 	clearPriceLines(drawingPriceLines);
 	for (const series of drawingLineSeries) {
-		try { chart.removeSeries(series); } catch (_) {}
+		try { chart.removeSeries(series); } catch (e) { console.error(e); }
 	}
 	drawingLineSeries = [];
 }
@@ -1443,7 +1512,7 @@ function upsertLivePriceLine(price) {
 		} catch (_) {}
 	}
 	if (livePriceLine) {
-		try { candlesSeries.removePriceLine(livePriceLine); } catch (_) {}
+		try { candlesSeries.removePriceLine(livePriceLine); } catch (e) { console.error(e); }
 	}
 	livePriceLine = candlesSeries.createPriceLine({
 		price: px,
@@ -1500,7 +1569,8 @@ function paintLiveCandleFromQuote(timeframe) {
 	try {
 		candlesSeries.update(updated);
 		volumeSeries.update({ time: updated.time, value: updated.volume, color: volumeColorForCandle(updated) });
-	} catch (_) {
+	} catch (e) {
+		console.error(e);
 		try {
 			candlesSeries.setData(latestCandleSnapshot);
 			volumeSeries.setData(latestCandleSnapshot.map(row => ({
@@ -1508,7 +1578,7 @@ function paintLiveCandleFromQuote(timeframe) {
 				value: Math.max(0, Number(row.volume || 0)),
 				color: volumeColorForCandle(row),
 			})));
-		} catch (_) {}
+		} catch (e2) { console.error(e2); }
 	}
 
 	const livePriceLabel = document.getElementById("chartLivePrice");
@@ -1954,7 +2024,13 @@ async function loadInstitutionalChart() {
 	const renderKey = `${symbol}|${timeframe}`;
 	updateChartWatermark(symbol, timeframe);
 	const requestLimit = chartInitialLoadDone ? 220 : 80;
-	const payload = await fetchJson(`/chart/data?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&limit=${requestLimit}`, 18000);
+	let payload, errorMsg = null;
+	try {
+		payload = await fetchJson(`/chart/data?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&limit=${requestLimit}`, { method: "GET" }, 18000);
+	} catch (err) {
+		errorMsg = err && err.message ? err.message : String(err);
+		payload = null;
+	}
 	if (requestSerial < chartRequestSerial) {
 		return;
 	}
@@ -1964,7 +2040,20 @@ async function loadInstitutionalChart() {
 	chartAppliedSerial = requestSerial;
 	cachedPayload = payload;
 
+	if (errorMsg) {
+		setChartStateMessage("error", `Chart data fetch failed: ${errorMsg}`);
+		candlesSeries.setData([]);
+		volumeSeries.setData([]);
+		vwapSeries.setData([]);
+		atrUpperSeries.setData([]);
+		atrLowerSeries.setData([]);
+		cumDeltaSeries.setData([]);
+		return;
+	}
+
 	const candles = toSeries(payload?.candles || [], timeframe);
+	console.log("Chart payload:", payload);
+	console.log("Candles after toSeries:", candles);
 	const lastClose = candles.length ? Number(candles[candles.length - 1].close) : NaN;
 	const liveQuotePrice = Number(payload?.meta?.live_quote?.price);
 	const degraded = Boolean(payload?.meta?.degraded_data);
@@ -1980,30 +2069,43 @@ async function loadInstitutionalChart() {
 		color: volumeColorForCandle(row),
 	})));
 
-	if (candles.length === 0) {
-		candlesSeries.setData([]);
-		volumeSeries.setData([]);
-		vwapSeries.setData([]);
-		atrUpperSeries.setData([]);
-		atrLowerSeries.setData([]);
-		cumDeltaSeries.setData([]);
-		clearPriceLines(liquidityLines);
-		clearPriceLines(orderBlockLines);
-		clearPriceLines(fvgLines);
-		clearPriceLines(icebergLines);
-		clearPriceLines(gannLines);
-		clearPriceLines(vpLines);
-		clearPriceLines(tradeLines);
-		latestVpProfile = null;
-		clearVpOverlay();
-		setSeriesMarkersCompat(candlesSeries, []);
-		updateVpLegend(null, false);
-		updateChartMeta(payload, timeframe, candles);
-		renderMicrostructureTables(payload, candles);
-		lastRenderKey = renderKey;
-		lastRenderedTime = 0;
-		return;
-	}
+	       if (candles.length === 0) {
+		       let chartError = null;
+		       if (payload && payload.meta) {
+			       if (payload.meta.error) chartError = payload.meta.error;
+			       if (Array.isArray(payload.meta.errors) && payload.meta.errors.length > 0) {
+				       chartError = (chartError ? chartError + ' | ' : '') + payload.meta.errors.join(' | ');
+			       }
+		       }
+		       if (chartError) {
+			       setChartStateMessage("error", `Chart data error: ${chartError}`);
+			       showError("chart_data_error", chartError, null, false);
+		       } else {
+			       setChartStateMessage("error", "No chart data available.");
+		       }
+		       candlesSeries.setData([]);
+		       volumeSeries.setData([]);
+		       vwapSeries.setData([]);
+		       atrUpperSeries.setData([]);
+		       atrLowerSeries.setData([]);
+		       cumDeltaSeries.setData([]);
+		       clearPriceLines(liquidityLines);
+		       clearPriceLines(orderBlockLines);
+		       clearPriceLines(fvgLines);
+		       clearPriceLines(icebergLines);
+		       clearPriceLines(gannLines);
+		       clearPriceLines(vpLines);
+		       clearPriceLines(tradeLines);
+		       latestVpProfile = null;
+		       clearVpOverlay();
+		       setSeriesMarkersCompat(candlesSeries, []);
+		       updateVpLegend(null, false);
+		       updateChartMeta(payload, timeframe, candles);
+		       renderMicrostructureTables(payload, candles);
+		       lastRenderKey = renderKey;
+		       lastRenderedTime = 0;
+		       return;
+	       }
 
 	updateCandlesSmoothly(candles, volumeRows, renderKey, timeframe);
 	vwapSeries.setData(sanitizeLineRows(payload?.overlays?.vwap || []));
@@ -2144,3 +2246,9 @@ setInterval(() => {
 	if (ageMs > 20000) return;
 	paintLiveCandleFromQuote(selectedTimeframe());
 }, LIVE_PAINT_INTERVAL_MS);
+
+// --- Start live WebSocket for chart ---
+window.addEventListener("DOMContentLoaded", () => {
+	const symbol = selectedSymbol();
+	connectLiveChartWebSocket(symbol);
+});

@@ -1,4 +1,4 @@
-from engine.gann.gann_master_engine import GannMasterEngine
+from astroquant.engine.gann.gann_master_engine import GannMasterEngine
 
 
 class GannModel:

@@ -5,30 +5,30 @@ import datetime
 import threading
 from datetime import datetime, timezone
 from collections import deque
-from engine.signal_manager import SignalManager
-from engine.ai_decision import AIDecisionEngine
-from engine.governance import Governance
-from engine.prop_phase import PropPhase
-from engine.risk import RiskEngine
-from engine.execution import ExecutionEngine
-from engine.journal import JournalEngine
-from engine.position_manager import PositionManager
-from engine.session_bias import SessionBias
-from engine.system_state import SystemState
-from engine.regime import RegimeEngine as VolatilityRegimeEngine
-from engine.market_feed import MarketFeed
-from engine.position_monitor import PositionMonitor
-from engine.slippage import SlippageGuard
-from engine.telegram import TelegramEngine
-from telegram.clawbot import ClawbotEngine
-from engine.capital_engine import CapitalEngine
-from engine.montecarlo_engine import MonteCarlo
-from engine.basis_engine import BasisEngine
-from engine.contract_resolver import ContractResolver
-from engine.position_reconciliation import PositionReconciliationEngine
-from engine.broker_equity_verification import BrokerEquityVerificationEngine
-from backend.ai.model_learning import ModelLearningEngine
-from backend.config import (
+from astroquant.engine.signal_manager import SignalManager
+from astroquant.engine.ai_decision import AIDecisionEngine
+from astroquant.engine.governance import Governance
+from astroquant.engine.prop_phase import PropPhase
+from astroquant.engine.risk import RiskEngine
+from astroquant.engine.execution import ExecutionEngine
+from astroquant.engine.journal import JournalEngine
+from astroquant.engine.position_manager import PositionManager
+from astroquant.engine.session_bias import SessionBias
+from astroquant.engine.system_state import SystemState
+from astroquant.engine.regime import RegimeEngine as VolatilityRegimeEngine
+from astroquant.engine.market_feed import MarketFeed
+from astroquant.engine.position_monitor import PositionMonitor
+from astroquant.engine.slippage import SlippageGuard
+from astroquant.engine.telegram import TelegramEngine
+from astroquant.telegram.clawbot import ClawbotEngine
+from astroquant.engine.capital_engine import CapitalEngine
+from astroquant.engine.montecarlo_engine import MonteCarlo
+from astroquant.engine.basis_engine import BasisEngine
+from astroquant.engine.contract_resolver import ContractResolver
+from astroquant.engine.position_reconciliation import PositionReconciliationEngine
+from astroquant.engine.broker_equity_verification import BrokerEquityVerificationEngine
+from astroquant.backend.ai.model_learning import ModelLearningEngine
+from astroquant.backend.config import (
     DATABENTO_API_KEY,
     DATABENTO_DATASET,
     SPOT_CONFIRMATION_MAX_BPS,
@@ -283,7 +283,11 @@ class MultiSymbolRunner:
             unique.append(key)
         return unique
 
-    def resolve_active_feed_symbol(self, symbol, max_candidates=4, force_probe=False, max_probe_seconds=6.0):
+    def resolve_active_feed_symbol(self, symbol, max_candidates=12, force_probe=False, max_probe_seconds=12.0):
+        """
+        Probe all possible contract months and fallback candidates for the symbol.
+        Select the first contract that returns data, update resolver, and return it.
+        """
         preferred = self.SYMBOL_MAP.get(symbol, symbol)
         cached = self.contract_resolver.get_cached(symbol, max_age_seconds=6 * 3600)
         valid_candidates = set(self.candidate_feed_symbols(symbol, include_contracts=True))
@@ -295,12 +299,15 @@ class MultiSymbolRunner:
         if cached and not force_probe:
             return cached
 
-        if not force_probe and not self.contract_resolver.can_probe(symbol, cooldown_seconds=120):
+        if not force_probe and not self.contract_resolver.can_probe(symbol, cooldown_seconds=60):
             return cached or preferred
 
         dataset = symbol_dataset(symbol)
-        candidates = self.candidate_feed_symbols(symbol, include_contracts=True)[: max(1, min(int(max_candidates), 12))]
+        # Always probe all candidates (up to 12)
+        candidates = self.candidate_feed_symbols(symbol, include_contracts=True)[:max_candidates]
         probe_start = time.monotonic()
+        found = None
+        attempted = []
         for candidate in candidates:
             if (time.monotonic() - probe_start) > float(max_probe_seconds):
                 break
@@ -310,80 +317,47 @@ class MultiSymbolRunner:
                 lookback_minutes=180,
                 record_limit=400,
             )
+            attempted.append(candidate)
             if candles:
-                self.contract_resolver.set_active(symbol, candidate, sample_count=len(candles), candidates_tried=candidates, ttl_seconds=4 * 3600)
-                return candidate
-
-        self.contract_resolver.mark_unresolved(symbol, candidates_tried=candidates)
-        return cached or preferred
+                self.contract_resolver.set_active(symbol, candidate, sample_count=len(candles), candidates_tried=attempted, ttl_seconds=4 * 3600)
+                found = candidate
+                break
+        if not found:
+            self.contract_resolver.mark_unresolved(symbol, candidates_tried=attempted)
+        return found or cached or preferred
 
     def get_futures_candles(self, symbol, lookback_minutes=180, record_limit=1200, prefer_cached=True):
         dataset = symbol_dataset(symbol)
+        # Always probe all candidates for automation
         active = self.resolve_active_feed_symbol(
             symbol,
             force_probe=not prefer_cached,
-            max_candidates=(3 if prefer_cached else 5),
-            max_probe_seconds=(4.0 if prefer_cached else 8.0),
+            max_candidates=12,
+            max_probe_seconds=12.0,
         )
 
         bounded_lookback = max(60, min(int(lookback_minutes or 180), 60 * 24 * 3))
         bounded_limit = max(100, min(int(record_limit or 1200), 4000))
 
-        base_candidates = self.candidate_feed_symbols(symbol, include_contracts=True)
-        root = str(self.SYMBOL_MAP.get(symbol, symbol) or symbol).split(".")[0]
-        preferred_continuous = [f"{root}.c.1", f"{root}.c.0"]
-
-        ordered_candidates = []
-        if str(active or "").endswith(".FUT"):
-            ordered_candidates.extend(preferred_continuous)
-            ordered_candidates.append(active)
-        else:
-            ordered_candidates.append(active)
-            ordered_candidates.extend(preferred_continuous)
-        ordered_candidates.extend(base_candidates)
-
-        unique_candidates = []
-        seen_candidates = set()
-        for candidate in ordered_candidates:
-            key = str(candidate or "").strip()
-            if not key or key in seen_candidates:
-                continue
-            seen_candidates.add(key)
-            unique_candidates.append(key)
-
-        attempted = []
-        for candidate in unique_candidates[:6]:
-            attempted.append(candidate)
+        if active:
             candidate_candles = self.feed.get_ohlcv(
                 dataset=dataset,
-                symbol=candidate,
+                symbol=active,
                 lookback_minutes=bounded_lookback,
                 record_limit=bounded_limit,
             )
             if candidate_candles:
                 self.contract_resolver.set_active(
                     symbol,
-                    candidate,
+                    active,
                     sample_count=len(candidate_candles),
-                    candidates_tried=attempted,
+                    candidates_tried=[active],
                     ttl_seconds=4 * 3600,
                 )
-                return candidate, candidate_candles
+                return active, candidate_candles
 
+        # If no data found, mark miss and return empty
         self.contract_resolver.mark_miss(symbol, failed_symbol=active)
-
-        preferred = self.SYMBOL_MAP.get(symbol, symbol)
-        if active != preferred:
-            preferred_candles = self.feed.get_ohlcv(
-                dataset=dataset,
-                symbol=preferred,
-                lookback_minutes=bounded_lookback,
-                record_limit=bounded_limit,
-            )
-            if preferred_candles:
-                self.contract_resolver.set_active(symbol, preferred, sample_count=len(preferred_candles), candidates_tried=[active, preferred], ttl_seconds=4 * 3600)
-                return preferred, preferred_candles
-
         return active, []
 
     def warmup_contracts(self, force_probe=False, max_candidates=2, max_probe_seconds=2.0):
@@ -1636,6 +1610,31 @@ class MultiSymbolRunner:
             "tp": planned_tp,
             "sl": planned_sl,
         }
+
+
+        # --- Broker price validation before execution ---
+        broker_quote = self.get_broker_spot_quote(symbol)
+        broker_price = broker_quote.get("price")
+        broker_stale = broker_quote.get("stale", True)
+        broker_cache_age = broker_quote.get("cache_age_seconds", 999)
+        price_threshold_bps = 20  # 0.2% difference allowed
+        if broker_price is None or broker_stale or broker_cache_age > 10:
+            return {
+                "status": "Blocked",
+                "symbol": symbol,
+                "reason": f"Broker price unavailable or stale (age={broker_cache_age:.1f}s)",
+                "broker_quote": broker_quote,
+            }
+        price_diff_bps = abs((float(broker_price) - float(intended_price)) / float(intended_price)) * 10000.0
+        if price_diff_bps > price_threshold_bps:
+            return {
+                "status": "Blocked",
+                "symbol": symbol,
+                "reason": f"Broker price deviation too high: {price_diff_bps:.2f}bps",
+                "intended_price": intended_price,
+                "broker_price": broker_price,
+                "broker_quote": broker_quote,
+            }
 
         self.entry_attempt_lock[symbol] = time.time()
         trade = self.execution.execute(execution_signal, lot_size)

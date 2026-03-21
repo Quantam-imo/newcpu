@@ -1,4 +1,4 @@
-from execution.playwright_engine import PlaywrightExecutionEngine
+from astroquant.execution.playwright_engine import PlaywrightExecutionEngine
 
 
 class ExecutionEngine:

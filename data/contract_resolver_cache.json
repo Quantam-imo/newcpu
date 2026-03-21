@@ -1,0 +1,67 @@
+{
+  "XAUUSD": {
+    "active_symbol": "GC.c.1",
+    "resolved_at": 1773628713,
+    "last_probe_at": 1773628713,
+    "last_status": "LIVE",
+    "sample_count": 180,
+    "attempts": 6,
+    "consecutive_failures": 0,
+    "ttl_seconds": 14400,
+    "candidates_tried": [
+      "GC.c.1"
+    ]
+  },
+  "NQ": {
+    "active_symbol": "NQ.c.1",
+    "resolved_at": 1773628817,
+    "last_probe_at": 1773628817,
+    "last_status": "LIVE",
+    "sample_count": 180,
+    "attempts": 6,
+    "consecutive_failures": 0,
+    "ttl_seconds": 14400,
+    "candidates_tried": [
+      "NQ.c.1"
+    ]
+  },
+  "EURUSD": {
+    "active_symbol": "6E.c.1",
+    "resolved_at": 1773628824,
+    "last_probe_at": 1773628824,
+    "last_status": "LIVE",
+    "sample_count": 16,
+    "attempts": 6,
+    "consecutive_failures": 0,
+    "ttl_seconds": 14400,
+    "candidates_tried": [
+      "6E.c.1"
+    ]
+  },
+  "BTC": {
+    "active_symbol": null,
+    "resolved_at": null,
+    "last_probe_at": 1773629970,
+    "last_status": "UNRESOLVED",
+    "sample_count": 0,
+    "attempts": 9,
+    "consecutive_failures": 11,
+    "ttl_seconds": 21600,
+    "candidates_tried": [
+      "BTC.c.1"
+    ]
+  },
+  "US30": {
+    "active_symbol": "YM.c.1",
+    "resolved_at": 1773628842,
+    "last_probe_at": 1773628842,
+    "last_status": "LIVE",
+    "sample_count": 180,
+    "attempts": 6,
+    "consecutive_failures": 0,
+    "ttl_seconds": 14400,
+    "candidates_tried": [
+      "YM.c.1"
+    ]
+  }
+}

@@ -1,7 +1,7 @@
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi import APIRouter
 import asyncio
-from backend.main import mentor_engine, runner
+from astroquant.backend.main import mentor_engine, runner
 
 router = APIRouter()
 

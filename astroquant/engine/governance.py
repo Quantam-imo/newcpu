@@ -1,7 +1,7 @@
-from engine.news_engine import NewsEngine
-from engine.correlation_engine import CorrelationEngine
-from engine.model_weight_engine import ModelWeightEngine
-from engine.frequency_engine import FrequencyEngine
+from astroquant.engine.news_engine import NewsEngine
+from astroquant.engine.correlation_engine import CorrelationEngine
+from astroquant.engine.model_weight_engine import ModelWeightEngine
+from astroquant.engine.frequency_engine import FrequencyEngine
 import datetime
 
 

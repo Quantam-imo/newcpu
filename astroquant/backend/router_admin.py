@@ -1,10 +1,13 @@
+# Minimal placeholder router for admin endpoints
+from fastapi import APIRouter
+router = APIRouter(prefix="/admin", tags=["admin"])
 from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from backend.admin_control_store import AdminControlStore
+from astroquant.backend.admin_control_store import AdminControlStore
 
 
 ROLE_ORDER = {

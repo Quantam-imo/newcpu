@@ -1,86 +1,97 @@
-// Draggable and closable Iceberg panel
-class DraggablePanel {
-    constructor(id, title, contentHtml) {
-        this.id = id;
-        this.title = title;
-        this.contentHtml = contentHtml;
-        this.createPanel();
-    }
 
-    createPanel() {
-        const panel = document.createElement('div');
-        panel.id = this.id;
-        panel.className = 'draggable-panel';
-        panel.innerHTML = `
-            <div class="panel-header">
-                <span>${this.title}</span>
-                <button class="close-btn">×</button>
-            </div>
-            <div class="panel-content">${this.contentHtml}</div>
-        `;
-        document.body.appendChild(panel);
-        this.makeDraggable(panel);
-        panel.querySelector('.close-btn').onclick = () => panel.remove();
-    }
+import { DraggablePanel } from './draggable_panel.js';
+import { fetchWithRetry, registerPanel } from './core.js';
+import { WSManager } from './ws_manager.js';
 
-    makeDraggable(panel) {
-        const header = panel.querySelector('.panel-header');
-        let offsetX = 0, offsetY = 0, isDragging = false;
-        header.onmousedown = (e) => {
-            isDragging = true;
-            offsetX = e.clientX - panel.offsetLeft;
-            offsetY = e.clientY - panel.offsetTop;
-            document.onmousemove = (ev) => {
-                if (isDragging) {
-                    panel.style.left = (ev.clientX - offsetX) + 'px';
-                    panel.style.top = (ev.clientY - offsetY) + 'px';
-                }
-            };
-            document.onmouseup = () => {
-                isDragging = false;
-                document.onmousemove = null;
-                document.onmouseup = null;
-            };
-        };
-    }
-}
-
-function createIcebergPanel(symbol) {
+export function createIcebergPanel(symbol) {
+    let wsManager = null;
+    let restInterval = null;
     const contentHtml = `<table id="iceberg-table">
         <thead><tr><th>Price Level</th><th>Volume</th><th>Repetitions</th><th>Side</th><th>Confidence</th></tr></thead>
         <tbody></tbody>
-    </table>`;
-    new DraggablePanel('iceberg-panel', `Iceberg: ${symbol}`, contentHtml);
-    startIcebergWebSocket(symbol);
-}
+    </table>
+    <div id="iceberg-error" style="color:red;"></div>`;
+    const panel = new DraggablePanel(
+        'iceberg-panel',
+        `Iceberg: ${symbol}`,
+        contentHtml,
+        () => {
+            if (wsManager) wsManager.close();
+            if (restInterval) clearInterval(restInterval);
+        }
+    );
 
-function startIcebergWebSocket(symbol) {
-    // Use REST for now, can upgrade to WebSocket for iceberg
-    function fetchIceberg() {
-        fetch(`/iceberg/${symbol}`)
-            .then(res => {
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                return res.json();
-            })
-            .then(data => {
-                const tbody = document.querySelector('#iceberg-table tbody');
-                if (!tbody) return;
-                tbody.innerHTML = '';
-                data.events.forEach(ev => {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `<td>${ev.price_level}</td><td>${ev.total_volume}</td><td>${ev.repetition_count}</td><td>${ev.dominant_side}</td><td>${(ev.confidence * 100).toFixed(1)}%</td>`;
-                    row.style.color = ev.dominant_side === 'absorption' ? 'blue' : 'orange';
-                    tbody.appendChild(row);
-                });
-            })
-            .catch(err => {
-                const tbody = document.querySelector('#iceberg-table tbody');
-                if (tbody) tbody.innerHTML = '<tr><td colspan="5">Error loading iceberg data</td></tr>';
-                console.error('Iceberg fetch failed:', err);
-            });
+    function setIcebergError(msg) {
+        const el = document.getElementById('iceberg-error');
+        if (el) el.textContent = msg || '';
     }
-    fetchIceberg();
-    setInterval(fetchIceberg, 3000);
+
+    function renderIcebergTable(events, errorMsg) {
+        const tbody = document.querySelector('#iceberg-table tbody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        if (errorMsg) {
+            tbody.innerHTML = `<tr><td colspan="5">${errorMsg}</td></tr>`;
+            return;
+        }
+        (events || []).forEach(ev => {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td>${ev.price_level}</td><td>${ev.total_volume}</td><td>${ev.repetition_count}</td><td>${ev.dominant_side}</td><td>${(ev.confidence * 100).toFixed(1)}%</td>`;
+            row.style.color = ev.dominant_side === 'absorption' ? 'blue' : 'orange';
+            tbody.appendChild(row);
+        });
+    }
+
+    // Try WebSocket first
+    try {
+        wsManager = new WSManager(`/ws/iceberg/${symbol}`, (data) => {
+            if (data && Array.isArray(data.events)) {
+                renderIcebergTable(data.events, '');
+                setIcebergError('');
+            } else if (data && data.error) {
+                renderIcebergTable([], 'Live error: ' + data.error);
+                setIcebergError('Live error: ' + data.error);
+            }
+        });
+        wsManager.ws.onclose = () => {
+            setIcebergError('Live connection lost, switching to REST fallback.');
+            renderIcebergTable([], 'Error');
+            if (wsManager) wsManager.close();
+            restInterval = setInterval(loadIcebergRest, 3000);
+        };
+        wsManager.ws.onerror = (e) => {
+            setIcebergError('WebSocket error, switching to REST fallback.');
+            renderIcebergTable([], 'Error');
+            if (wsManager) wsManager.close();
+            restInterval = setInterval(loadIcebergRest, 3000);
+        };
+    } catch (err) {
+        setIcebergError('WebSocket init failed, using REST fallback.');
+        renderIcebergTable([], 'Error');
+        restInterval = setInterval(loadIcebergRest, 3000);
+    }
+
+    async function loadIcebergRest() {
+        try {
+            const res = await fetchWithRetry(`${window.AQ_BASE}/iceberg/${symbol}`);
+            const data = await res.json();
+            if (data.error) {
+                renderIcebergTable([], data.error);
+                setIcebergError(data.error);
+                return;
+            }
+            renderIcebergTable(data.events, '');
+            setIcebergError('');
+        } catch (err) {
+            renderIcebergTable([], 'REST error');
+            setIcebergError('REST error');
+        }
+    }
+
+    registerPanel(panel.panel, () => {
+        if (wsManager) wsManager.close();
+        if (restInterval) clearInterval(restInterval);
+    });
 }
 
 function addIcebergButton(symbol) {

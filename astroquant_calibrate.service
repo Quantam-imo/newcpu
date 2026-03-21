@@ -1,0 +1,13 @@
+[Unit]
+Description=AstroQuant Playwright Selector Calibration
+After=chrome_remote_debug.service astroquant_tradingbot.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/workspaces/newcpu
+ExecStart=/workspaces/newcpu/.venv/bin/python3 /workspaces/newcpu/astroquant/execution/matchtrader_executor.py --mode calibrate --cdp-url ws://127.0.0.1:9222 --manual-login-timeout 30
+TimeoutSec=120
+
+[Install]
+WantedBy=multi-user.target

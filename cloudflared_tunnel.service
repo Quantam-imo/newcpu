@@ -1,0 +1,13 @@
+[Unit]
+Description=Cloudflare Tunnel for AstroQuant
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/workspaces/newcpu
+ExecStart=/usr/local/bin/cloudflared tunnel --url http://localhost:8000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

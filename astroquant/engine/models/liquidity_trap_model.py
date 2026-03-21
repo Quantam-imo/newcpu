@@ -1,5 +1,5 @@
-from engine.liquidity_trap_detector import LiquidityTrapDetector
-from engine.tape_speed_engine import TapeSpeedEngine
+from astroquant.engine.liquidity_trap_detector import LiquidityTrapDetector
+from astroquant.engine.tape_speed_engine import TapeSpeedEngine
 
 
 class LiquidityTrapModel:

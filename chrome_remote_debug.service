@@ -1,0 +1,13 @@
+[Unit]
+Description=Chrome with Remote Debugging for AstroQuant
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/workspaces/newcpu
+ExecStart=/usr/bin/google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-profile --no-sandbox --disable-gpu --disable-software-rasterizer --disable-dev-shm-usage --disable-extensions --disable-background-networking --disable-sync --disable-translate --disable-default-apps --disable-popup-blocking --disable-background-timer-throttling --disable-renderer-backgrounding --disable-device-discovery-notifications --disable-features=TranslateUI --window-size=1280,900 https://manager.maven.markets/app/trade
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

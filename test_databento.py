@@ -5,8 +5,14 @@ from datetime import datetime, timedelta, timezone
 import databento as db
 
 
-def test_historical_bbo(client, candidates):
-    # Keep a safety lag to avoid querying beyond the current available end.
+
+import pytest
+
+@pytest.mark.parametrize("candidates", [["GCJ6", "GCM6", "GCZ6", "GC.c.1"]])
+def test_historical_bbo(candidates):
+    key = os.getenv("DATABENTO_API_KEY")
+    assert key, "DATABENTO_API_KEY is not set"
+    client = db.Historical(key)
     now = datetime.now(timezone.utc)
     end = now - timedelta(minutes=20)
     start = end - timedelta(minutes=30)
@@ -21,19 +27,20 @@ def test_historical_bbo(client, candidates):
             )
             rows = list(store)
             if rows:
-                print(
-                    f"HIST OK {symbol}: rows={len(rows)} window={start.isoformat()} -> {end.isoformat()}",
-                    flush=True,
-                )
-                return True, symbol
+                print(f"HIST OK {symbol}: rows={len(rows)} window={start.isoformat()} -> {end.isoformat()}", flush=True)
+                return
             print(f"HIST NO_DATA {symbol}: rows=0", flush=True)
         except Exception as exc:
             first_line = str(exc).splitlines()[0]
             print(f"HIST FAIL {symbol}: {first_line}", flush=True)
-    return False, None
+    pytest.fail("No historical BBO data found for any candidate symbol.")
 
 
-def test_live_bbo(key, symbol, listen_seconds=6):
+
+@pytest.mark.parametrize("symbol", ["GC.c.1"])
+def test_live_bbo(symbol, listen_seconds=6):
+    key = os.getenv("DATABENTO_API_KEY")
+    assert key, "DATABENTO_API_KEY is not set"
     seen = {"count": 0}
 
     def on_record(_record):
@@ -57,10 +64,9 @@ def test_live_bbo(key, symbol, listen_seconds=6):
         time.sleep(max(2, int(listen_seconds)))
         ok = seen["count"] > 0
         print(f"LIVE {'OK' if ok else 'NO_DATA'} {symbol}: ticks={seen['count']}", flush=True)
-        return ok
+        assert ok, f"No live BBO data received for {symbol}"
     except Exception as exc:
-        print(f"LIVE FAIL {symbol}: {exc}", flush=True)
-        return False
+        pytest.fail(f"LIVE FAIL {symbol}: {exc}")
     finally:
         if live is not None:
             try:

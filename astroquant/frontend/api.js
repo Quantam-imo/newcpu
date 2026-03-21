@@ -1,38 +1,29 @@
-const AQ_DEFAULT_API_ORIGIN = ["8000", "8001"].includes(String(window.location.port || ""))
-	? window.location.origin
-	: "http://127.0.0.1:8000";
-const AQ_API_BASE_API = String(window.AQ_API_BASE || AQ_DEFAULT_API_ORIGIN);
-
-// Backend connection monitoring & error handling
-let backendConnected = true;
-let failureCount = 0;
-const FAILURE_THRESHOLD = 2;
-const ERROR_EXPIRY_MS = 15000;
-
-const connectionStatusEl = document.getElementById("connectionStatus");
-const errorBannerContainerEl = document.getElementById("errorBannerContainer");
-const activeErrors = new Map();
-
-function updateConnectionStatus(isConnected, message = "") {
-	if (!connectionStatusEl) return;
-	backendConnected = isConnected;
-	connectionStatusEl.classList.remove("good", "warn", "bad");
-	if (isConnected) {
-		connectionStatusEl.classList.add("good");
-		connectionStatusEl.innerHTML = '<span class="status-dot"></span>Backend Connected';
-		failureCount = 0;
-	} else {
-		connectionStatusEl.classList.add("bad");
-		connectionStatusEl.innerHTML = `<span class="status-dot"></span>Backend ${message || "Unreachable"}`;
-	}
-}
-
+// ---------- ERROR BANNER (GLOBAL) ----------
 function showError(key, message, retryFn = null, autoDismiss = true) {
-	if (!errorBannerContainerEl) return;
-	if (activeErrors.has(key)) clearTimeout(activeErrors.get(key).timeout);
+	let errorBannerContainerEl = document.getElementById("errorBannerContainer");
+	if (!errorBannerContainerEl) {
+		errorBannerContainerEl = document.createElement("div");
+		errorBannerContainerEl.id = "errorBannerContainer";
+		errorBannerContainerEl.style.position = "fixed";
+		errorBannerContainerEl.style.top = "10px";
+		errorBannerContainerEl.style.right = "10px";
+		errorBannerContainerEl.style.zIndex = 9999;
+		document.body.appendChild(errorBannerContainerEl);
+	}
+	if (!window._activeErrors) window._activeErrors = new Map();
+	if (window._activeErrors.has(key)) clearTimeout(window._activeErrors.get(key).timeout);
 	const errorDiv = document.createElement("div");
 	errorDiv.id = `error-${key}`;
 	errorDiv.className = "error-banner";
+	errorDiv.style.background = "#2a3b59";
+	errorDiv.style.color = "#fff";
+	errorDiv.style.padding = "10px 18px";
+	errorDiv.style.margin = "8px 0";
+	errorDiv.style.borderRadius = "8px";
+	errorDiv.style.boxShadow = "0 2px 8px rgba(0,0,0,0.18)";
+	errorDiv.style.display = "flex";
+	errorDiv.style.alignItems = "center";
+	errorDiv.style.gap = "10px";
 	const errorText = document.createElement("div");
 	errorText.className = "error-text";
 	errorText.textContent = message;
@@ -42,244 +33,256 @@ function showError(key, message, retryFn = null, autoDismiss = true) {
 		retryBtn.className = "retry-btn";
 		retryBtn.textContent = "Retry";
 		retryBtn.onclick = () => { retryFn(); removeError(key); };
+		retryBtn.style.marginLeft = "8px";
 		errorDiv.appendChild(retryBtn);
 	}
 	const closeBtn = document.createElement("button");
 	closeBtn.className = "close-btn";
 	closeBtn.textContent = "×";
 	closeBtn.onclick = () => removeError(key);
+	closeBtn.style.marginLeft = "8px";
 	errorDiv.appendChild(closeBtn);
 	errorBannerContainerEl.appendChild(errorDiv);
-	const timeout = autoDismiss ?setTimeout(() => removeError(key), ERROR_EXPIRY_MS) : null;
-	activeErrors.set(key, { errorDiv, retryFn, timeout });
+	const timeout = autoDismiss ? setTimeout(() => removeError(key), 12000) : null;
+	window._activeErrors.set(key, { errorDiv, retryFn, timeout });
 }
 
 function removeError(key) {
-	if (activeErrors.has(key)) {
-		const { errorDiv, timeout } = activeErrors.get(key);
+	if (!window._activeErrors) return;
+	if (window._activeErrors.has(key)) {
+		const { errorDiv, timeout } = window._activeErrors.get(key);
 		if (timeout) clearTimeout(timeout);
 		if (errorDiv && errorDiv.parentNode) errorDiv.remove();
-		activeErrors.delete(key);
+		window._activeErrors.delete(key);
 	}
 }
+// ==========================
+// PRO API ENGINE (ASTRAQUANT)
+// ==========================
 
-// ============================================================================
-// PHASE 2: Response Caching & Performance Monitoring
-// ============================================================================
-
-const CACHE_KEY_PREFIX = "AQ_CACHE_";
-const PERF_KEY_PREFIX = "AQ_PERF_";
-const CACHE_CONFIG = {
-	"/mentor/context": { ttl: 8000, maxSize: 100 },    // Cache mentor for 8s (matches poll interval)
-	"/mentor": { ttl: 8000, maxSize: 100 },
-	"/chart/data": { ttl: 3000, maxSize: 150 },        // Cache chart for 3s
-	"/market/orderflow_summary": { ttl: 5000, maxSize: 100 },
-	"/market/offset_quality": { ttl: 10000, maxSize: 80 }, // Slow endpoint - cache 10s
-	"/status": { ttl: 5000, maxSize: 50 },
+// ---------- CONFIG ----------
+const API_CONFIG = {
+  TIMEOUT: 20000,
+  MAX_RETRIES: 3,
+  BASE_DELAY: 400,
+  FAILURE_THRESHOLD: 3,
+  CIRCUIT_RESET_TIME: 15000,
 };
 
-const performanceMetrics = {
-	requests: [],         // Array of {path, startTime, duration, fromCache}
-	slowestEndpoints: {}, // {path: maxDuration}
+// ---------- ENDPOINTS ----------
+const API_ENDPOINTS = [
+	"http://127.0.0.1:8000"
+];
+
+// ---------- STATE ----------
+const circuitState = {
+  failures: 0,
+  open: false,
+  lastFailureTime: 0,
 };
 
-/** Get cache key for a URL path */
-function getCacheKey(path) {
-	return `${CACHE_KEY_PREFIX}${path}`;
+const inFlightRequests = new Map();
+
+// ---------- CACHE ----------
+const CACHE_PREFIX = "AQ_CACHE_";
+
+function cacheKey(path) {
+  return CACHE_PREFIX + path;
 }
 
-/** Store response in cache with TTL */
-function cacheResponse(path, jsonData) {
-	const config = CACHE_CONFIG[path] || { ttl: 5000, maxSize: 100 };
-	const cacheEntry = {
-		data: jsonData,
-		timestamp: Date.now(),
-		ttl: config.ttl,
-		size: JSON.stringify(jsonData).length,
-	};
-	try {
-		localStorage.setItem(getCacheKey(path), JSON.stringify(cacheEntry));
-	} catch (e) {
-		console.warn("Cache storage failed:", e);
-	}
+function setCache(path, data, ttl = 5000) {
+  try {
+    localStorage.setItem(
+      cacheKey(path),
+      JSON.stringify({ data, exp: Date.now() + ttl })
+    );
+  } catch {}
 }
 
-/** Retrieve cached response if valid (not expired) */
-function getCachedResponse(path) {
-	const key = getCacheKey(path);
-	try {
-		const cached = localStorage.getItem(key);
-		if (!cached) return null;
-		const entry = JSON.parse(cached);
-		const age = Date.now() - entry.timestamp;
-		if (age >= entry.ttl) {
-			localStorage.removeItem(key); // Expired
-			return null;
-		}
-		return entry.data;
-	} catch (e) {
-		return null;
-	}
+function getCache(path) {
+  try {
+    const raw = localStorage.getItem(cacheKey(path));
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (Date.now() > parsed.exp) {
+      localStorage.removeItem(cacheKey(path));
+      return null;
+    }
+    return parsed.data;
+  } catch {
+    return null;
+  }
 }
 
-/** Clear cache for a specific path or pattern */
-function clearCache(pathPattern = "*") {
-	try {
-		if (pathPattern === "*") {
-			// Clear all caches
-			for (let i = 0; i < localStorage.length; i++) {
-				const key = localStorage.key(i);
-				if (key && key.startsWith(CACHE_KEY_PREFIX)) {
-					localStorage.removeItem(key);
-				}
-			}
-		} else {
-			// Clear specific path
-			const key = getCacheKey(pathPattern);
-			localStorage.removeItem(key);
-		}
-	} catch (e) {
-		console.warn("Cache clear failed:", e);
-	}
+// ---------- CIRCUIT BREAKER ----------
+function isCircuitOpen() {
+  if (!circuitState.open) return false;
+
+  const now = Date.now();
+  if (now - circuitState.lastFailureTime > API_CONFIG.CIRCUIT_RESET_TIME) {
+    circuitState.open = false;
+    circuitState.failures = 0;
+    return false;
+  }
+
+  return true;
 }
 
-/** Track request performance */
-function trackPerformance(path, duration, fromCache = false) {
-	const metric = { path: path.split('?')[0], duration, fromCache, timestamp: Date.now() };
-	performanceMetrics.requests.push(metric);
-	
-	// Keep only last 100 requests in memory
-	if (performanceMetrics.requests.length > 100) {
-		performanceMetrics.requests.shift();
-	}
-	
-	// Track slowest endpoints
-	const pathKey = path.split('?')[0];
-	if (!performanceMetrics.slowestEndpoints[pathKey] || duration > performanceMetrics.slowestEndpoints[pathKey]) {
-		performanceMetrics.slowestEndpoints[pathKey] = duration;
-	}
+function recordFailure() {
+  circuitState.failures++;
+
+  if (circuitState.failures >= API_CONFIG.FAILURE_THRESHOLD) {
+    circuitState.open = true;
+    circuitState.lastFailureTime = Date.now();
+    console.warn("🚨 Circuit OPEN (API unstable)");
+  }
 }
 
-/** Get performance summary for debugging */
-function getPerformanceSummary() {
-	const avgByPath = {};
-	const countByPath = {};
-	for (const metric of performanceMetrics.requests) {
-		countByPath[metric.path] = (countByPath[metric.path] || 0) + 1;
-		avgByPath[metric.path] = (avgByPath[metric.path] || 0) + metric.duration;
-	}
-	for (const path in avgByPath) {
-		avgByPath[path] = Math.round(avgByPath[path] / countByPath[path]);
-	}
-	return {
-		totalRequests: performanceMetrics.requests.length,
-		averageByPath: avgByPath,
-		slowestEndpoints: performanceMetrics.slowestEndpoints,
-		lastUpdated: new Date().toISOString(),
-	};
+function recordSuccess() {
+  circuitState.failures = 0;
+  circuitState.open = false;
 }
 
-const apiFetch = async (path, options, timeoutMs = 25000) => {
-	const startTime = performance.now();
-	const pathBase = path.split('?')[0];
-	
-	// Check cache first for GET requests
-	if (!options.method || options.method === "GET") {
-		const cached = getCachedResponse(path);
-		if (cached) {
-			trackPerformance(path, 0, true);
-			console.debug(`apiFetch: Cache hit for ${path}`);
-			// Return cached data as Response object
-			return new Response(JSON.stringify(cached), {
-				status: 200,
-				headers: { "Content-Type": "application/json", "X-From-Cache": "true" }
-			});
-		}
-	}
-	
-	// Build comprehensive list of targets to try
-	const targets = [];
-	
-	// Always try relative URL first (same origin as page)
-	targets.push(path);
-	
-	// Then try absolute URLs in priority order
-	const uniqueOrigins = new Set();
-	const baseOrigins = [
-		window.location.origin,              // Current page origin
-		"http://localhost:8000",              // Localhost
-		"http://127.0.0.1:8000",              // Loopback
-	];
-	
-	for (const origin of baseOrigins) {
-		const trimmed = String(origin || "").trim();
-		if (trimmed && !uniqueOrigins.has(trimmed)) {
-			uniqueOrigins.add(trimmed);
-			targets.push(`${trimmed}${path}`);
-		}
-	}
+// ---------- RETRY WITH JITTER ----------
+async function retry(fn, retries = API_CONFIG.MAX_RETRIES) {
+  let attempt = 0;
 
-	let lastError = null;
-	for (const target of targets) {
-		const controller = new AbortController();
-		const timer = setTimeout(() => controller.abort(), timeoutMs);
-		try {
-			const response = await fetch(target, { ...options, signal: controller.signal });
-			clearTimeout(timer);
-			if (response.ok || response.status === 599) {
-				const duration = performance.now() - startTime;
-				trackPerformance(path, duration, false);
-				
-				// Success - update connection status if it was down
-				if (failureCount > 0) updateConnectionStatus(true);
-				// Update AQ_API_BASE on success
-				if (target.startsWith("http")) {
-					try {
-						const origin = new URL(target).origin;
-						if (origin && origin !== window.location.origin) {
-							window.AQ_API_BASE = origin;
-						}
-					} catch (_) {}
-				}
-				
-				// Cache successful JSON responses
-				if (response.ok && response.headers.get("Content-Type")?.includes("application/json")) {
-					try {
-						const jsonData = await response.clone().json();
-						if (CACHE_CONFIG[pathBase]) {
-							cacheResponse(path, jsonData);
-						}
-					} catch (_) {}
-				}
-				
-				return response;
-			}
-			lastError = response;
-		} catch (error) {
-			clearTimeout(timer);
-			lastError = error;
-			console.debug(`apiFetch: ${target} failed -`, error.message || error);
-		}
-	}
-	
-	// All attempts failed - track failure
-	failureCount++;
-	if (failureCount >= FAILURE_THRESHOLD) {
-		updateConnectionStatus(false, "Timeout");
-	}
-	
-	const fallbackError = lastError instanceof Error ? String(lastError) : "fetch failed";
-	const isTimeout = lastError?.name === "AbortError" || fallbackError.includes("timeout");
-	const errorMsg = isTimeout ? `Request timeout (${timeoutMs}ms): ${path}` : `Request failed: ${path}`;
-	const errorKey = `fetch-${path.split('?')[0]}`;
-	showError(errorKey, errorMsg, () => apiFetch(path, options, timeoutMs), false);
-	
-	console.warn("apiFetch failed on all targets:", targets, "lastError:", fallbackError);
-	return new Response(
-		JSON.stringify({ status: "error", message: fallbackError }),
-		{ status: 599, headers: { "Content-Type": "application/json" } },
-	);
-};
+  while (attempt <= retries) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt === retries) throw err;
+
+      const delay =
+        API_CONFIG.BASE_DELAY *
+        Math.pow(2, attempt) *
+        (1 + Math.random());
+
+      await new Promise((r) => setTimeout(r, delay));
+      attempt++;
+    }
+  }
+}
+
+// ---------- CORE FETCH ----------
+async function coreFetch(url, options, timeout) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const res = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+
+    clearTimeout(timer);
+
+    if (!res.ok) throw new Error("HTTP " + res.status);
+
+    return res;
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
+  }
+}
+
+// ---------- MAIN ENGINE ----------
+async function apiFetch(path, options = {}, timeout = API_CONFIG.TIMEOUT) {
+  const method = options.method || "GET";
+  const basePath = path.split("?")[0];
+
+  // 🚫 CIRCUIT BREAKER
+  if (isCircuitOpen()) {
+    console.warn("⚠️ API blocked by circuit breaker");
+
+    return new Response(
+      JSON.stringify({
+        status: "blocked",
+        reason: "circuit_open",
+      }),
+      { status: 503 }
+    );
+  }
+
+  // ⚡ REQUEST DEDUPLICATION
+  const key = method + ":" + path;
+  if (inFlightRequests.has(key)) {
+    return inFlightRequests.get(key);
+  }
+
+  // 💾 CACHE
+  if (method === "GET") {
+    const cached = getCache(basePath);
+    if (cached) {
+      return new Response(JSON.stringify(cached), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  }
+
+  // 🔁 EXECUTION
+  const requestPromise = retry(async () => {
+    let lastError;
+
+    for (const base of API_ENDPOINTS) {
+      const url = base + path;
+
+      try {
+        const res = await coreFetch(url, options, timeout);
+
+        recordSuccess();
+
+        // cache
+        if (
+          method === "GET" &&
+          res.headers.get("content-type")?.includes("application/json")
+        ) {
+          const data = await res.clone().json();
+          setCache(basePath, data);
+        }
+
+        return res;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    recordFailure();
+    throw lastError;
+  });
+
+  inFlightRequests.set(key, requestPromise);
+
+  try {
+    return await requestPromise;
+  } finally {
+    inFlightRequests.delete(key);
+  }
+}
+
+// ---------- HEALTH CHECK ----------
+function getApiHealth() {
+  return {
+    circuitOpen: circuitState.open,
+    failures: circuitState.failures,
+    inFlight: inFlightRequests.size,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+// ---------- TRADING SAFETY ----------
+function canExecuteTrade() {
+  if (isCircuitOpen()) return false;
+  if (circuitState.failures >= 2) return false;
+  return true;
+}
+
+// ---------- EXPORT ----------
+window.apiFetch = apiFetch;
+window.apiHealth = getApiHealth;
+window.canExecuteTrade = canExecuteTrade;
 const AQ_ADMIN_TOKEN = window.AQ_ADMIN_TOKEN || localStorage.getItem("AQ_ADMIN_TOKEN") || "dev-admin-token";
 const AQ_ADMIN_ROLE = window.AQ_ADMIN_ROLE || localStorage.getItem("AQ_ADMIN_ROLE") || "ADMIN";
 const AQ_ADMIN_USER = window.AQ_ADMIN_USER || localStorage.getItem("AQ_ADMIN_USER") || "admin";
@@ -372,7 +375,7 @@ function toggleMicroPanel(kind, forceOpen) {
 	if (shouldOpen) {
 		keepPanelInViewport(panel);
 		if (kind === "summary") {
-			refreshOrderflowSummaryPanel().catch(() => {});
+			   refreshOrderflowSummaryPanel().catch(console.error);
 		}
 	}
 	if (btn) btn.innerText = shouldOpen ? `Hide ${cfg.label}` : `Open ${cfg.label}`;
@@ -487,7 +490,7 @@ function toggleJournalPanel(forceOpen) {
 		// ignore storage errors
 	}
 	if (shouldOpen) {
-		loadJournal().catch(() => {});
+		loadJournal().catch(console.error);
 	}
 	return shouldOpen;
 }
@@ -580,14 +583,14 @@ function _toggleFloatingPanel(panelId, buttonId, storageKey, label, forceOpen) {
 function toggleGovernancePanel(forceOpen) {
 	const opened = _toggleFloatingPanel("governancePanel", "governanceToggleBtn", AQ_GOV_PANEL_STATE_KEY, "Governance", forceOpen);
 	if (opened) {
-		loadStatus().catch(() => {});
-		updateVolatility().catch(() => {});
-		updatePropStatus().catch(() => {});
-		updateEquityBar().catch(() => {});
-		updateDrawdownBar().catch(() => {});
-		updateModelStats().catch(() => {});
-		updateNewsSeverity().catch(() => {});
-		syncPropEngineControls().catch(() => {});
+		loadStatus().catch(console.error);
+		updateVolatility().catch(console.error);
+		updatePropStatus().catch(console.error);
+		updateEquityBar().catch(console.error);
+		updateDrawdownBar().catch(console.error);
+		updateModelStats().catch(console.error);
+		updateNewsSeverity().catch(console.error);
+		syncPropEngineControls().catch(console.error);
 	}
 	return opened;
 }
@@ -595,7 +598,7 @@ function toggleGovernancePanel(forceOpen) {
 function toggleSystemHealthPanel(forceOpen) {
 	const opened = _toggleFloatingPanel("systemHealthPanel", "systemHealthToggleBtn", AQ_HEALTH_PANEL_STATE_KEY, "System Health", forceOpen);
 	if (opened) {
-		updateSystemHealth().catch(() => {});
+		updateSystemHealth().catch(console.error);
 	}
 	return opened;
 }
@@ -803,10 +806,10 @@ function toggleOperationsConsole(forceOpen) {
 		// ignore storage errors
 	}
 	if (shouldOpen) {
-		updateBasisOps().catch(() => {});
-		updateOpsStatus().catch(() => {});
-		updateMultiSymbolDashboard().catch(() => {});
-		runFeedProbe().catch(() => {});
+		updateBasisOps().catch(console.error);
+		updateOpsStatus().catch(console.error);
+		updateMultiSymbolDashboard().catch(console.error);
+		runFeedProbe().catch(console.error);
 	}
 	return shouldOpen;
 }
@@ -894,7 +897,7 @@ function adminHeaders(extra = {}) {
 async function loadStatus() {
 
 	const res = await apiFetch("/status");
-	const data = await res.json();
+	const data = await res.clone().json();
 
 	document.getElementById("balance").innerText = data.balance;
 	document.getElementById("phase").innerText = data.phase;
@@ -916,7 +919,7 @@ async function loadStatus() {
 async function updatePropStatus() {
 	const res = await apiFetch("/prop_status");
 	if (!res.ok) return;
-	const data = await res.json();
+	const data = await res.clone().json();
 
 	const phaseDisplay = document.getElementById("phaseDisplay");
 	const floorDisplay = document.getElementById("floorDisplay");
@@ -941,7 +944,7 @@ async function updatePropStatus() {
 async function updateEquityBar() {
 	const res = await apiFetch("/equity");
 	if (!res.ok) return;
-	const data = await res.json();
+	const data = await res.clone().json();
 
 	const base = Number(data.base || 50000);
 	const target = Number(data.target || base);
@@ -967,8 +970,8 @@ async function updateDrawdownBar() {
 	]);
 	if (!equityRes.ok || !propRes.ok) return;
 
-	const equityData = await equityRes.json();
-	const propData = await propRes.json();
+	const equityData = await equityRes.clone().json();
+	const propData = await propRes.clone().json();
 
 	const equity = Number(equityData.equity || 0);
 	const floor = Number(propData.static_floor || 0);
@@ -1288,20 +1291,23 @@ async function updateMultiSymbolDashboard() {
 
 		const tr = document.createElement("tr");
 		tr.style.cursor = "pointer";
-		tr.innerHTML = `
-			<td>${row.symbol || "--"}</td>
-			<td>${market.htf_bias || "--"}</td>
-			<td>${market.ltf_structure || "--"}</td>
-			<td>${model.active_model || "--"}</td>
-			<td>${model.confidence != null ? Number(model.confidence).toFixed(2) : "--"}</td>
-			<td>${risk.risk_percent != null ? Number(risk.risk_percent).toFixed(2) : "--"}</td>
-			<td>${risk.phase || "--"}</td>
-			<td>${(row.prop_behavior || {}).mode || "--"}</td>
-			<td>${basis.status || "--"}</td>
-			<td>${resolver.status || "--"}</td>
-			<td>${resolver.watch_only ? "YES" : "NO"}</td>
-			<td>${market.news_state || "--"}</td>
-		`;
+		   tr.innerHTML = `
+			   <td>${row.symbol || "--"}</td>
+			   <td>${market.htf_bias || "--"}</td>
+			   <td>${market.ltf_structure || "--"}</td>
+			   <td>${model.active_model || "--"}</td>
+			   <td>${model.confidence != null ? Number(model.confidence).toFixed(2) : "--"}</td>
+			   <td>${risk.risk_percent != null ? Number(risk.risk_percent).toFixed(2) : "--"}</td>
+			   <td>${risk.phase || "--"}</td>
+			   <td>${(row.prop_behavior || {}).mode || "--"}</td>
+			   <td>${basis.status || "--"}</td>
+			   <td>${resolver.status || "--"}</td>
+			   <td>${resolver.watch_only ? "YES" : "NO"}</td>
+			   <td>${market.news_state || "--"}</td>
+			   <td>${row.broker_price != null ? fmtPrice(row.broker_price, 2) : "--"}</td>
+			   <td>${row.system_price != null ? fmtPrice(row.system_price, 2) : "--"}</td>
+			   <td>${row.offset_diff != null ? fmtPrice(row.offset_diff, 2) : "--"}</td>
+		   `;
 
 		tr.addEventListener("click", () => {
 			const select = document.getElementById("chartSymbol");
@@ -1474,7 +1480,14 @@ async function updateOpsStatus() {
 		apiFetch("/status"),
 		apiFetch(`/market/offset_quality?symbol=${encodeURIComponent(symbol)}`),
 	]);
-	if (!feedRes.ok || !execRes.ok || !recRes.ok || !eqRes.ok || !propBehaviorRes.ok || !propRes.ok || !statusRes.ok || !offsetQualityRes.ok) return;
+	// If any response is not ok, try to show error in the console panel
+	if (!feedRes.ok || !execRes.ok || !recRes.ok || !eqRes.ok || !propBehaviorRes.ok || !propRes.ok || !statusRes.ok || !offsetQualityRes.ok) {
+		const panel = document.getElementById("operationsConsolePanel");
+		if (panel) {
+			panel.innerHTML = `<div style='color:#ef4444;font-size:14px;padding:12px;'>Backend error: One or more status endpoints failed to respond.<br/>Please check backend logs and network connectivity.</div>`;
+		}
+		return;
+	}
 
 	const feed = await feedRes.json();
 	const exec = await execRes.json();
@@ -1484,6 +1497,15 @@ async function updateOpsStatus() {
 	const status = await statusRes.json();
 	const offsetQuality = await offsetQualityRes.json();
 	const propBehaviorData = await propBehaviorRes.json();
+
+	// Defensive: If any required object is missing, show error and return
+	if (!feed || !exec || !rec || !eq || !prop || !status || !offsetQuality || !propBehaviorData) {
+		const panel = document.getElementById("operationsConsolePanel");
+		if (panel) {
+			panel.innerHTML = `<div style='color:#ef4444;font-size:14px;padding:12px;'>Backend returned incomplete data for operations console.<br/>Please check backend health.</div>`;
+		}
+		return;
+	}
 	const behavior = propBehaviorData?.behavior || {};
 	const override = propBehaviorData?.override || {};
 	const feedHealthy = Boolean(feed?.healthy);
@@ -1834,8 +1856,8 @@ async function reconnectExecutionBrowser() {
 	setText("opsProbeSnapshot", "Validating selectors...");
 	await apiFetch("/execution/recover?force_reconnect=true", { method: "POST" });
 	await updateOpsStatus();
-	setTimeout(() => updateOpsStatus().catch(() => {}), 1200);
-	setTimeout(() => updateOpsStatus().catch(() => {}), 2600);
+	setTimeout(() => updateOpsStatus().catch(console.error), 1200);
+	setTimeout(() => updateOpsStatus().catch(console.error), 2600);
 	setText("opsProbeSnapshot", "Reconnect completed");
 }
 
@@ -1905,82 +1927,82 @@ async function setGannEngineEnabled(enabled) {
 
 setInterval(() => {
 	if (!document.getElementById("governancePanel")?.classList.contains("open")) return;
-	loadStatus().catch(() => {});
-	updateVolatility().catch(() => {});
-	updatePropStatus().catch(() => {});
-	updateEquityBar().catch(() => {});
-	updateDrawdownBar().catch(() => {});
-	updateModelStats().catch(() => {});
-	updateNewsSeverity().catch(() => {});
+	loadStatus().catch(console.error);
+	updateVolatility().catch(console.error);
+	updatePropStatus().catch(console.error);
+	updateEquityBar().catch(console.error);
+	updateDrawdownBar().catch(console.error);
+	updateModelStats().catch(console.error);
+	updateNewsSeverity().catch(console.error);
 }, 5000);
 
 setInterval(() => {
 	if (!document.getElementById("systemHealthPanel")?.classList.contains("open")) return;
-	updateSystemHealth().catch(() => {});
+	updateSystemHealth().catch(console.error);
 }, 5000);
 
 setInterval(() => {
 	if (!document.getElementById("journalPanel")?.classList.contains("open")) return;
-	loadJournal().catch(() => {});
+	loadJournal().catch(console.error);
 }, 8000);
 
 setInterval(() => {
 	if (!document.getElementById("operationsConsolePanel")?.classList.contains("open")) return;
-	updateBasisOps().catch(() => {});
-	updateOpsStatus().catch(() => {});
-	updateMultiSymbolDashboard().catch(() => {});
+	updateBasisOps().catch(console.error);
+	updateOpsStatus().catch(console.error);
+	updateMultiSymbolDashboard().catch(console.error);
 }, 7000);
 
 const warmupBtn = document.getElementById("basisWarmupBtn");
-if (warmupBtn) warmupBtn.addEventListener("click", () => warmupContracts().catch(() => {}));
+if (warmupBtn) warmupBtn.addEventListener("click", () => warmupContracts().catch(console.error));
 
 const chartSymbolSelect = document.getElementById("chartSymbol");
 if (chartSymbolSelect) {
-	chartSymbolSelect.addEventListener("change", () => updateBasisOps(true).catch(() => {}));
-	chartSymbolSelect.addEventListener("change", () => runFeedProbe().catch(() => {}));
-	chartSymbolSelect.addEventListener("change", () => updateModelStats().catch(() => {}));
-	chartSymbolSelect.addEventListener("change", () => loadJournal().catch(() => {}));
-	chartSymbolSelect.addEventListener("change", () => updateOpsStatus().catch(() => {}));
+	chartSymbolSelect.addEventListener("change", () => updateBasisOps(true).catch(console.error));
+	chartSymbolSelect.addEventListener("change", () => runFeedProbe().catch(console.error));
+	chartSymbolSelect.addEventListener("change", () => updateModelStats().catch(console.error));
+	chartSymbolSelect.addEventListener("change", () => loadJournal().catch(console.error));
+	chartSymbolSelect.addEventListener("change", () => updateOpsStatus().catch(console.error));
 }
 
 const phase1Btn = document.getElementById("phase1Btn");
-if (phase1Btn) phase1Btn.addEventListener("click", () => setPhaseDashboard("PHASE1").catch(() => {}));
+if (phase1Btn) phase1Btn.addEventListener("click", () => setPhaseDashboard("PHASE1").catch(console.error));
 
 const phase2Btn = document.getElementById("phase2Btn");
-if (phase2Btn) phase2Btn.addEventListener("click", () => setPhaseDashboard("PHASE2").catch(() => {}));
+if (phase2Btn) phase2Btn.addEventListener("click", () => setPhaseDashboard("PHASE2").catch(console.error));
 
 const fundedBtn = document.getElementById("fundedBtn");
-if (fundedBtn) fundedBtn.addEventListener("click", () => setPhaseDashboard("FUNDED").catch(() => {}));
+if (fundedBtn) fundedBtn.addEventListener("click", () => setPhaseDashboard("FUNDED").catch(console.error));
 
 const applyPropEngineBtn = document.getElementById("applyPropEngineBtn");
-if (applyPropEngineBtn) applyPropEngineBtn.addEventListener("click", () => configurePropEngineDashboard().catch(() => {}));
+if (applyPropEngineBtn) applyPropEngineBtn.addEventListener("click", () => configurePropEngineDashboard().catch(console.error));
 
 const engineStartBtn = document.getElementById("engineStartBtn");
-if (engineStartBtn) engineStartBtn.addEventListener("click", () => engineAction("start").catch(() => {}));
+if (engineStartBtn) engineStartBtn.addEventListener("click", () => engineAction("start").catch(console.error));
 
 const engineStopBtn = document.getElementById("engineStopBtn");
-if (engineStopBtn) engineStopBtn.addEventListener("click", () => engineAction("stop").catch(() => {}));
+if (engineStopBtn) engineStopBtn.addEventListener("click", () => engineAction("stop").catch(console.error));
 
 const opsProbeBtn = document.getElementById("opsProbeBtn");
-if (opsProbeBtn) opsProbeBtn.addEventListener("click", () => runFeedProbe().catch(() => {}));
+if (opsProbeBtn) opsProbeBtn.addEventListener("click", () => runFeedProbe().catch(console.error));
 
 const opsGannOnBtn = document.getElementById("opsGannOnBtn");
-if (opsGannOnBtn) opsGannOnBtn.addEventListener("click", () => setGannEngineEnabled(true).catch(() => {}));
+if (opsGannOnBtn) opsGannOnBtn.addEventListener("click", () => setGannEngineEnabled(true).catch(console.error));
 
 const opsGannOffBtn = document.getElementById("opsGannOffBtn");
-if (opsGannOffBtn) opsGannOffBtn.addEventListener("click", () => setGannEngineEnabled(false).catch(() => {}));
+if (opsGannOffBtn) opsGannOffBtn.addEventListener("click", () => setGannEngineEnabled(false).catch(console.error));
 
 const opsReconnectBtn = document.getElementById("opsReconnectBtn");
 if (opsReconnectBtn) opsReconnectBtn.addEventListener("click", () => window.reconnectExecutionBrowserSafe());
 
 const opsKillSwitchBtn = document.getElementById("opsKillSwitchBtn");
-if (opsKillSwitchBtn) opsKillSwitchBtn.addEventListener("click", () => adminEmergency("kill").catch(() => {}));
+if (opsKillSwitchBtn) opsKillSwitchBtn.addEventListener("click", () => adminEmergency("kill").catch(console.error));
 
 const opsRestartExecBtn = document.getElementById("opsRestartExecBtn");
-if (opsRestartExecBtn) opsRestartExecBtn.addEventListener("click", () => adminEmergency("restart").catch(() => {}));
+if (opsRestartExecBtn) opsRestartExecBtn.addEventListener("click", () => adminEmergency("restart").catch(console.error));
 
 const opsDisableAutoBtn = document.getElementById("opsDisableAutoBtn");
-if (opsDisableAutoBtn) opsDisableAutoBtn.addEventListener("click", () => adminEmergency("disable_auto", false).catch(() => {}));
+if (opsDisableAutoBtn) opsDisableAutoBtn.addEventListener("click", () => adminEmergency("disable_auto", false).catch(console.error));
 
 const opsDefensiveBtn = document.getElementById("opsDefensiveBtn");
 if (opsDefensiveBtn) {
@@ -1990,7 +2012,7 @@ if (opsDefensiveBtn) {
 		false,
 		60,
 		["Manual defensive override"],
-	).catch(() => {}));
+	).catch(console.error));
 }
 
 const opsHaltBtn = document.getElementById("opsHaltBtn");
@@ -2001,17 +2023,17 @@ if (opsHaltBtn) {
 		true,
 		60,
 		["Manual halt override"],
-	).catch(() => {}));
+	).catch(console.error));
 }
 
 const opsClearOverrideBtn = document.getElementById("opsClearOverrideBtn");
 if (opsClearOverrideBtn) {
-	opsClearOverrideBtn.addEventListener("click", () => clearPropBehaviorOverride().catch(() => {}));
+	opsClearOverrideBtn.addEventListener("click", () => clearPropBehaviorOverride().catch(console.error));
 }
 
 const opsSimRunBtn = document.getElementById("opsSimRunBtn");
 if (opsSimRunBtn) {
-	opsSimRunBtn.addEventListener("click", () => runPropBehaviorScenario().catch(() => {}));
+	opsSimRunBtn.addEventListener("click", () => runPropBehaviorScenario().catch(console.error));
 }
 
 for (const kind of Object.keys(MICRO_PANEL_CONFIG)) {
@@ -2052,17 +2074,7 @@ function updatePerfDashboard() {
 function updateCacheStatus() {
 	const cacheDiv = document.getElementById("cacheStatus");
 	if (!cacheDiv) return;
-	
-	let html = "<table style='width:100%;'>";
-	html += "<tr><th style='text-align:left;'>Path</th><th style='text-align:right;'>TTL (ms)</th></tr>";
-	for (const [path, config] of Object.entries(CACHE_CONFIG)) {
-		const cached = getCachedResponse(path);
-		const status = cached ? "✓ Cached" : "∅ Empty";
-		html += `<tr><td>${path}</td><td style='text-align:right;'>${config.ttl} - ${status}</td></tr>`;
-	}
-	html += "</table>";
-	
-	cacheDiv.innerHTML = html;
+	cacheDiv.innerHTML = "Cache status UI removed (no CACHE_CONFIG)";
 }
 
 function initPerfDashboard() {
@@ -2119,3 +2131,32 @@ setInterval(async () => {
         // apiFetch() already shows errors, just track them here
     }
 }, 30000); // Every 30 seconds
+
+// Force-refresh all panels, tables, and feeds on page load
+window.addEventListener("load", () => {
+	// Chart
+	if (typeof loadInstitutionalChart === "function") loadInstitutionalChart();
+	// Micro panels
+	for (const kind of Object.keys(MICRO_PANEL_CONFIG)) {
+		if (typeof toggleMicroPanel === "function") toggleMicroPanel(kind, true);
+		if (kind === "summary" && typeof refreshOrderflowSummaryPanel === "function") refreshOrderflowSummaryPanel();
+	}
+	// Journal
+	if (typeof loadJournal === "function") loadJournal();
+	// Governance
+	if (typeof loadStatus === "function") loadStatus();
+	if (typeof updateVolatility === "function") updateVolatility();
+	if (typeof updatePropStatus === "function") updatePropStatus();
+	if (typeof updateEquityBar === "function") updateEquityBar();
+	if (typeof updateDrawdownBar === "function") updateDrawdownBar();
+	if (typeof updateModelStats === "function") updateModelStats();
+	if (typeof updateNewsSeverity === "function") updateNewsSeverity();
+	// System Health
+	if (typeof updateSystemHealth === "function") updateSystemHealth();
+	// Operations Console
+	if (typeof updateBasisOps === "function") updateBasisOps();
+	if (typeof updateOpsStatus === "function") updateOpsStatus();
+	if (typeof updateMultiSymbolDashboard === "function") updateMultiSymbolDashboard();
+	});
+
+

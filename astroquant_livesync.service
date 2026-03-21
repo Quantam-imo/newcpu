@@ -1,0 +1,14 @@
+[Unit]
+Description=AstroQuant Live Sync Engine
+After=network.target astroquant_tradingbot.service
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/workspaces/newcpu
+ExecStart=/workspaces/newcpu/.venv/bin/python3 /workspaces/newcpu/start_live_sync.py
+Restart=always
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

@@ -45,30 +45,100 @@ class DraggablePanel {
     }
 }
 
-// Example usage: create a live orderflow table
-function createOrderflowPanel(symbol) {
+
+import { DraggablePanel } from './draggable_panel.js';
+import { registerPanel, fetchWithRetry } from './core.js';
+import { WSManager } from './ws_manager.js';
+
+export function createOrderflowPanel(symbol) {
+    let wsManager = null;
+    let restInterval = null;
     const contentHtml = `<table id="orderflow-table">
         <thead><tr><th>Time</th><th>Price</th><th>Size</th><th>Side</th></tr></thead>
         <tbody></tbody>
-    </table>`;
-    new DraggablePanel('orderflow-panel', `Orderflow: ${symbol}`, contentHtml);
-    startOrderflowWebSocket(symbol);
-}
+    </table>
+    <div id="orderflow-error" style="color:red;"></div>`;
+    const panel = new DraggablePanel(
+        'orderflow-panel',
+        `Orderflow: ${symbol}`,
+        contentHtml,
+        () => {
+            if (wsManager) wsManager.close();
+            if (restInterval) clearInterval(restInterval);
+        }
+    );
 
-function startOrderflowWebSocket(symbol) {
-    const ws = new WebSocket(`ws://${window.location.hostname}:8000/ws/orderflow/${symbol}`);
-    ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
+    function setOrderflowError(msg) {
+        const el = document.getElementById('orderflow-error');
+        if (el) el.textContent = msg || '';
+    }
+
+    function renderOrderflowTable(trades, errorMsg) {
         const tbody = document.querySelector('#orderflow-table tbody');
         if (!tbody) return;
         tbody.innerHTML = '';
-        data.trades.forEach(([price, size, side, trade_time]) => {
+        if (errorMsg) {
+            tbody.innerHTML = `<tr><td colspan="4">${errorMsg}</td></tr>`;
+            return;
+        }
+        (trades || []).forEach(([price, size, side, trade_time]) => {
             const row = document.createElement('tr');
             row.innerHTML = `<td>${trade_time}</td><td>${price}</td><td>${size}</td><td>${side}</td>`;
             row.style.color = side === 'buy' ? 'green' : 'red';
             tbody.appendChild(row);
         });
-    };
+    }
+
+    // Try WebSocket first
+    try {
+        wsManager = new WSManager(`/ws/orderflow/${symbol}`, (data) => {
+            if (data && Array.isArray(data.trades)) {
+                renderOrderflowTable(data.trades, '');
+                setOrderflowError('');
+            } else if (data && data.error) {
+                renderOrderflowTable([], 'Live error: ' + data.error);
+                setOrderflowError('Live error: ' + data.error);
+            }
+        });
+        wsManager.ws.onclose = () => {
+            setOrderflowError('Live connection lost, switching to REST fallback.');
+            renderOrderflowTable([], 'Error');
+            if (wsManager) wsManager.close();
+            restInterval = setInterval(loadOrderflowRest, 3000);
+        };
+        wsManager.ws.onerror = (e) => {
+            setOrderflowError('WebSocket error, switching to REST fallback.');
+            renderOrderflowTable([], 'Error');
+            if (wsManager) wsManager.close();
+            restInterval = setInterval(loadOrderflowRest, 3000);
+        };
+    } catch (err) {
+        setOrderflowError('WebSocket init failed, using REST fallback.');
+        renderOrderflowTable([], 'Error');
+        restInterval = setInterval(loadOrderflowRest, 3000);
+    }
+
+    async function loadOrderflowRest() {
+        try {
+            const res = await fetchWithRetry(`${window.AQ_BASE}/orderflow/${symbol}`);
+            const data = await res.json();
+            if (data.error) {
+                renderOrderflowTable([], data.error);
+                setOrderflowError(data.error);
+                return;
+            }
+            renderOrderflowTable(data.trades, '');
+            setOrderflowError('');
+        } catch (err) {
+            renderOrderflowTable([], 'REST error');
+            setOrderflowError('REST error');
+        }
+    }
+
+    registerPanel(panel.panel, () => {
+        if (wsManager) wsManager.close();
+        if (restInterval) clearInterval(restInterval);
+    });
 }
 
 // Button to open/close panel

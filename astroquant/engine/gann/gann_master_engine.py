@@ -1,21 +1,21 @@
 import math
 
-from engine.gann.gann_144_engine import Gann144Engine
-from engine.gann.gann_360_wheel_engine import Gann360WheelEngine
-from engine.gann.gann_angle_engine import GannAngleEngine
-from engine.gann.gann_cross_engine import GannCrossEngine
-from engine.gann.gann_hexagon_engine import GannHexagonEngine
-from engine.gann.gann_master_cycle_engine import GannMasterCycleEngine
-from engine.gann.gann_octave_engine import GannOctaveEngine
-from engine.gann.gann_planet_alignment_engine import GannPlanetAlignmentEngine
-from engine.gann.gann_price_time_engine import GannPriceTimeEngine
-from engine.gann.gann_spiral_engine import GannSpiralEngine
-from engine.gann.gann_spiral_vector_engine import GannSpiralVectorEngine
-from engine.gann.gann_square_engine import GannSquareEngine
-from engine.gann.gann_square_of_9_engine import GannSquareOf9Engine
-from engine.gann.gann_trendline_engine import GannTrendlineEngine
-from engine.gann.gann_vector_engine import GannVectorEngine
-from engine.gann.gann_vibration_engine import GannVibrationEngine
+from astroquant.engine.gann.gann_144_engine import Gann144Engine
+from astroquant.engine.gann.gann_360_wheel_engine import Gann360WheelEngine
+from astroquant.engine.gann.gann_angle_engine import GannAngleEngine
+from astroquant.engine.gann.gann_cross_engine import GannCrossEngine
+from astroquant.engine.gann.gann_hexagon_engine import GannHexagonEngine
+from astroquant.engine.gann.gann_master_cycle_engine import GannMasterCycleEngine
+from astroquant.engine.gann.gann_octave_engine import GannOctaveEngine
+from astroquant.engine.gann.gann_planet_alignment_engine import GannPlanetAlignmentEngine
+from astroquant.engine.gann.gann_price_time_engine import GannPriceTimeEngine
+from astroquant.engine.gann.gann_spiral_engine import GannSpiralEngine
+from astroquant.engine.gann.gann_spiral_vector_engine import GannSpiralVectorEngine
+from astroquant.engine.gann.gann_square_engine import GannSquareEngine
+from astroquant.engine.gann.gann_square_of_9_engine import GannSquareOf9Engine
+from astroquant.engine.gann.gann_trendline_engine import GannTrendlineEngine
+from astroquant.engine.gann.gann_vector_engine import GannVectorEngine
+from astroquant.engine.gann.gann_vibration_engine import GannVibrationEngine
 
 
 class GannMasterEngine:

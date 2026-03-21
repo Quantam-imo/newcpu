@@ -3,6 +3,29 @@ const AQ_DEFAULT_ADMIN_API_ORIGIN = ["8000", "8001"].includes(String(window.loca
   : "http://127.0.0.1:8000";
 const AQ_API_BASE = window.AQ_API_BASE || AQ_DEFAULT_ADMIN_API_ORIGIN;
 
+function adminApiOrigins() {
+  const existing = String(window.AQ_API_BASE || "").trim();
+  if (existing) {
+    return [existing, "http://localhost:8000", "http://127.0.0.1:8000", "http://localhost:8001", "http://127.0.0.1:8001"];
+  }
+  const origins = [];
+  const uniqueOrigins = new Set();
+  const baseOrigins = [
+    String(window.location.origin || "").trim(),
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:8001",
+    "http://127.0.0.1:8001",
+  ];
+  for (const origin of baseOrigins) {
+    if (origin && !uniqueOrigins.has(origin)) {
+      uniqueOrigins.add(origin);
+      origins.push(origin);
+    }
+  }
+  return origins.length ? origins : ["http://127.0.0.1:8000", "http://127.0.0.1:8001"];
+}
+
 function getCreds() {
   return {
     token: document.getElementById("adminToken")?.value || localStorage.getItem("AQ_ADMIN_TOKEN") || "dev-admin-token",

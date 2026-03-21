@@ -45,36 +45,88 @@ class DraggablePanel {
     }
 }
 
-function createDeltaPanel(symbol) {
-    const contentHtml = `<div id="delta-summary">
-        <p><strong>Buy Volume:</strong> <span id="buy-volume">0</span></p>
-        <p><strong>Sell Volume:</strong> <span id="sell-volume">0</span></p>
-        <p><strong>Delta:</strong> <span id="delta">0</span></p>
-        <p><strong>Delta %:</strong> <span id="delta-percent">0</span></p>
-    </div>`;
-    new DraggablePanel('delta-panel', `Delta: ${symbol}`, contentHtml);
-    startDeltaWebSocket(symbol);
-}
 
-function startDeltaWebSocket(symbol) {
-    // Use REST for now, can upgrade to WebSocket for delta
-    function fetchDelta() {
-        fetch(`/delta/${symbol}`)
-            .then(res => {
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                return res.json();
-            })
-            .then(data => {
-                document.getElementById('delta-percent').textContent = (data.delta_percent * 100).toFixed(2) + '%';
-                // Optionally update buy/sell/delta if available
-            })
-            .catch(err => {
-                document.getElementById('delta-percent').textContent = 'Error';
-                console.error('Delta fetch failed:', err);
-            });
+import { WSManager } from './ws_manager.js';
+
+function createDeltaPanel(symbol) {
+    let wsManager = null;
+    let restInterval = null;
+    const contentHtml = `<div id="delta-summary">
+        <p><strong>Delta %:</strong> <span id="delta-percent">0</span></p>
+        <div id="delta-error" style="color:red;"></div>
+    </div>`;
+    const panel = new DraggablePanel(
+        'delta-panel',
+        `Delta: ${symbol}`,
+        contentHtml,
+        () => {
+            if (wsManager) wsManager.close();
+            if (restInterval) clearInterval(restInterval);
+        }
+    );
+
+    function setDeltaError(msg) {
+        const el = document.getElementById('delta-error');
+        if (el) el.textContent = msg || '';
     }
-    fetchDelta();
-    setInterval(fetchDelta, 2000);
+
+    function setDeltaValue(val) {
+        const el = document.getElementById('delta-percent');
+        if (el) el.textContent = val;
+    }
+
+    // Try WebSocket first
+    try {
+        wsManager = new WSManager(`/ws/delta/${symbol}`, (data) => {
+            if (data && typeof data.delta_percent === 'number') {
+                setDeltaValue((data.delta_percent * 100).toFixed(2) + '%');
+                setDeltaError('');
+            } else if (data && data.error) {
+                setDeltaError('Live error: ' + data.error);
+                setDeltaValue('Error');
+            }
+        });
+        // If WebSocket closes, fallback to REST
+        wsManager.ws.onclose = () => {
+            setDeltaError('Live connection lost, switching to REST fallback.');
+            setDeltaValue('Error');
+            if (wsManager) wsManager.close();
+            // Start REST fallback
+            restInterval = setInterval(loadDeltaRest, 2000);
+        };
+        wsManager.ws.onerror = (e) => {
+            setDeltaError('WebSocket error, switching to REST fallback.');
+            setDeltaValue('Error');
+            if (wsManager) wsManager.close();
+            restInterval = setInterval(loadDeltaRest, 2000);
+        };
+    } catch (err) {
+        setDeltaError('WebSocket init failed, using REST fallback.');
+        setDeltaValue('Error');
+        restInterval = setInterval(loadDeltaRest, 2000);
+    }
+
+    async function loadDeltaRest() {
+        try {
+            const res = await fetchWithRetry(`${window.AQ_BASE}/delta/${symbol}`);
+            const data = await res.json();
+            if (data.error) {
+                setDeltaError(data.error);
+                setDeltaValue('Error');
+                return;
+            }
+            setDeltaValue((data.delta_percent * 100).toFixed(2) + '%');
+            setDeltaError('');
+        } catch (e) {
+            setDeltaError('REST error');
+            setDeltaValue('Error');
+        }
+    }
+
+    registerPanel(panel.panel, () => {
+        if (wsManager) wsManager.close();
+        if (restInterval) clearInterval(restInterval);
+    });
 }
 
 function addDeltaButton(symbol) {

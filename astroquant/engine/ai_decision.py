@@ -1,7 +1,7 @@
-from engine.model_weight_engine import ModelWeightEngine
-from engine.confidence_engine import ConfidenceEngine
-from engine.regime_engine import RegimeEngine
-from engine.performance_memory_engine import PerformanceMemory
+from astroquant.engine.model_weight_engine import ModelWeightEngine
+from astroquant.engine.confidence_engine import ConfidenceEngine
+from astroquant.engine.regime_engine import RegimeEngine
+from astroquant.engine.performance_memory_engine import PerformanceMemory
 
 
 class AIDecisionEngine:

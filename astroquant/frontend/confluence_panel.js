@@ -1,51 +1,11 @@
-// Draggable and closable Confluence panel
-class DraggablePanel {
-    constructor(id, title, contentHtml) {
-        this.id = id;
-        this.title = title;
-        this.contentHtml = contentHtml;
-        this.createPanel();
-    }
 
-    createPanel() {
-        const panel = document.createElement('div');
-        panel.id = this.id;
-        panel.className = 'draggable-panel';
-        panel.innerHTML = `
-            <div class="panel-header">
-                <span>${this.title}</span>
-                <button class="close-btn">×</button>
-            </div>
-            <div class="panel-content">${this.contentHtml}</div>
-        `;
-        document.body.appendChild(panel);
-        this.makeDraggable(panel);
-        panel.querySelector('.close-btn').onclick = () => panel.remove();
-    }
+import { DraggablePanel } from './draggable_panel.js';
+import { fetchWithRetry, safeSet, registerPanel } from './core.js';
+import { WSManager } from './ws_manager.js';
 
-    makeDraggable(panel) {
-        const header = panel.querySelector('.panel-header');
-        let offsetX = 0, offsetY = 0, isDragging = false;
-        header.onmousedown = (e) => {
-            isDragging = true;
-            offsetX = e.clientX - panel.offsetLeft;
-            offsetY = e.clientY - panel.offsetTop;
-            document.onmousemove = (ev) => {
-                if (isDragging) {
-                    panel.style.left = (ev.clientX - offsetX) + 'px';
-                    panel.style.top = (ev.clientY - offsetY) + 'px';
-                }
-            };
-            document.onmouseup = () => {
-                isDragging = false;
-                document.onmousemove = null;
-                document.onmouseup = null;
-            };
-        };
-    }
-}
-
-function createConfluencePanel(symbol) {
+export function createConfluencePanel(symbol) {
+    let wsManager = null;
+    let restInterval = null;
     const contentHtml = `<div id="confluence-summary">
         <p><strong>ICT Score:</strong> <span id="ict-score">0</span></p>
         <p><strong>Delta Score:</strong> <span id="delta-score">0</span></p>
@@ -53,39 +13,91 @@ function createConfluencePanel(symbol) {
         <p><strong>Gann Score:</strong> <span id="gann-score">0</span></p>
         <p><strong>Astro Score:</strong> <span id="astro-score">0</span></p>
         <p><strong>Confidence:</strong> <span id="confidence">0</span></p>
+        <div id="confluence-error" style="color:red;"></div>
     </div>`;
-    new DraggablePanel('confluence-panel', `Confluence: ${symbol}`, contentHtml);
-    startConfluenceWebSocket(symbol);
-}
+    const panel = new DraggablePanel(
+        'confluence-panel',
+        `Confluence: ${symbol}`,
+        contentHtml,
+        () => {
+            if (wsManager) wsManager.close();
+            if (restInterval) clearInterval(restInterval);
+        }
+    );
 
-function startConfluenceWebSocket(symbol) {
-    // Use REST for now, can upgrade to WebSocket for confluence
-    function fetchConfluence() {
-        fetch(`/confluence/${symbol}`)
-            .then(res => {
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                return res.json();
-            })
-            .then(data => {
-                document.getElementById('ict-score').textContent = data.ict_score;
-                document.getElementById('delta-score').textContent = data.delta_score;
-                document.getElementById('iceberg-score').textContent = data.iceberg_score;
-                document.getElementById('gann-score').textContent = data.gann_score;
-                document.getElementById('astro-score').textContent = data.astro_score;
-                document.getElementById('confidence').textContent = (data.confidence * 100).toFixed(2) + '%';
-            })
-            .catch(err => {
-                document.getElementById('ict-score').textContent = 'Error';
-                document.getElementById('delta-score').textContent = 'Error';
-                document.getElementById('iceberg-score').textContent = 'Error';
-                document.getElementById('gann-score').textContent = 'Error';
-                document.getElementById('astro-score').textContent = 'Error';
-                document.getElementById('confidence').textContent = '';
-                console.error('Confluence fetch failed:', err);
-            });
+    function setConfluenceError(msg) {
+        const el = document.getElementById('confluence-error');
+        if (el) el.textContent = msg || '';
     }
-    fetchConfluence();
-    setInterval(fetchConfluence, 2000);
+
+    function renderConfluence(data, errorMsg) {
+        if (errorMsg) {
+            safeSet('ict-score', errorMsg);
+            safeSet('delta-score', '');
+            safeSet('iceberg-score', '');
+            safeSet('gann-score', '');
+            safeSet('astro-score', '');
+            safeSet('confidence', '');
+            return;
+        }
+        safeSet('ict-score', data.ict_score);
+        safeSet('delta-score', data.delta_score);
+        safeSet('iceberg-score', data.iceberg_score);
+        safeSet('gann-score', data.gann_score);
+        safeSet('astro-score', data.astro_score);
+        safeSet('confidence', (data.confidence * 100).toFixed(2) + '%');
+    }
+
+    // Try WebSocket first
+    try {
+        wsManager = new WSManager(`/ws/confluence/${symbol}`, (data) => {
+            if (data && typeof data.ict_score !== 'undefined') {
+                renderConfluence(data, '');
+                setConfluenceError('');
+            } else if (data && data.error) {
+                renderConfluence({}, 'Live error: ' + data.error);
+                setConfluenceError('Live error: ' + data.error);
+            }
+        });
+        wsManager.ws.onclose = () => {
+            setConfluenceError('Live connection lost, switching to REST fallback.');
+            renderConfluence({}, 'Error');
+            if (wsManager) wsManager.close();
+            restInterval = setInterval(loadConfluenceRest, 2000);
+        };
+        wsManager.ws.onerror = (e) => {
+            setConfluenceError('WebSocket error, switching to REST fallback.');
+            renderConfluence({}, 'Error');
+            if (wsManager) wsManager.close();
+            restInterval = setInterval(loadConfluenceRest, 2000);
+        };
+    } catch (err) {
+        setConfluenceError('WebSocket init failed, using REST fallback.');
+        renderConfluence({}, 'Error');
+        restInterval = setInterval(loadConfluenceRest, 2000);
+    }
+
+    async function loadConfluenceRest() {
+        try {
+            const res = await fetchWithRetry(`${window.AQ_BASE}/confluence/${symbol}`);
+            const data = await res.json();
+            if (data.error) {
+                renderConfluence({}, data.error);
+                setConfluenceError(data.error);
+                return;
+            }
+            renderConfluence(data, '');
+            setConfluenceError('');
+        } catch (err) {
+            renderConfluence({}, 'REST error');
+            setConfluenceError('REST error');
+        }
+    }
+
+    registerPanel(panel.panel, () => {
+        if (wsManager) wsManager.close();
+        if (restInterval) clearInterval(restInterval);
+    });
 }
 
 function addConfluenceButton(symbol) {

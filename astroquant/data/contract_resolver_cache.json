@@ -2,11 +2,11 @@
   "XAUUSD": {
     "active_symbol": null,
     "resolved_at": 1773250515,
-    "last_probe_at": 1773279893,
+    "last_probe_at": 1773510803,
     "last_status": "MISS",
     "sample_count": 240,
-    "attempts": 22266,
-    "consecutive_failures": 73,
+    "attempts": 22308,
+    "consecutive_failures": 184,
     "ttl_seconds": 14400,
     "candidates_tried": [
       "GC.c.1",
@@ -19,61 +19,53 @@
   "NQ": {
     "active_symbol": null,
     "resolved_at": 1773250355,
-    "last_probe_at": 1773279892,
-    "last_status": "MISS",
+    "last_probe_at": 1773510737,
+    "last_status": "UNRESOLVED",
     "sample_count": 219,
-    "attempts": 1748,
-    "consecutive_failures": 5,
+    "attempts": 1753,
+    "consecutive_failures": 11,
     "ttl_seconds": 14400,
     "candidates_tried": [
-      "NQ.c.1",
-      "NQ.c.0",
-      "NQ.FUT"
+      "NQ.c.1"
     ]
   },
   "EURUSD": {
     "active_symbol": null,
     "resolved_at": 1773250355,
-    "last_probe_at": 1773279892,
-    "last_status": "MISS",
+    "last_probe_at": 1773510737,
+    "last_status": "UNRESOLVED",
     "sample_count": 41,
-    "attempts": 383,
-    "consecutive_failures": 5,
+    "attempts": 388,
+    "consecutive_failures": 11,
     "ttl_seconds": 14400,
     "candidates_tried": [
-      "6E.c.1",
-      "6E.c.0",
-      "6E.FUT"
+      "6E.c.1"
     ]
   },
   "BTC": {
     "active_symbol": null,
     "resolved_at": 1773250358,
-    "last_probe_at": 1773279892,
-    "last_status": "MISS",
+    "last_probe_at": 1773510738,
+    "last_status": "UNRESOLVED",
     "sample_count": 37,
-    "attempts": 393,
-    "consecutive_failures": 5,
+    "attempts": 398,
+    "consecutive_failures": 11,
     "ttl_seconds": 14400,
     "candidates_tried": [
-      "BTC.c.1",
-      "BTC.c.0",
-      "BTC.FUT"
+      "BTC.c.1"
     ]
   },
   "US30": {
     "active_symbol": null,
     "resolved_at": 1773250359,
-    "last_probe_at": 1773279892,
-    "last_status": "MISS",
+    "last_probe_at": 1773510738,
+    "last_status": "UNRESOLVED",
     "sample_count": 182,
-    "attempts": 382,
-    "consecutive_failures": 5,
+    "attempts": 387,
+    "consecutive_failures": 11,
     "ttl_seconds": 14400,
     "candidates_tried": [
-      "YM.c.1",
-      "YM.c.0",
-      "YM.FUT"
+      "YM.c.1"
     ]
   },
   "GC-F": {

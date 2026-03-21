@@ -245,6 +245,7 @@ if [[ -n "$CHROME_BIN" ]]; then
         --disable-sync \
         --disable-default-apps \
         --disable-extensions \
+        --headless=new \
         "$BROKER_URL" \
         >"$LOG_DIR/chrome.log" 2>&1 &
 
@@ -290,10 +291,13 @@ fi
 header "Starting Backend API Server"
 
 info "Starting FastAPI backend from: $BACKEND_DIR"
-cd "$BACKEND_DIR"
+
+cd "/workspaces/newcpu"
 
 # Start backend in background
-"$PYTHON_BIN" -m uvicorn backend.main:app \
+
+export PYTHONPATH=/workspaces/newcpu
+"$PYTHON_BIN" -m uvicorn astroquant.backend.main:app \
     --host 127.0.0.1 \
     --port 8000 \
     --log-level info \

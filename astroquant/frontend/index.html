@@ -983,7 +983,7 @@
                         <div class="badge">Updated: <span id="msUpdated">--</span></div>
                     </div>
                     <table>
-                        <thead><tr><th>Symbol</th><th>HTF</th><th>LTF</th><th>Model</th><th>Conf</th><th>Risk%</th><th>Phase</th><th>Mode</th><th>Basis</th><th>Resolver</th><th>Watch</th><th>News</th></tr></thead>
+                        <thead><tr><th>Symbol</th><th>HTF</th><th>LTF</th><th>Model</th><th>Conf</th><th>Risk%</th><th>Phase</th><th>Mode</th><th>Basis</th><th>Resolver</th><th>Watch</th><th>News</th><th>Broker Price</th><th>System Price</th><th>Offset Diff</th></tr></thead>
                         <tbody id="multiSymbolBody"></tbody>
                     </table>
                 </div>
@@ -1352,7 +1352,8 @@
             const existingBase = String(window.AQ_API_BASE || "").trim();
             window.AQ_API_BASE = existingBase || "http://127.0.0.1:8000";
             const port = String(window.location.port || "");
-            const prefix = port === "8080" ? "" : "/frontend";
+            // Use empty prefix for port 3000 (python http.server), else fallback to /frontend for legacy setups
+            const prefix = (port === "3000" || port === "8080") ? "" : "/frontend";
             const scripts = ["api.js", "chart.js", "mentor.js"];
             const scriptVersion = "aq-v20260310";
 

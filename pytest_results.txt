@@ -1,0 +1,29 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.1, pytest-9.0.1, pluggy-1.6.0
+rootdir: /workspaces/newcpu
+plugins: anyio-4.11.0
+collected 2 items
+
+test_databento.py EE                                                     [100%]
+
+==================================== ERRORS ====================================
+____________________ ERROR at setup of test_historical_bbo _____________________
+file /workspaces/newcpu/test_databento.py, line 8
+  def test_historical_bbo(client, candidates):
+E       fixture 'client' not found
+>       available fixtures: anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, doctest_namespace, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/workspaces/newcpu/test_databento.py:8
+_______________________ ERROR at setup of test_live_bbo ________________________
+file /workspaces/newcpu/test_databento.py, line 36
+  def test_live_bbo(key, symbol, listen_seconds=6):
+E       fixture 'key' not found
+>       available fixtures: anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, doctest_namespace, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
+>       use 'pytest --fixtures [testpath]' for help on them.
+
+/workspaces/newcpu/test_databento.py:36
+=========================== short test summary info ============================
+ERROR test_databento.py::test_historical_bbo
+ERROR test_databento.py::test_live_bbo
+============================== 2 errors in 10.15s ==============================
