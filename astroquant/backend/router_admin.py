@@ -1,3 +1,5 @@
+import os
+
 # Minimal placeholder router for admin endpoints
 from fastapi import APIRouter
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -93,13 +95,29 @@ class DynamicPropEngineConfigureRequest(BaseModel):
 dynamic_prop_engine = DynamicPropEngine()
 
 
+def _require_admin_token(x_admin_token: str | None) -> None:
+	"""Protect legacy /admin endpoints with the configured admin token."""
+	configured = str(os.getenv("ADMIN_API_TOKEN", "")).strip()
+	if not configured:
+		raise HTTPException(status_code=503, detail="ADMIN_API_TOKEN is not configured")
+	if str(x_admin_token or "").strip() != configured:
+		raise HTTPException(status_code=401, detail="Invalid admin token")
+
+
 @router.get("/prop_engine/state")
-def prop_engine_state():
+def prop_engine_state(
+	x_admin_token: str | None = Header(default=None),
+):
+	_require_admin_token(x_admin_token)
 	return {"state": dynamic_prop_engine.snapshot()}
 
 
 @router.post("/prop_engine/configure")
-def prop_engine_configure(data: DynamicPropEngineConfigureRequest):
+def prop_engine_configure(
+	data: DynamicPropEngineConfigureRequest,
+	x_admin_token: str | None = Header(default=None),
+):
+	_require_admin_token(x_admin_token)
 	dynamic_prop_engine.configure(
 		active_accounts=data.active_accounts,
 		primary_account=data.primary_account,
