@@ -15,7 +15,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from execution.basis_engine import BasisEngine
 from execution.broker_guard import BrokerGuard
-from execution.playwright_engine import PlaywrightEngine
+from execution.playwright_engine import PlaywrightExecution as PlaywrightEngine
 
 
 @dataclass

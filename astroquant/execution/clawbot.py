@@ -1,6 +1,6 @@
-from execution.playwright_engine import PlaywrightEngine
-from risk.equity_guard import allow_trade
-from notifications.telegram_bot import send_message
+from astroquant.execution.playwright_engine import PlaywrightExecution as PlaywrightEngine
+from astroquant.risk.equity_guard import allow_trade
+from astroquant.notifications.telegram_bot import send_message
 
 class ClawBot:
     def __init__(self):

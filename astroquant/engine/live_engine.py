@@ -1,8 +1,18 @@
 import time
 from astroquant.engine.databento_live import get_live_data
-from core.orchestrator import run_cycle
 from astroquant.engine.trade_execution import execute_trade
 from astroquant.engine.telegram_bot import send_telegram
+from astroquant.engine.multi_symbol_runner import MultiSymbolRunner
+
+
+def run_cycle(df_1m, df_5m, df_15m, price):
+    """Minimal orchestration shim — delegates to MultiSymbolRunner signal logic."""
+    runner = MultiSymbolRunner(["XAUUSD"])
+    try:
+        signal = runner.compute_signal("XAUUSD")
+    except Exception:
+        signal = {"action": "NO_TRADE", "reason": "runner unavailable"}
+    return signal
 
 def start_live_trading():
     while True:

@@ -1,5 +1,5 @@
 import os
-from engine.live_sync.live_sync_engine import LiveSyncEngine
+from astroquant.engine.live_sync.live_sync_engine import LiveSyncEngine
 
 API_KEY = os.environ.get("DATABENTO_API_KEY")
 if not API_KEY:

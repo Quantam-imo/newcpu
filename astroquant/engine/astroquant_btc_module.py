@@ -1,6 +1,6 @@
 # AstroQuant BTC Institutional Module
-from engine.databento_sync_engine import DatabentoSyncEngine
-from engine.ict_cme_gap_strategy import ICTCMEGapStrategy
+from astroquant.engine.databento_sync_engine import DatabentoSyncEngine
+from astroquant.engine.ict_cme_gap_strategy import ICTCMEGapStrategy
 
 class AstroQuantBTC:
     def __init__(self):

@@ -1,7 +1,5 @@
-def execute_signal(signal):
-
 # --- PlaywrightExecution integration ---
-from execution.playwright_engine import PlaywrightExecution
+from astroquant.execution.playwright_engine import PlaywrightExecution
 
 engine = None
 
