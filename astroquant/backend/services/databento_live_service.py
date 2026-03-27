@@ -52,6 +52,90 @@ class DatabentoLiveService:
                     await asyncio.sleep(1)
             except Exception as e:
                 print(f"[DatabentoLiveService] Fallback failed: {e}")
+    async def stream_ohlcv_1m(self, symbol, callback):
+        """Aggregate 1s candles from the live feed into 1-minute OHLCV bars and emit them."""
+        bucket_ts: int | None = None
+        agg: dict | None = None
+
+        async def _on_1s_candle(candle: dict):
+            nonlocal bucket_ts, agg
+            # Determine which 1-minute bucket this 1s candle belongs to
+            candle_ts = int(candle["time"])
+            minute_ts = candle_ts - (candle_ts % 60)  # floor to minute boundary
+
+            if bucket_ts is None:
+                bucket_ts = minute_ts
+
+            if minute_ts != bucket_ts:
+                # Emit the completed 1m candle
+                if agg is not None:
+                    await callback(agg)
+                # Start new bucket
+                bucket_ts = minute_ts
+                agg = None
+
+            if agg is None:
+                agg = {
+                    "symbol": candle["symbol"],
+                    "time": minute_ts,
+                    "open": candle["open"],
+                    "high": candle["high"],
+                    "low": candle["low"],
+                    "close": candle["close"],
+                    "volume": candle["volume"],
+                }
+            else:
+                agg["high"] = max(agg["high"], candle["high"])
+                agg["low"] = min(agg["low"], candle["low"])
+                agg["close"] = candle["close"]
+                agg["volume"] = agg["volume"] + candle["volume"]
+
+        await self.stream_ohlcv_1s(symbol, _on_1s_candle)
+        # Emit any partial last bucket on stream end
+        if agg is not None:
+            await callback(agg)
+    async def stream_ohlcv_1m(self, symbol, callback):
+        """Aggregate 1s candles from the live feed into 1-minute OHLCV bars and emit them."""
+        bucket_ts: int | None = None
+        agg: dict | None = None
+
+        async def _on_1s_candle(candle: dict):
+            nonlocal bucket_ts, agg
+            # Determine which 1-minute bucket this 1s candle belongs to
+            candle_ts = int(candle["time"])
+            minute_ts = candle_ts - (candle_ts % 60)  # floor to minute boundary
+
+            if bucket_ts is None:
+                bucket_ts = minute_ts
+
+            if minute_ts != bucket_ts:
+                # Emit the completed 1m candle
+                if agg is not None:
+                    await callback(agg)
+                # Start new bucket
+                bucket_ts = minute_ts
+                agg = None
+
+            if agg is None:
+                agg = {
+                    "symbol": candle["symbol"],
+                    "time": minute_ts,
+                    "open": candle["open"],
+                    "high": candle["high"],
+                    "low": candle["low"],
+                    "close": candle["close"],
+                    "volume": candle["volume"],
+                }
+            else:
+                agg["high"] = max(agg["high"], candle["high"])
+                agg["low"] = min(agg["low"], candle["low"])
+                agg["close"] = candle["close"]
+                agg["volume"] = agg["volume"] + candle["volume"]
+
+        await self.stream_ohlcv_1s(symbol, _on_1s_candle)
+        # Emit any partial last bucket on stream end
+        if agg is not None:
+            await callback(agg)
 
     async def stream_trades(self, symbol, callback):
         # Stream live trades using Databento Live API

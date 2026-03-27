@@ -3,8 +3,28 @@ import asyncio
 from astroquant.backend.services.databento_live_service import DatabentoLiveService
 from astroquant.backend.database import get_connection
 
-# Define router at the top so all decorators work
+# Define router and manager at the top so all endpoint decorators can use them
 router = APIRouter()
+
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)
+
+
+manager = ConnectionManager()
 
 # --- WebSocket endpoint: Delta panel ---
 @router.websocket("/ws/delta/{symbol}")
@@ -111,27 +131,9 @@ async def websocket_confluence(websocket: WebSocket, symbol: str):
         await websocket.send_json({"error": str(e)})
 
 
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: list[WebSocket] = []
 
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-
-    def disconnect(self, websocket: WebSocket):
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
-
-    async def broadcast(self, message: str):
-        for connection in self.active_connections:
-            await connection.send_text(message)
-
-manager = ConnectionManager()
 
 # --- WebSocket endpoint: Live chart candles ---
-@router.websocket("/ws/chart_live/{symbol}")
-
 @router.websocket("/ws/chart_live/{symbol}")
 async def websocket_chart_live(websocket: WebSocket, symbol: str):
     # Parse schema from query params (default to ohlcv-1s)
@@ -167,9 +169,10 @@ async def websocket_chart_live(websocket: WebSocket, symbol: str):
             await websocket.send_json({"candle": candle})
 
         # Route based on schema
-        if schema in ("ohlcv-1s", "ohlcv-1m"):
-            # Use 1s for both for now, TODO: implement 1m aggregation if needed
+        if schema == "ohlcv-1s":
             await service.stream_ohlcv_1s(resolved_symbol, send_candle)
+        elif schema == "ohlcv-1m":
+            await service.stream_ohlcv_1m(resolved_symbol, send_candle)
         elif schema == "trades":
             if hasattr(service, "stream_trades"):
                 await service.stream_trades(resolved_symbol, send_candle)

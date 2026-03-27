@@ -1,14 +1,9 @@
-import time
-from execution.clawbot import ClawBot
-from api.signal_provider import get_signal  # your API
-
-bot = ClawBot()
-
-while True:
-    try:
-        signal_data = get_signal()
-        bot.process_signal(signal_data)
-        time.sleep(5)
-    except Exception as e:
-        print("Loop error:", e)
-        time.sleep(5)
+# This file is kept for backwards compatibility only.
+# The production entry point is: astroquant/backend/main.py
+# Run with: uvicorn astroquant.backend.main:app --host 0.0.0.0 --port 8000
+#
+# Do NOT launch this file directly — it will not start the trading system.
+raise SystemExit(
+    "astroquant/main.py is deprecated. "
+    "Start the server with: uvicorn astroquant.backend.main:app --host 0.0.0.0 --port 8000"
+)
