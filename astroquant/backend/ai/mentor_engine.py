@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import warnings
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
@@ -10,7 +11,15 @@ class MentorEngine:
     def __init__(self):
         self.disabled_models: set[str] = set()
         self.aggressive_mode: bool = False
-        self.admin_password = os.getenv("MENTOR_ADMIN_PASSWORD", "AQ-ADMIN").strip() or "AQ-ADMIN"
+        self.admin_password = os.getenv("MENTOR_ADMIN_PASSWORD", "").strip()
+        if not self.admin_password or self.admin_password == "AQ-ADMIN":
+            warnings.warn(
+                "MENTOR_ADMIN_PASSWORD is not configured with a secure value. "
+                "Aggressive mentor mode changes are disabled.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            self.admin_password = ""
 
     def build_context(self, market_data, model_data, risk_data, phase_data):
 
@@ -140,6 +149,8 @@ class MentorEngine:
         return {"status": "ok", "message": "Reduce risk mode acknowledged"}
 
     def set_aggressive_mode(self, enabled: bool, password: str) -> Dict[str, Any]:
+        if not self.admin_password:
+            return {"status": "error", "message": "mentor admin password not configured"}
         supplied = str(password or "").strip()
         if supplied != self.admin_password:
             return {"status": "error", "message": "invalid password"}
