@@ -57,13 +57,14 @@ def _security_posture() -> dict:
     databento_configured = bool(databento_key)
 
     blockers = []
-    if _is_production_env():
-        if not admin_secure:
-            blockers.append("ADMIN_API_TOKEN must be configured with a secure non-default value")
-        if not mentor_secure:
-            blockers.append("MENTOR_ADMIN_PASSWORD must be configured with a secure non-default value")
-        if not databento_configured:
-            blockers.append("DATABENTO_API_KEY must be configured")
+    if not admin_secure:
+        blockers.append("ADMIN_API_TOKEN must be configured with a secure non-default value")
+    if not mentor_secure:
+        blockers.append("MENTOR_ADMIN_PASSWORD must be configured with a secure non-default value")
+    if not databento_configured:
+        blockers.append("DATABENTO_API_KEY must be configured")
+
+    running_in_production = _is_production_env()
 
     return {
         "environment": env_name,
@@ -75,6 +76,8 @@ def _security_posture() -> dict:
         "production_startup_guard_active": True,
         "production_ready": len(blockers) == 0,
         "production_blockers": blockers,
+        "running_in_production": running_in_production,
+        "startup_blocked_now": bool(running_in_production and blockers),
     }
 
 
