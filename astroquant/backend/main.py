@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import os
+import logging
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
@@ -147,7 +148,7 @@ try:
     if secure_admin_token and secure_admin_token != "dev-admin-token":
         app.include_router(router_admin.build_admin_router(runner, runner.prop_engine, secure_admin_token))
 except Exception:
-    pass
+    logging.exception("Admin router setup failed; admin control routes may be unavailable")
 
 # --- Mentor Endpoints (ported from legacy) ---
 import types
