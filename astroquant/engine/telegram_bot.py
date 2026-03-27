@@ -1,15 +1,20 @@
 import requests
 import os
 
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+
+def _credentials() -> tuple[str, str]:
+    token = str(os.getenv("TELEGRAM_BOT_TOKEN", "")).strip()
+    chat_id = str(os.getenv("TELEGRAM_CHAT_ID", "")).strip()
+    return token, chat_id
+
 
 def send_telegram(message):
-    if not TOKEN or not CHAT_ID:
+    token, chat_id = _credentials()
+    if not token or not chat_id:
         return {"ok": False, "reason": "telegram credentials missing"}
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
-        response = requests.post(url, data={"chat_id": CHAT_ID, "text": message}, timeout=8)
+        response = requests.post(url, data={"chat_id": chat_id, "text": message}, timeout=8)
         response.raise_for_status()
         return {"ok": True}
     except Exception as exc:
