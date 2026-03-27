@@ -98,7 +98,7 @@ dynamic_prop_engine = DynamicPropEngine()
 def _require_admin_token(x_admin_token: str | None) -> None:
 	"""Protect legacy /admin endpoints with the configured admin token."""
 	configured = str(os.getenv("ADMIN_API_TOKEN", "")).strip()
-	if not configured:
+	if not configured or configured == "dev-admin-token":
 		raise HTTPException(status_code=503, detail="ADMIN_API_TOKEN is not configured")
 	if str(x_admin_token or "").strip() != configured:
 		raise HTTPException(status_code=401, detail="Invalid admin token")
@@ -136,7 +136,10 @@ def build_admin_router(runner, prop_engine, admin_token: str, default_role: str 
 		x_admin_token: str | None,
 		x_admin_role: str | None,
 	) -> str:
-		if str(x_admin_token or "").strip() != str(admin_token or "").strip():
+		expected_token = str(admin_token or "").strip()
+		if not expected_token or expected_token == "dev-admin-token":
+			raise HTTPException(status_code=503, detail="ADMIN_API_TOKEN is not configured")
+		if str(x_admin_token or "").strip() != expected_token:
 			raise HTTPException(status_code=401, detail="Invalid admin token")
 
 		caller_role = str(x_admin_role or default_role or "VIEWER").upper().strip()

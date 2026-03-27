@@ -116,15 +116,21 @@ EXECUTION_BROWSER_TIMEOUT_MS = _env_int(
 EXECUTION_LOGIN_USERNAME = os.getenv("EXECUTION_LOGIN_USERNAME", os.getenv("MAVEN_USERNAME", "")).strip()
 EXECUTION_LOGIN_PASSWORD = os.getenv("EXECUTION_LOGIN_PASSWORD", os.getenv("MAVEN_PASSWORD", "")).strip()
 ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "").strip()
-if not ADMIN_API_TOKEN or ADMIN_API_TOKEN == "dev-admin-token":
+if not ADMIN_API_TOKEN:
     import warnings
     warnings.warn(
-        "ADMIN_API_TOKEN is not set or uses the insecure default. "
-        "Set ADMIN_API_TOKEN in your .env file before going live.",
+        "ADMIN_API_TOKEN is not set. Admin control routes will be disabled.",
         RuntimeWarning,
         stacklevel=2,
     )
-    ADMIN_API_TOKEN = ADMIN_API_TOKEN or "dev-admin-token"
+elif ADMIN_API_TOKEN == "dev-admin-token":
+    import warnings
+    warnings.warn(
+        "ADMIN_API_TOKEN uses insecure default value 'dev-admin-token'. "
+        "Admin control routes will be disabled until a secure token is configured.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 ADMIN_DEFAULT_ROLE = os.getenv("ADMIN_DEFAULT_ROLE", "ADMIN").strip().upper() or "ADMIN"
 
 

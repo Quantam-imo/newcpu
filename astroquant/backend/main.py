@@ -82,7 +82,9 @@ try:
                 internal_daily_guard_pct=0.015,
             )
         )
-    app.include_router(router_admin.build_admin_router(runner, runner.prop_engine, ADMIN_API_TOKEN))
+    secure_admin_token = str(ADMIN_API_TOKEN or "").strip()
+    if secure_admin_token and secure_admin_token != "dev-admin-token":
+        app.include_router(router_admin.build_admin_router(runner, runner.prop_engine, secure_admin_token))
 except Exception:
     pass
 
