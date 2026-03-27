@@ -2007,7 +2007,8 @@ class MultiSymbolRunner:
 
     def feed_status(self):
         probe_symbol = self.resolve_active_feed_symbol(self.symbols[0]) if self.symbols else "GC.FUT"
-        test = self.feed.test_connection(symbol_dataset(self.symbols[0]) if self.symbols else self.dataset, probe_symbol)
+        # Keep status endpoint lightweight: do not force a fresh network probe on each call.
+        test = self.feed.health()
         return {
             "dataset": self.dataset,
             "probe_symbol": probe_symbol,

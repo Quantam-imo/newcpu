@@ -1,6 +1,7 @@
 import requests
 import datetime
 import xml.etree.ElementTree as ET
+import logging
 
 
 HIGH_IMPACT_KEYWORDS = ["CPI", "NFP", "FOMC", "Rate", "Powell"]
@@ -16,15 +17,30 @@ class NewsEngine:
     def __init__(self):
         self.events = []
         self.last_fetch = None
+        self.next_fetch_allowed = None
         self.alerted_events = set()
         self.freeze_pre_minutes = 20
         self.freeze_post_minutes = 20
 
     def fetch_news(self):
+        if self.next_fetch_allowed and datetime.datetime.now(datetime.UTC) < self.next_fetch_allowed:
+            return
+
         url = "https://nfs.faireconomy.media/ff_calendar_thisweek.xml"
 
         try:
-            response = requests.get(url, timeout=5)
+            response = requests.get(
+                url,
+                timeout=8,
+                headers={"User-Agent": "AstroQuant/1.0 (news-engine)"},
+            )
+
+            if response.status_code == 429:
+                # Respect upstream rate limiting and keep existing cached events.
+                self.next_fetch_allowed = datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=15)
+                logging.warning("News fetch rate-limited (429). Backing off for 15 minutes.")
+                return
+
             response.raise_for_status()
             root = ET.fromstring(response.content)
 
@@ -65,9 +81,12 @@ class NewsEngine:
                 })
 
             self.last_fetch = datetime.datetime.now(datetime.UTC)
+            self.next_fetch_allowed = self.last_fetch + datetime.timedelta(minutes=10)
 
         except Exception as error:
-            print("News fetch error:", error)
+            # Avoid hot-looping after transient failures while preserving prior cache.
+            self.next_fetch_allowed = datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=5)
+            logging.warning("News fetch error: %s", error)
 
     def normalize_symbol(self, symbol):
         if symbol == "XAUUSD":
