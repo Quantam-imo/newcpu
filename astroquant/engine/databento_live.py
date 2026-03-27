@@ -2,10 +2,15 @@ import databento as db
 import pandas as pd
 import os
 
-client = db.Historical(os.getenv("DATABENTO_API_KEY", "YOUR_API_KEY"))
+
+def _client() -> db.Historical:
+    api_key = str(os.getenv("DATABENTO_API_KEY", "")).strip()
+    if not api_key:
+        raise RuntimeError("DATABENTO_API_KEY is not configured")
+    return db.Historical(api_key)
 
 def get_live_data():
-    data = client.timeseries.get_range(
+    data = _client().timeseries.get_range(
         dataset="GLBX.MDP3",
         symbols=["GC"],
         schema="ohlcv-1m",
