@@ -1,6 +1,11 @@
 import databento as db
+import os
 
-client = db.Historical("db-sfFfTe5QH8NsyXVrK9yMsUsGHmYfT")
+api_key = str(os.getenv("DATABENTO_API_KEY", "")).strip()
+if not api_key:
+    raise RuntimeError("DATABENTO_API_KEY is required to run this script")
+
+client = db.Historical(api_key)
 
 data = client.timeseries.get_range(
     dataset="GLBX.MDP3",

@@ -23,6 +23,7 @@ logs/
 
 # Env files
 .env
+.env.backup*
 
 # Browser/runtime profiles
 **/data/playwright_user/
