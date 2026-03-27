@@ -26,6 +26,27 @@ from astroquant.backend.router_gann_websocket import router as router_gann_ws
 from astroquant.backend.runtime import get_runner
 
 
+def _is_production_env() -> bool:
+    value = str(
+        os.getenv("APP_ENV")
+        or os.getenv("ENV")
+        or os.getenv("ENVIRONMENT")
+        or ""
+    ).strip().lower()
+    return value in {"prod", "production"}
+
+
+def _ensure_secure_admin_token_for_production() -> None:
+    token = str(ADMIN_API_TOKEN or "").strip()
+    if _is_production_env() and (not token or token == "dev-admin-token"):
+        raise RuntimeError(
+            "Production startup blocked: ADMIN_API_TOKEN must be set to a secure value."
+        )
+
+
+_ensure_secure_admin_token_for_production()
+
+
 app = FastAPI()
 
 
