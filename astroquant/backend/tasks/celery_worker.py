@@ -10,10 +10,9 @@ celery_app = Celery(
 )
 
 # Example task for engine execution
+@celery_app.task(name="astroquant.run_engine")
 def run_engine(engine_name, *args, **kwargs):
     module = __import__(f"astroquant.engine.{engine_name}", fromlist=[engine_name])
     engine_class = getattr(module, engine_name)
     engine = engine_class()
     return engine.run(*args, **kwargs)
-
-celery_app.task(run_engine)

@@ -31,11 +31,11 @@ class DatabentoLiveService:
                     }
                     await callback(candle)
         except Exception as live_exc:
-            # Fallback: Simulate live candles using historical data (1s bars from a known-good window)
+            # Fallback: Simulate live candles using recent historical data (rolling 5-min window)
             from astroquant.backend.services.databento_utility import fetch_databento_data
             from datetime import datetime, timedelta, timezone
-            hist_start = datetime(2024, 3, 10, 0, 0, 0, tzinfo=timezone.utc)
-            hist_end = datetime(2024, 3, 10, 0, 5, 0, tzinfo=timezone.utc)
+            hist_end = datetime.now(timezone.utc) - timedelta(minutes=35)  # 30-min safety lag
+            hist_start = hist_end - timedelta(minutes=5)
             try:
                 df = fetch_databento_data([symbol], "ohlcv-1s", hist_start.isoformat(), hist_end.isoformat(), dataset=self.dataset, api_key=self.api_key)
                 for _, record in df.iterrows():
