@@ -36,15 +36,55 @@ def _is_production_env() -> bool:
     return value in {"prod", "production"}
 
 
-def _ensure_secure_admin_token_for_production() -> None:
-    token = str(ADMIN_API_TOKEN or "").strip()
-    if _is_production_env() and (not token or token == "dev-admin-token"):
-        raise RuntimeError(
-            "Production startup blocked: ADMIN_API_TOKEN must be set to a secure value."
-        )
+def _security_posture() -> dict:
+    env_name = str(
+        os.getenv("APP_ENV")
+        or os.getenv("ENV")
+        or os.getenv("ENVIRONMENT")
+        or ""
+    ).strip().lower() or "dev"
+
+    admin_token = str(os.getenv("ADMIN_API_TOKEN", "")).strip()
+    mentor_password = str(os.getenv("MENTOR_ADMIN_PASSWORD", "")).strip()
+    telegram_token = str(os.getenv("TELEGRAM_BOT_TOKEN", "")).strip()
+    telegram_chat_id = str(os.getenv("TELEGRAM_CHAT_ID", "")).strip()
+    databento_key = str(os.getenv("DATABENTO_API_KEY", "")).strip()
+
+    admin_secure = bool(admin_token and admin_token != "dev-admin-token")
+    mentor_secure = bool(mentor_password and mentor_password != "AQ-ADMIN")
+    telegram_configured = bool(telegram_token and telegram_chat_id)
+    databento_configured = bool(databento_key)
+
+    blockers = []
+    if _is_production_env():
+        if not admin_secure:
+            blockers.append("ADMIN_API_TOKEN must be configured with a secure non-default value")
+        if not mentor_secure:
+            blockers.append("MENTOR_ADMIN_PASSWORD must be configured with a secure non-default value")
+        if not databento_configured:
+            blockers.append("DATABENTO_API_KEY must be configured")
+
+    return {
+        "environment": env_name,
+        "admin_token_secure": admin_secure,
+        "mentor_admin_password_secure": mentor_secure,
+        "telegram_configured": telegram_configured,
+        "databento_configured": databento_configured,
+        "admin_control_routes_enabled": admin_secure,
+        "production_startup_guard_active": True,
+        "production_ready": len(blockers) == 0,
+        "production_blockers": blockers,
+    }
 
 
-_ensure_secure_admin_token_for_production()
+def _ensure_secure_runtime_for_production() -> None:
+    posture = _security_posture()
+    if _is_production_env() and posture.get("production_blockers"):
+        reasons = "; ".join(posture.get("production_blockers") or [])
+        raise RuntimeError(f"Production startup blocked: {reasons}")
+
+
+_ensure_secure_runtime_for_production()
 
 
 app = FastAPI()
@@ -142,32 +182,7 @@ def feed_status():
 
 @app.get("/status/security")
 def security_status():
-    env_name = str(
-        os.getenv("APP_ENV")
-        or os.getenv("ENV")
-        or os.getenv("ENVIRONMENT")
-        or ""
-    ).strip().lower() or "dev"
-    admin_token = str(os.getenv("ADMIN_API_TOKEN", "")).strip()
-    mentor_password = str(os.getenv("MENTOR_ADMIN_PASSWORD", "")).strip()
-    telegram_token = str(os.getenv("TELEGRAM_BOT_TOKEN", "")).strip()
-    telegram_chat_id = str(os.getenv("TELEGRAM_CHAT_ID", "")).strip()
-    databento_key = str(os.getenv("DATABENTO_API_KEY", "")).strip()
-
-    admin_secure = bool(admin_token and admin_token != "dev-admin-token")
-    mentor_secure = bool(mentor_password and mentor_password != "AQ-ADMIN")
-    telegram_configured = bool(telegram_token and telegram_chat_id)
-    databento_configured = bool(databento_key)
-
-    return {
-        "environment": env_name,
-        "admin_token_secure": admin_secure,
-        "mentor_admin_password_secure": mentor_secure,
-        "telegram_configured": telegram_configured,
-        "databento_configured": databento_configured,
-        "admin_control_routes_enabled": admin_secure,
-        "production_startup_guard_active": True,
-    }
+    return _security_posture()
 
 @app.get("/")
 def root():
