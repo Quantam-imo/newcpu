@@ -36,19 +36,24 @@ def _env_int(*names: str, default: int = 0) -> int:
 
 
 def _load_env_file():
-    env_path = Path(__file__).resolve().parent.parent / ".env"
-    if not env_path.exists():
-        return
+    base = Path(__file__).resolve()
+    candidates = [
+        base.parent.parent / ".env",      # astroquant/.env
+        base.parent.parent.parent / ".env",  # workspace root .env
+    ]
 
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+    for env_path in candidates:
+        if not env_path.exists():
             continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        if key and key not in os.environ:
-            os.environ[key] = value
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
 
 
 _load_env_file()
@@ -68,9 +73,20 @@ SYMBOLS = {
     "XAUUSD": {"databento": "GC.c.1", "priority_models": ["ICT", "ICEBERG"], "dataset": "GLBX.MDP3"},
     "GC-F": {"databento": "GC.c.1", "priority_models": ["ICT", "ICEBERG"], "dataset": "GLBX.MDP3"},
     "NQ": {"databento": "NQ.c.1", "priority_models": ["EXPANSION", "ICEBERG"], "dataset": "GLBX.MDP3"},
+    "NQ.FUT": {"databento": "NQ.c.1", "priority_models": ["EXPANSION", "ICEBERG"], "dataset": "GLBX.MDP3"},
     "EURUSD": {"databento": "6E.c.1", "priority_models": ["ICT"], "dataset": "GLBX.MDP3"},
-    "BTC": {"databento": "BTC.c.1", "priority_models": ["EXPANSION"], "dataset": "GLBX.MDP3"},
     "US30": {"databento": "YM.c.1", "priority_models": ["ICT"], "dataset": "GLBX.MDP3"}
+}
+
+# Permanent active trading universe for frontend chart + ops flows.
+TRADING_FUTURES_SYMBOLS = ["GC.FUT", "NQ.FUT", "6E.FUT", "YM.FUT"]
+TRADING_SYMBOL_ALIASES = {
+    "XAUUSD": "GC.FUT",
+    "GC": "GC.FUT",
+    "NQ": "NQ.FUT",
+    "EURUSD": "6E.FUT",
+    "US30": "YM.FUT",
+    "YM": "YM.FUT",
 }
 
 DATABENTO_API_KEY = os.getenv("DATABENTO_API_KEY", "").strip()

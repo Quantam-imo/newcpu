@@ -1,5 +1,7 @@
 # AstroQuant Production Readiness Report
 
+Superseded by the current root-level README.md, DEPLOYMENT_README.md, and PRODUCTION_READINESS_REPORT.md. This 2026-03-19 snapshot predates the broker-bridge unattended gate and should be treated as historical context only.
+
 **Date:** 2026-03-19
 **Workspace:** /workspaces/newcpu
 
@@ -35,7 +37,7 @@
 
 **Conclusion:**
 
-AstroQuant is fully production-ready. All integration, automation, and documentation requirements are met. System is ready for live trading deployment.
+This 2026-03-19 snapshot is no longer the source of truth for launch readiness. Current status is: supervised live testing can proceed when the broker DOM is visible, while unattended launch remains blocked until the broker bridge is challenge-free and preflight_unattended.sh returns READY.
 
 ---
 

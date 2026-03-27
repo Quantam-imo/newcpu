@@ -1,5 +1,7 @@
-import databento
-client = databento.Historical('db-9YYc6umB6fA7Yv9rF5YjVhFT6Sips')
+import databento as db
+API_KEY = "REDACTED"
+
+client = db.Historical(API_KEY)
 symbols = ['GCZ6','GCM6','GCF6','GCG6','GCH6','GCJ6','GCK6','GCL6','GCN6','GCQ6','GCU6','GCX6']
 for sym in symbols:
     try:

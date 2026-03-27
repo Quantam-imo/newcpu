@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Astrology Calendar - Market Events</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #00ff00;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .container {
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #00ff00;
+            border-radius: 10px;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #ffaa00;
+            text-shadow: 0 0 10px #ffaa00;
+            margin: 0 0 10px 0;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #00aa00;
+            font-size: 0.9em;
+            margin-bottom: 20px;
+        }
+        
+        .controls {
+            background: rgba(0, 20, 0, 0.5);
+            padding: 15px;
+            border: 1px solid #00aa00;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .controls label {
+            color: #00ff00;
+            font-weight: bold;
+        }
+        
+        .controls input {
+            padding: 8px;
+            background: #0a0a0a;
+            border: 1px solid #00ff00;
+            color: #00ff00;
+            border-radius: 3px;
+        }
+        
+        .controls button {
+            padding: 8px 15px;
+            background: #ffaa00;
+            color: #000;
+            border: none;
+            border-radius: 3px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .controls button:hover {
+            background: #ffcc00;
+        }
+        
+        .calendar-container {
+            display: grid;
+            gap: 20px;
+        }
+        
+        .month-view {
+            background: rgba(0, 10, 0, 0.3);
+            border: 1px solid #00aa00;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        
+        .month-header {
+            background: #0a0a0a;
+            padding: 15px;
+            border-bottom: 2px solid #ffaa00;
+            text-align: center;
+            font-weight: bold;
+            color: #ffaa00;
+        }
+        
+        .weekday-row {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            background: rgba(0, 0, 0, 0.5);
+            border-bottom: 1px solid #00aa00;
+        }
+        
+        .weekday {
+            padding: 8px;
+            text-align: center;
+            color: #00aa00;
+            font-size: 0.85em;
+            font-weight: bold;
+            border-right: 1px solid #004400;
+        }
+        
+        .weekday:last-child {
+            border-right: none;
+        }
+        
+        .days-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+        }
+        
+        .day-cell {
+            min-height: 60px;
+            padding: 8px;
+            border: 1px solid #004400;
+            background: rgba(0, 0, 0, 0.3);
+            font-size: 0.8em;
+            position: relative;
+        }
+        
+        .day-cell.other-month {
+            background: rgba(0, 0, 0, 0.1);
+            opacity: 0.5;
+        }
+        
+        .day-cell.today {
+            background: rgba(0, 255, 0, 0.1);
+            border: 1px solid #00ff00;
+        }
+        
+        .day-number {
+            font-weight: bold;
+            color: #00ff00;
+            margin-bottom: 3px;
+        }
+        
+        .day-events {
+            font-size: 0.7em;
+            line-height: 1.2;
+        }
+        
+        .event {
+            background: rgba(255, 170, 0, 0.2);
+            border-left: 2px solid #ffaa00;
+            padding: 2px 4px;
+            margin: 1px 0;
+            border-radius: 2px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .event.major {
+            background: rgba(255, 85, 85, 0.2);
+            border-left-color: #ff5555;
+            color: #ff5555;
+            font-weight: bold;
+        }
+        
+        .event.retrograde {
+            background: rgba(100, 200, 255, 0.2);
+            border-left-color: #64c8ff;
+            color: #64c8ff;
+        }
+        
+        .event.harmonic {
+            background: rgba(100, 255, 100, 0.2);
+            border-left-color: #64ff64;
+            color: #64ff64;
+        }
+        
+        .legend {
+            background: rgba(0, 20, 0, 0.5);
+            padding: 15px;
+            border: 1px solid #00aa00;
+            border-radius: 5px;
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            border-left: 3px solid;
+        }
+        
+        .event-details {
+            background: rgba(0, 20, 0, 0.5);
+            padding: 15px;
+            border: 1px solid #00aa00;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        
+        .event-details h3 {
+            color: #ffaa00;
+            margin: 0 0 10px 0;
+        }
+        
+        .event-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .event-item {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 8px;
+            border-left: 3px solid #ffaa00;
+            border-radius: 3px;
+        }
+        
+        .event-date {
+            color: #00aa00;
+            font-size: 0.9em;
+        }
+        
+        .event-name {
+            color: #00ff00;
+            font-weight: bold;
+        }
+        
+        .event-impact {
+            color: #ffaa00;
+            font-size: 0.85em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>☿️ ASTROLOGY CALENDAR - MARKET EVENTS</h1>
+        <div class="subtitle">Planetary Events & Trading Windows</div>
+        
+        <div class="controls">
+            <label>Month:</label>
+            <input type="month" id="monthInput" value="">
+            
+            <label>Filter:</label>
+            <select id="filterType" style="padding: 8px; background: #0a0a0a; border: 1px solid #00ff00; color: #00ff00;">
+                <option value="all">All Events</option>
+                <option value="major">Major Aspects</option>
+                <option value="retrograde">Retrograde</option>
+                <option value="harmonic">Harmonic Windows</option>
+            </select>
+            
+            <button onclick="updateCalendar()">🔄 UPDATE</button>
+        </div>
+        
+        <div class="calendar-container" id="calendarContainer"></div>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="border-left-color: #ffaa00;"></div>
+                <span>Standard Events</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="border-left-color: #ff5555;"></div>
+                <span>Major Aspects (High Impact)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="border-left-color: #64c8ff;"></div>
+                <span>Retrograde Motion</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="border-left-color: #64ff64;"></div>
+                <span>Harmonic Windows</span>
+            </div>
+        </div>
+        
+        <div class="event-details">
+            <h3>📅 Upcoming Events</h3>
+            <div class="event-list" id="eventList"></div>
+        </div>
+    </div>
+    
+    <script>
+        // Sample calendar data - in production, this would come from swisseph
+        const astronomicalEvents = {
+            '2025-03': [
+                { date: '2025-03-01', name: 'Mercury Conjunct Venus', type: 'harmonic', impact: 'Medium' },
+                { date: '2025-03-05', name: 'New Moon', type: 'major', impact: 'High' },
+                { date: '2025-03-10', name: 'Mars Square Jupiter', type: 'major', impact: 'High' },
+                { date: '2025-03-15', name: 'Full Moon', type: 'major', impact: 'High' },
+                { date: '2025-03-18', name: 'Venus Retrograde Begins', type: 'retrograde', impact: 'Very High' },
+                { date: '2025-03-22', name: 'Sun Trine Pluto', type: 'harmonic', impact: 'Medium' },
+                { date: '2025-03-28', name: 'Mercury Trine Saturn', type: 'harmonic', impact: 'Low' }
+            ],
+            '2025-04': [
+                { date: '2025-04-02', name: 'Saturn Square Neptune', type: 'major', impact: 'High' },
+                { date: '2025-04-04', name: 'New Moon', type: 'major', impact: 'High' },
+                { date: '2025-04-08', name: 'Venus Sextile Mars', type: 'harmonic', impact: 'Medium' },
+                { date: '2025-04-14', name: 'Full Moon', type: 'major', impact: 'High' },
+                { date: '2025-04-20', name: 'Sun Conjunct Mercury', type: 'harmonic', impact: 'Low' },
+                { date: '2025-04-25', name: 'Jupiter Direct', type: 'retrograde', impact: 'Very High' }
+            ],
+            '2025-05': [
+                { date: '2025-05-03', name: 'New Moon', type: 'major', impact: 'High' },
+                { date: '2025-05-08', name: 'Mars Trine Pluto', type: 'harmonic', impact: 'Medium' },
+                { date: '2025-05-14', name: 'Full Moon (Lunar Eclipse)', type: 'major', impact: 'Very High' },
+                { date: '2025-05-19', name: 'Venus Direct', type: 'retrograde', impact: 'Very High' },
+                { date: '2025-05-22', name: 'Sun Square Saturn', type: 'major', impact: 'High' }
+            ]
+        };
+        
+        function daysInMonth(date) {
+            return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+        }
+        
+        function getFirstDayOfMonth(date) {
+            return new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+        }
+        
+        function renderCalendar(yearMonth) {
+            const [year, month] = yearMonth.split('-').map(Number);
+            const date = new Date(year, month - 1, 1);
+            const firstDay = getFirstDayOfMonth(date);
+            const daysCount = daysInMonth(date);
+            
+            const monthKey = yearMonth;
+            const events = astronomicalEvents[monthKey] || [];
+            const eventsByDate = {};
+            
+            events.forEach(event => {
+                const day = new Date(event.date).getDate();
+                if (!eventsByDate[day]) eventsByDate[day] = [];
+                eventsByDate[day].push(event);
+            });
+            
+            let html = '<div class="month-view">';
+            html += `<div class="month-header">${date.toLocaleString('default', { month: 'long', year: 'numeric' })}</div>`;
+            
+            // Weekday headers
+            html += '<div class="weekday-row">';
+            ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach(day => {
+                html += `<div class="weekday">${day}</div>`;
+            });
+            html += '</div>';
+            
+            // Days grid
+            html += '<div class="days-grid">';
+            
+            // Empty cells for days before month starts
+            for (let i = 0; i < firstDay; i++) {
+                html += '<div class="day-cell other-month"></div>';
+            }
+            
+            // Days of month
+            const today = new Date();
+            for (let day = 1; day <= daysCount; day++) {
+                const isToday = day === today.getDate() && 
+                               date.getMonth() === today.getMonth() && 
+                               date.getFullYear() === today.getFullYear();
+                
+                html += `<div class="day-cell ${isToday ? 'today' : ''}">`;
+                html += `<div class="day-number">${day}</div>`;
+                html += '<div class="day-events">';
+                
+                if (eventsByDate[day]) {
+                    eventsByDate[day].forEach(event => {
+                        html += `<div class="event ${event.type}">${event.name}</div>`;
+                    });
+                }
+                
+                html += '</div></div>';
+            }
+            
+            // Empty cells for days after month ends
+            const lastDay = new Date(date.getFullYear(), date.getMonth(), daysCount).getDay();
+            for (let i = lastDay; i < 6; i++) {
+                html += '<div class="day-cell other-month"></div>';
+            }
+            
+            html += '</div></div>';
+            
+            return html;
+        }
+        
+        function updateCalendar() {
+            const monthInput = document.getElementById('monthInput').value;
+            if (!monthInput) {
+                const today = new Date();
+                const year = today.getFullYear();
+                const month = String(today.getMonth() + 1).padStart(2, '0');
+                document.getElementById('monthInput').value = `${year}-${month}`;
+                updateCalendar();
+                return;
+            }
+            
+            const container = document.getElementById('calendarContainer');
+            container.innerHTML = renderCalendar(monthInput);
+            
+            // Update event list
+            const events = astronomicalEvents[monthInput] || [];
+            const eventList = document.getElementById('eventList');
+            
+            let listHtml = '';
+            events.forEach(event => {
+                const date = new Date(event.date);
+                listHtml += `
+                    <div class="event-item">
+                        <div class="event-date">${date.toLocaleDateString('default', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+                        <div class="event-name">${event.name}</div>
+                        <div class="event-impact">Impact: ${event.impact}</div>
+                    </div>
+                `;
+            });
+            
+            eventList.innerHTML = listHtml || '<p style="color: #00aa00;">No events this month</p>';
+        }
+        
+        // Initialize
+        window.addEventListener('load', () => {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            document.getElementById('monthInput').value = `${year}-${month}`;
+            updateCalendar();
+        });
+        
+        document.getElementById('monthInput').addEventListener('change', updateCalendar);
+    </script>
+</body>
+</html>

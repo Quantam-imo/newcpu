@@ -20,11 +20,13 @@ fi
 # 2. Run health checks
 bash health_check.sh "$API_BASE" | tee -a "$LOGFILE"
 bash preflight_strict.sh "$API_BASE" | tee -a "$LOGFILE"
+bash preflight_unattended.sh "$API_BASE" | tee -a "$LOGFILE"
 
 # 3. Validate all panels and operation console endpoints
 PANEL_ENDPOINTS=(
   "/status/feed"
   "/status/execution"
+  "/status/broker_bridge"
   "/status/reconciliation"
   "/status/equity_verification"
   "/system_health"

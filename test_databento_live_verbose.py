@@ -8,7 +8,7 @@ def print_record(record):
 def print_error(exception):
     print("EXCEPTION:", exception)
 
-client = db.Live(key="db-9YYc6umB6fA7Yv9rF5YjVhFT6Sips")
+client = db.Live(key="REDACTED")
 
 client.subscribe(
     dataset="GLBX.MDP3",

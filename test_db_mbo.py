@@ -1,7 +1,7 @@
 import os
 import databento as db
 
-API_KEY = os.environ.get("DATABENTO_API_KEY", "db-9YYc6umB6fA7Yv9rF5YjVhFT6Sips")
+API_KEY = os.environ.get("DATABENTO_API_KEY", "REDACTED")
 client = db.Historical(API_KEY)
 
 try:

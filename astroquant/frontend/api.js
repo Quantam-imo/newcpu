@@ -62,16 +62,30 @@ function removeError(key) {
 
 // ---------- CONFIG ----------
 const API_CONFIG = {
-  TIMEOUT: 20000,
+	TIMEOUT: 30000,
   MAX_RETRIES: 3,
   BASE_DELAY: 400,
   FAILURE_THRESHOLD: 3,
   CIRCUIT_RESET_TIME: 15000,
 };
 
+const CIRCUIT_EXEMPT_WRITE_PATHS = [
+	"/execution/reconnect",
+	"/execution/recover",
+	"/status/broker_bridge/recover",
+];
+
+function isCircuitExemptWritePath(path) {
+	const target = String(path || "");
+	return CIRCUIT_EXEMPT_WRITE_PATHS.some(prefix => target.startsWith(prefix));
+}
+
 // ---------- ENDPOINTS ----------
+// Use the same origin the page was loaded from so VS Code port-forwarding
+// (8001→8000) proxies API calls transparently without CORS headers needed.
 const API_ENDPOINTS = [
-	"http://127.0.0.1:8000"
+	"",
+	(typeof window !== "undefined" && window.AQ_API_BASE) ? window.AQ_API_BASE : ""
 ];
 
 // ---------- STATE ----------
@@ -82,6 +96,22 @@ const circuitState = {
 };
 
 const inFlightRequests = new Map();
+
+if (!window.__aqSingletonIntervals) {
+	window.__aqSingletonIntervals = {};
+}
+
+function setSingletonInterval(key, fn, ms) {
+	const k = String(key || "");
+	if (!k) return null;
+	const existing = window.__aqSingletonIntervals[k];
+	if (existing) {
+		clearInterval(existing);
+	}
+	const id = setInterval(fn, ms);
+	window.__aqSingletonIntervals[k] = id;
+	return id;
+}
 
 // ---------- CACHE ----------
 const CACHE_PREFIX = "AQ_CACHE_";
@@ -144,6 +174,18 @@ function recordSuccess() {
   circuitState.open = false;
 }
 
+function resetCircuitState() {
+	circuitState.failures = 0;
+	circuitState.open = false;
+	circuitState.lastFailureTime = 0;
+}
+
+function isTimeoutLikeError(err) {
+	const name = String(err?.name || "").toLowerCase();
+	const msg = String(err?.message || err || "").toLowerCase();
+	return name.includes("abort") || msg.includes("timeout") || msg.includes("aborted");
+}
+
 // ---------- RETRY WITH JITTER ----------
 async function retry(fn, retries = API_CONFIG.MAX_RETRIES) {
   let attempt = 0;
@@ -168,7 +210,7 @@ async function retry(fn, retries = API_CONFIG.MAX_RETRIES) {
 // ---------- CORE FETCH ----------
 async function coreFetch(url, options, timeout) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
+	const timer = setTimeout(() => controller.abort(new Error("request_timeout")), timeout);
 
   try {
     const res = await fetch(url, {
@@ -189,11 +231,14 @@ async function coreFetch(url, options, timeout) {
 
 // ---------- MAIN ENGINE ----------
 async function apiFetch(path, options = {}, timeout = API_CONFIG.TIMEOUT) {
-  const method = options.method || "GET";
-  const basePath = path.split("?")[0];
+  const method = String(options.method || "GET").toUpperCase();
+	const cachePath = path;
+  const isReadOnly = method === "GET" || method === "HEAD";
+	const exemptWritePath = !isReadOnly && isCircuitExemptWritePath(path);
 
   // 🚫 CIRCUIT BREAKER
-  if (isCircuitOpen()) {
+  // Keep read-only observability endpoints available even when trading safety trips.
+	if (isCircuitOpen() && !isReadOnly && !exemptWritePath) {
     console.warn("⚠️ API blocked by circuit breaker");
 
     return new Response(
@@ -206,14 +251,21 @@ async function apiFetch(path, options = {}, timeout = API_CONFIG.TIMEOUT) {
   }
 
   // ⚡ REQUEST DEDUPLICATION
+  // inFlightRequests stores data promises (not Response objects) so each caller
+  // gets its own fresh Response and cannot see "body stream already read" errors.
   const key = method + ":" + path;
   if (inFlightRequests.has(key)) {
-    return inFlightRequests.get(key);
+    try {
+      const { status, bodyText } = await inFlightRequests.get(key);
+      return new Response(bodyText, { status, headers: { "Content-Type": "application/json" } });
+    } catch (err) {
+      throw err;
+    }
   }
 
   // 💾 CACHE
   if (method === "GET") {
-    const cached = getCache(basePath);
+		const cached = getCache(cachePath);
     if (cached) {
       return new Response(JSON.stringify(cached), {
         status: 200,
@@ -223,7 +275,7 @@ async function apiFetch(path, options = {}, timeout = API_CONFIG.TIMEOUT) {
   }
 
   // 🔁 EXECUTION
-  const requestPromise = retry(async () => {
+  const dataPromise = retry(async () => {
     let lastError;
 
     for (const base of API_ENDPOINTS) {
@@ -231,32 +283,32 @@ async function apiFetch(path, options = {}, timeout = API_CONFIG.TIMEOUT) {
 
       try {
         const res = await coreFetch(url, options, timeout);
+        const bodyText = await res.text();
 
-        recordSuccess();
-
-        // cache
-        if (
-          method === "GET" &&
-          res.headers.get("content-type")?.includes("application/json")
-        ) {
-          const data = await res.clone().json();
-          setCache(basePath, data);
+        // Cache successful JSON responses
+        if (isReadOnly && res.headers.get("content-type")?.includes("application/json")) {
+          try { setCache(cachePath, JSON.parse(bodyText)); } catch (_) {}
         }
 
-        return res;
+				// Read-only calls should not mutate global circuit breaker state.
+				if (!isReadOnly && !exemptWritePath) recordSuccess();
+        return { ok: res.ok, status: res.status, bodyText };
       } catch (err) {
         lastError = err;
       }
     }
 
-    recordFailure();
+		if (!isReadOnly && !exemptWritePath && !isTimeoutLikeError(lastError)) {
+			recordFailure();
+		}
     throw lastError;
   });
 
-  inFlightRequests.set(key, requestPromise);
+  inFlightRequests.set(key, dataPromise);
 
   try {
-    return await requestPromise;
+    const { status, bodyText } = await dataPromise;
+    return new Response(bodyText, { status, headers: { "Content-Type": "application/json" } });
   } finally {
     inFlightRequests.delete(key);
   }
@@ -283,6 +335,7 @@ function canExecuteTrade() {
 window.apiFetch = apiFetch;
 window.apiHealth = getApiHealth;
 window.canExecuteTrade = canExecuteTrade;
+window.apiResetCircuit = resetCircuitState;
 const AQ_ADMIN_TOKEN = window.AQ_ADMIN_TOKEN || localStorage.getItem("AQ_ADMIN_TOKEN") || "dev-admin-token";
 const AQ_ADMIN_ROLE = window.AQ_ADMIN_ROLE || localStorage.getItem("AQ_ADMIN_ROLE") || "ADMIN";
 const AQ_ADMIN_USER = window.AQ_ADMIN_USER || localStorage.getItem("AQ_ADMIN_USER") || "admin";
@@ -316,7 +369,7 @@ function setSummaryField(id, value, className) {
 async function refreshOrderflowSummaryPanel() {
 	const symbol = typeof selectedSymbol === "function"
 		? String(selectedSymbol() || "XAUUSD")
-		: String(document.getElementById("symbolSelect")?.value || "XAUUSD");
+		: String(document.getElementById("chartSymbolInput")?.value || document.getElementById("chartSymbol")?.value || "XAUUSD");
 	const timeframe = typeof selectedTimeframe === "function"
 		? String(selectedTimeframe() || "1m")
 		: "1m";
@@ -809,7 +862,8 @@ function toggleOperationsConsole(forceOpen) {
 		updateBasisOps().catch(console.error);
 		updateOpsStatus().catch(console.error);
 		updateMultiSymbolDashboard().catch(console.error);
-		runFeedProbe().catch(console.error);
+		// Run lightweight probe on open; deep probe remains manual via button.
+		runFeedProbe(false).catch(console.error);
 	}
 	return shouldOpen;
 }
@@ -943,7 +997,14 @@ async function updatePropStatus() {
 
 async function updateEquityBar() {
 	const res = await apiFetch("/equity");
-	if (!res.ok) return;
+	if (!res.ok) {
+		setText("accountSizeDisplay", "--");
+		const bar = document.getElementById("equityBar");
+		if (bar) bar.style.width = "0%";
+		const label = document.getElementById("equityLabel");
+		if (label) label.innerText = "Equity data unavailable";
+		return;
+	}
 	const data = await res.clone().json();
 
 	const base = Number(data.base || 50000);
@@ -968,7 +1029,13 @@ async function updateDrawdownBar() {
 		apiFetch("/equity"),
 		apiFetch("/prop_status"),
 	]);
-	if (!equityRes.ok || !propRes.ok) return;
+	if (!equityRes.ok || !propRes.ok) {
+		const bar = document.getElementById("drawdownBar");
+		if (bar) bar.style.width = "0%";
+		const label = document.getElementById("drawdownLabel");
+		if (label) label.innerText = "Drawdown data unavailable";
+		return;
+	}
 
 	const equityData = await equityRes.clone().json();
 	const propData = await propRes.clone().json();
@@ -995,11 +1062,16 @@ async function updateDrawdownBar() {
 async function updateModelStats() {
 	const symbol = selectedChartSymbol();
 	const res = await apiFetch(`/model_stats?symbol=${encodeURIComponent(symbol)}`);
-	if (!res.ok) return;
-	const data = await res.json();
-
 	const body = document.getElementById("modelStatsBody");
 	if (!body) return;
+	if (!res.ok) {
+		body.innerHTML = "";
+		const tr = document.createElement("tr");
+		tr.innerHTML = `<td colspan="4">Model stats endpoint unavailable (${res.status})</td>`;
+		body.appendChild(tr);
+		return;
+	}
+	const data = await res.json();
 	body.innerHTML = "";
 
 	const entries = Object.entries(data || {});
@@ -1023,12 +1095,39 @@ async function updateModelStats() {
 }
 
 async function updateNewsSeverity() {
-	const res = await apiFetch("/news_severity");
-	if (!res.ok) return;
-	const data = await res.json();
-
 	const panel = document.getElementById("newsPanel");
 	if (!panel) return;
+
+	let data = null;
+	try {
+		const res = await apiFetch("/news_severity");
+		if (res.ok) data = await res.json();
+	} catch (_) {
+		data = null;
+	}
+
+	if (!data) {
+		try {
+			const statusRes = await apiFetch("/status");
+			if (statusRes.ok) {
+				const status = await statusRes.json();
+				const next = Array.isArray(status?.next_news) ? status.next_news[0] : null;
+				data = {
+					halt_active: Boolean(status?.news_halt),
+					upcoming_title: next?.title || null,
+					upcoming_currency: next?.currency || null,
+					minutes_to_news: next?.time ? Math.max(0, Math.round((new Date(next.time).getTime() - Date.now()) / 60000)) : null,
+				};
+			}
+		} catch (_) {
+			data = null;
+		}
+	}
+
+	if (!data) {
+		panel.innerText = "News severity unavailable";
+		return;
+	}
 
 	const halt = data.halt_active ? "HALT ACTIVE" : "No Halt";
 	const upcoming = data.upcoming_title ? `${data.upcoming_title} (${data.upcoming_currency || "--"})` : "No upcoming event";
@@ -1045,6 +1144,25 @@ async function updateSystemHealth() {
 	const res = await apiFetch("/system_health");
 	if (!res.ok) return;
 	const data = await res.json();
+	const legacyShape = Boolean(data?.System || data?.Broker || data?.DataFeed);
+	const normalized = legacyShape
+		? {
+			health_state: String(data?.System?.status || "UNKNOWN").toUpperCase() === "ERROR" ? "CRITICAL" : "HEALTHY",
+			health_score: null,
+			playwright: String(data?.Broker?.status || "").toUpperCase() === "CONNECTED",
+			databento: String(data?.DataFeed?.status || "").toUpperCase() === "OK",
+			governance: true,
+			execution_status: String(data?.Broker?.status || "UNKNOWN").toUpperCase() === "CONNECTED" ? "CONNECTED" : "DISCONNECTED",
+			reconciliation_status: "UNKNOWN",
+			equity_verification_status: "UNKNOWN",
+			cpu_load_1m: null,
+			cpu_cores: null,
+			memory_used_pct: null,
+			disk_used_pct: null,
+			uptime_seconds: null,
+			issues: [data?.Broker?.details, data?.System?.details].filter(Boolean),
+		}
+		: (data || {});
 
 	const p = document.getElementById("healthPlaywright");
 	const d = document.getElementById("healthDatabento");
@@ -1060,38 +1178,38 @@ async function updateSystemHealth() {
 	const summary = document.getElementById("healthSummary");
 
 	const toTone = (ok) => ok ? "good" : "bad";
-	const execOk = String(data.execution_status || "OK").toUpperCase() !== "HALTED";
-	const recOk = !Boolean(data.reconciliation_halt);
-	const equityOk = !Boolean(data.equity_verification_halt);
-	const memPct = Number(data.memory_used_pct);
-	const diskPct = Number(data.disk_used_pct);
-	const cpuLoad = Number(data.cpu_load_1m);
-	const cpuCores = Number(data.cpu_cores || 0);
+	const execOk = String(normalized.execution_status || "OK").toUpperCase() !== "HALTED";
+	const recOk = !Boolean(normalized.reconciliation_halt);
+	const equityOk = !Boolean(normalized.equity_verification_halt);
+	const memPct = Number(normalized.memory_used_pct);
+	const diskPct = Number(normalized.disk_used_pct);
+	const cpuLoad = Number(normalized.cpu_load_1m);
+	const cpuCores = Number(normalized.cpu_cores || 0);
 
 	if (summary) {
-		const state = String(data.health_state || "UNKNOWN").toUpperCase();
-		const score = Number(data.health_score);
+		const state = String(normalized.health_state || "UNKNOWN").toUpperCase();
+		const score = Number(normalized.health_score);
 		const text = Number.isFinite(score) ? `${state} (${score})` : state;
 		setOpsValue("healthSummary", text, state === "HEALTHY" ? "good" : state === "DEGRADED" ? "warn" : "bad");
 	}
 
 	if (p) {
-		setOpsValue("healthPlaywright", data.playwright ? "OK" : "DOWN", toTone(Boolean(data.playwright)));
+		setOpsValue("healthPlaywright", normalized.playwright ? "OK" : "DOWN", toTone(Boolean(normalized.playwright)));
 	}
 	if (d) {
-		setOpsValue("healthDatabento", data.databento ? "OK" : "DOWN", toTone(Boolean(data.databento)));
+		setOpsValue("healthDatabento", normalized.databento ? "OK" : "DOWN", toTone(Boolean(normalized.databento)));
 	}
 	if (g) {
-		setOpsValue("healthGovernance", data.governance ? "OK" : "LOCKED", data.governance ? "good" : "warn");
+		setOpsValue("healthGovernance", normalized.governance ? "OK" : "LOCKED", normalized.governance ? "good" : "warn");
 	}
 	if (e) {
 		setOpsValue("healthExecution", execOk ? "OK" : "HALTED", execOk ? "good" : "bad");
 	}
 	if (r) {
-		setOpsValue("healthReconciliation", recOk ? (data.reconciliation_status || "OK") : "HALTED", recOk ? "good" : "bad");
+		setOpsValue("healthReconciliation", recOk ? (normalized.reconciliation_status || "OK") : "HALTED", recOk ? "good" : "bad");
 	}
 	if (eq) {
-		setOpsValue("healthEquityVerify", equityOk ? (data.equity_verification_status || "OK") : "HALTED", equityOk ? "good" : "bad");
+		setOpsValue("healthEquityVerify", equityOk ? (normalized.equity_verification_status || "OK") : "HALTED", equityOk ? "good" : "bad");
 	}
 	if (cpu) {
 		const text = Number.isFinite(cpuLoad)
@@ -1112,7 +1230,7 @@ async function updateSystemHealth() {
 		setOpsValue("healthDisk", text, tone);
 	}
 	if (uptime) {
-		const sec = Number(data.uptime_seconds);
+		const sec = Number(normalized.uptime_seconds);
 		if (Number.isFinite(sec)) {
 			const h = Math.floor(sec / 3600);
 			const m = Math.floor((sec % 3600) / 60);
@@ -1122,7 +1240,7 @@ async function updateSystemHealth() {
 		}
 	}
 	if (issues) {
-		const items = Array.isArray(data.issues) ? data.issues : [];
+		const items = Array.isArray(normalized.issues) ? normalized.issues : [];
 		if (!items.length) {
 			setOpsValue("healthIssues", "None", "good");
 		} else {
@@ -1134,12 +1252,16 @@ async function updateSystemHealth() {
 async function loadJournal() {
 	const symbol = selectedChartSymbol();
 	const res = await apiFetch(`/journal?symbol=${encodeURIComponent(symbol)}`);
-	if (!res.ok) return;
-	const data = await res.json();
-
 	const tbody = document.querySelector("#journalTable tbody");
 	if (!tbody) return;
 	tbody.innerHTML = "";
+	if (!res.ok) {
+		const tr = document.createElement("tr");
+		tr.innerHTML = `<td colspan="7">Journal endpoint unavailable (${res.status})</td>`;
+		tbody.appendChild(tr);
+		return;
+	}
+	const data = await res.json();
 
 	if (!Array.isArray(data) || data.length === 0) {
 		const tr = document.createElement("tr");
@@ -1195,8 +1317,10 @@ function renderNews(news) {
 }
 
 function selectedChartSymbol() {
+	const input = document.getElementById("chartSymbolInput");
+	if (input && input.value) return input.value;
 	const select = document.getElementById("chartSymbol");
-	return select ? select.value : "GC.FUT";
+	return select && select.value ? select.value : "GC.FUT";
 }
 
 function setText(id, value) {
@@ -1267,7 +1391,20 @@ function setOpsChips(id, raw, defaultTone = "neutral") {
 
 async function updateMultiSymbolDashboard() {
 	const res = await apiFetch("/dashboard/multi_symbol");
-	if (!res.ok) return;
+	const tbody = document.getElementById("multiSymbolBody");
+	if (!res.ok) {
+		setText("msFeedHealth", "DOWN");
+		setText("msRowCount", "0");
+		setText("msUpdated", "--");
+		setText("msExecHalted", "--");
+		if (tbody) {
+			tbody.innerHTML = "";
+			const tr = document.createElement("tr");
+			tr.innerHTML = `<td colspan="15">Multi-symbol endpoint unavailable (${res.status})</td>`;
+			tbody.appendChild(tr);
+		}
+		return;
+	}
 	const data = await res.json();
 
 	const rows = Array.isArray(data?.rows) ? data.rows : [];
@@ -1278,7 +1415,6 @@ async function updateMultiSymbolDashboard() {
 	setText("msUpdated", data?.timestamp ? new Date(data.timestamp).toLocaleTimeString() : "--");
 	setText("msExecHalted", rows.some(r => r?.execution_halted) ? "YES" : "NO");
 
-	const tbody = document.getElementById("multiSymbolBody");
 	if (!tbody) return;
 	tbody.innerHTML = "";
 
@@ -1310,18 +1446,18 @@ async function updateMultiSymbolDashboard() {
 		   `;
 
 		tr.addEventListener("click", () => {
-			const select = document.getElementById("chartSymbol");
-			if (!select) return;
+			const symbolEl = document.getElementById("chartSymbolInput") || document.getElementById("chartSymbol");
+			if (!symbolEl) return;
 			const canonicalToFeed = {
 				XAUUSD: "GC.FUT",
 				NQ: "NQ.FUT",
 				EURUSD: "6E.FUT",
-				BTC: "BTC.FUT",
 				US30: "YM.FUT",
 			};
 			const feedSymbol = canonicalToFeed[row.symbol] || row.symbol;
-			select.value = feedSymbol;
-			select.dispatchEvent(new Event("change"));
+			symbolEl.value = feedSymbol;
+			symbolEl.dispatchEvent(new Event("input", { bubbles: true }));
+			symbolEl.dispatchEvent(new Event("change", { bubbles: true }));
 		});
 
 		tbody.appendChild(tr);
@@ -1337,7 +1473,42 @@ async function updateBasisOps(forceRefresh = false) {
 		apiFetch(`/market/contracts?symbol=${encodeURIComponent(symbol)}`),
 		apiFetch(`/market/context?symbol=${encodeURIComponent(symbol)}`),
 	]);
-	if (!basisRes.ok || !contractsRes.ok || !contextRes.ok) return;
+
+	if (!basisRes.ok || !contractsRes.ok || !contextRes.ok) {
+		// Compatibility fallback for runtimes that only expose offset_quality + symbol_registry.
+		const [offsetRes, registryRes] = await Promise.all([
+			apiFetch(`/market/offset_quality?symbol=${encodeURIComponent(symbol)}`),
+			apiFetch("/status/symbol_registry"),
+		]);
+		if (!offsetRes.ok || !registryRes.ok) return;
+		const offset = await offsetRes.json();
+		const registry = await registryRes.json();
+		const rows = Array.isArray(registry?.symbols) ? registry.symbols : [];
+		const row = rows.find((item) => String(item?.symbol || "").toUpperCase() === String(symbol || "").toUpperCase()) || null;
+		const resolver = row?.resolver || {};
+
+		setText("basisStatus", offset?.basis?.status || "--");
+		setText("basisBps", "--");
+		setText("basisZ", "--");
+		setText("basisGuard", offset?.basis?.safety_block ? "BLOCKED" : "OK");
+		setText("basisPolicyBlock", offset?.basis_policy?.hard_block ? "YES" : "NO");
+		setText("basisPolicyRisk", offset?.basis_policy?.risk_modifier != null ? Number(offset.basis_policy.risk_modifier).toFixed(2) : "--");
+		setOpsChips(
+			"basisPolicyReasons",
+			Array.isArray(offset?.basis_policy?.reasons) && offset.basis_policy.reasons.length
+				? offset.basis_policy.reasons.join(" | ")
+				: "--",
+		);
+
+		setText("resolverActive", resolver?.active_symbol || row?.active_symbol || offset?.sources?.futures_source || "--");
+		setText("resolverStatus", resolver?.last_status || row?.last_status || offset?.basis_policy?.resolver_status || "--");
+		setText("resolverFailures", resolver?.consecutive_failures != null ? String(resolver.consecutive_failures) : "--");
+		setText("resolverAttempts", resolver?.attempts != null ? String(resolver.attempts) : "--");
+		setText("resolverTtl", resolver?.ttl_seconds != null ? `${resolver.ttl_seconds}s` : "--");
+		setText("resolverWatchOnly", row?.enabled === false ? "YES" : "NO");
+		setText("resolverWatchReason", row?.disable_reason || resolver?.disable_reason || "--");
+		return;
+	}
 
 	const basis = await basisRes.json();
 	const contracts = await contractsRes.json();
@@ -1379,6 +1550,128 @@ async function warmupContracts() {
 			btn.disabled = false;
 			btn.innerText = "Warmup Contracts";
 		}
+	}
+}
+
+async function prewarmSymbolRegistry() {
+	const btn = document.getElementById("opsRegistryPrewarmBtn");
+	if (btn) {
+		btn.disabled = true;
+		btn.innerText = "Prewarming...";
+	}
+	setText("opsProbeSnapshot", "Triggering symbol registry prewarm...");
+	try {
+		const res = await apiFetch("/status/symbol_registry/prewarm", { method: "POST" });
+		if (res.ok) {
+			const data = await res.json();
+			const symbols = Object.keys(data?.resolver || {});
+			const summary = data?.summary || {};
+			const resolved = Number(summary?.resolved);
+			const unresolved = Number(summary?.unresolved);
+			if (Number.isFinite(resolved) && Number.isFinite(unresolved)) {
+				setText("opsProbeSnapshot", `Prewarm OK: resolved ${resolved}, unresolved ${unresolved}`);
+			} else {
+				setText("opsProbeSnapshot", symbols.length ? `Prewarm OK: ${symbols.join(", ")}` : "Prewarm requested");
+			}
+		} else {
+			setText("opsProbeSnapshot", `Prewarm failed (${res.status})`);
+		}
+	} catch (_) {
+		setText("opsProbeSnapshot", "Prewarm request failed");
+	} finally {
+		if (btn) {
+			btn.disabled = false;
+			btn.innerText = "Prewarm Registry";
+		}
+		await updateOpsStatus();
+	}
+}
+
+function canonicalRuntimeSymbolForOps(symbol) {
+	const key = String(symbol || "").toUpperCase();
+	const map = {
+		"GC.FUT": "XAUUSD",
+		"NQ.FUT": "NQ",
+		"6E.FUT": "EURUSD",
+		"YM.FUT": "US30",
+	};
+	return map[key] || key || "XAUUSD";
+}
+
+async function pinRegistryActiveContract() {
+	const btn = document.getElementById("opsRegistryPinBtn");
+	const input = document.getElementById("opsRegistryContractInput");
+	const forceProbeCb = document.getElementById("opsRegistryForceProbeCb");
+	const selected = canonicalRuntimeSymbolForOps(selectedChartSymbol());
+	const contract = String(input?.value || "").trim();
+	const forceProbe = Boolean(forceProbeCb?.checked);
+	if (!contract) {
+		setText("opsProbeSnapshot", "Enter a contract first (example: GC.c.1)");
+		return;
+	}
+
+	if (btn) {
+		btn.disabled = true;
+		btn.innerText = "Pinning...";
+	}
+	setText("opsProbeSnapshot", `Pinning ${selected} -> ${contract} ...`);
+
+	try {
+		let res = await apiFetch(
+			`/status/symbol_registry/${encodeURIComponent(selected)}/set_active_verify?contract=${encodeURIComponent(contract)}&force_probe=${forceProbe ? "true" : "false"}`,
+			{ method: "POST" },
+		);
+		// Backward-compatible fallback if verify endpoint is unavailable.
+		if (!res.ok && res.status === 404) {
+			res = await apiFetch(
+				`/status/symbol_registry/${encodeURIComponent(selected)}/set_active?contract=${encodeURIComponent(contract)}`,
+				{ method: "POST" },
+			);
+		}
+		if (!res.ok) {
+			setText("opsProbeSnapshot", `Pin failed (${res.status})`);
+			return;
+		}
+
+		const pinData = await res.json();
+		const verifiedMode = String(pinData?.verify?.mode || "").toLowerCase();
+		const verifiedSource = String(pinData?.verify?.futures_source || "");
+		const verifiedCandles = Number(pinData?.verify?.candles);
+		const reprobeQueued = Boolean(pinData?.verify?.reprobe_queued);
+		if (verifiedMode) {
+			const details = [
+				`mode=${verifiedMode}`,
+				verifiedSource ? `src=${verifiedSource}` : null,
+				Number.isFinite(verifiedCandles) ? `candles=${verifiedCandles}` : null,
+				reprobeQueued ? "reprobe=queued" : null,
+			].filter(Boolean).join(" ");
+			setText("opsProbeSnapshot", `Pinned ${selected} -> ${contract}; ${details}`);
+		} else {
+			setText("opsProbeSnapshot", `Pinned ${selected} -> ${contract}`);
+		}
+
+		if (Number.isFinite(verifiedCandles) && verifiedCandles <= 0) {
+			const existing = document.getElementById("opsProbeSnapshot")?.textContent || "";
+			const guidance = reprobeQueued
+				? "No candles yet; background reprobe queued. Keep fast fallback and recheck in 10-20s."
+				: "No candles yet; keep fast fallback and run Prewarm Registry or retry with force probe.";
+			setText("opsProbeSnapshot", `${existing} | ${guidance}`.trim());
+		}
+
+		const modeRes = await apiFetch(`/market/offset_quality?symbol=${encodeURIComponent(selected)}`);
+		if (modeRes.ok) {
+			const data = await modeRes.json();
+			const apiMode = String(data?.market_data_mode || "--");
+			setText("opsProbeSnapshot", `${document.getElementById("opsProbeSnapshot")?.textContent || ""} api_mode=${apiMode}`.trim());
+		}
+	} catch (_) {
+		setText("opsProbeSnapshot", "Pin request failed");
+	} finally {
+		if (btn) {
+			btn.disabled = false;
+			btn.innerText = "Pin Active Contract";
+		}
+		await updateOpsStatus();
 	}
 }
 
@@ -1468,20 +1761,31 @@ async function syncPropEngineControls() {
 	});
 }
 
+let _opsStatusInFlight = false;
 async function updateOpsStatus() {
+	// Guard: skip if a previous call is still in progress to prevent connection-pool saturation.
+	if (_opsStatusInFlight) return;
+	_opsStatusInFlight = true;
+	try {
 	const symbol = selectedChartSymbol();
-	const [feedRes, execRes, recRes, eqRes, propBehaviorRes, propRes, statusRes, offsetQualityRes] = await Promise.all([
-		apiFetch("/status/feed"),
+	// Batch 1: fast endpoints (<5 ms each) – keep within Chrome's 6-per-host limit
+	const [execRes, recRes, eqRes, propBehaviorRes, propRes, bridgeRes] = await Promise.all([
 		apiFetch("/status/execution"),
 		apiFetch("/status/reconciliation"),
 		apiFetch("/status/equity_verification"),
 		apiFetch(`/prop/auto_behavior?symbol=${encodeURIComponent(symbol)}`),
 		apiFetch("/prop_status"),
+		apiFetch("/status/broker_bridge"),
+	]);
+	// Batch 2: slower/upstream endpoints – run after batch 1 so chart can use freed connections
+	const [feedRes, statusRes, offsetQualityRes, registryRes] = await Promise.all([
+		apiFetch("/status/feed"),
 		apiFetch("/status"),
 		apiFetch(`/market/offset_quality?symbol=${encodeURIComponent(symbol)}`),
+		apiFetch("/status/symbol_registry"),
 	]);
 	// If any response is not ok, try to show error in the console panel
-	if (!feedRes.ok || !execRes.ok || !recRes.ok || !eqRes.ok || !propBehaviorRes.ok || !propRes.ok || !statusRes.ok || !offsetQualityRes.ok) {
+	if (!feedRes.ok || !execRes.ok || !recRes.ok || !eqRes.ok || !propRes.ok || !statusRes.ok || !offsetQualityRes.ok || !bridgeRes.ok) {
 		const panel = document.getElementById("operationsConsolePanel");
 		if (panel) {
 			panel.innerHTML = `<div style='color:#ef4444;font-size:14px;padding:12px;'>Backend error: One or more status endpoints failed to respond.<br/>Please check backend logs and network connectivity.</div>`;
@@ -1496,10 +1800,14 @@ async function updateOpsStatus() {
 	const prop = await propRes.json();
 	const status = await statusRes.json();
 	const offsetQuality = await offsetQualityRes.json();
-	const propBehaviorData = await propBehaviorRes.json();
+	const bridge = await bridgeRes.json();
+	const registry = registryRes.ok ? await registryRes.json() : null;
+	const propBehaviorData = propBehaviorRes.ok
+		? await propBehaviorRes.json()
+		: { behavior: {}, override: {}, unavailable: true };
 
 	// Defensive: If any required object is missing, show error and return
-	if (!feed || !exec || !rec || !eq || !prop || !status || !offsetQuality || !propBehaviorData) {
+	if (!feed || !exec || !rec || !eq || !prop || !status || !offsetQuality || !bridge) {
 		const panel = document.getElementById("operationsConsolePanel");
 		if (panel) {
 			panel.innerHTML = `<div style='color:#ef4444;font-size:14px;padding:12px;'>Backend returned incomplete data for operations console.<br/>Please check backend health.</div>`;
@@ -1531,6 +1839,11 @@ async function updateOpsStatus() {
 	setOpsValue("opsLockRule", prop?.lock_rule_status || "--", lockRule.includes("LOCK") || lockRule.includes("BREACH") ? "warn" : "good");
 	setText("opsBreachRoom", fmtMoney(prop?.remaining_room_to_breach));
 	setOpsValue("opsPlaywrightConnected", connected ? "YES" : "NO", connected ? "good" : "bad");
+	setOpsValue("opsBridgeReady", bridge?.bridge_ready ? "YES" : "NO", bridge?.bridge_ready ? "good" : "warn");
+	setOpsValue("opsSameBrowserMode", bridge?.same_browser_mode ? "YES" : "NO", bridge?.same_browser_mode ? "good" : "warn");
+	setOpsValue("opsCdpReachable", bridge?.debugger_reachable ? "YES" : "NO", bridge?.debugger_reachable ? "good" : "bad");
+	setText("opsBrokerTabs", bridge?.tabs_broker != null ? String(bridge.tabs_broker) : "--");
+	setText("opsDashboardTabs", bridge?.tabs_dashboard != null ? String(bridge.tabs_dashboard) : "--");
 	setText("opsBrowserHeartbeat", exec?.browser_heartbeat_status ? `${exec.browser_heartbeat_status}${exec?.browser_heartbeat_age_seconds != null ? ` (${exec.browser_heartbeat_age_seconds}s)` : ""}` : "--");
 	setText("opsLastExecutionTs", exec?.last_trade_time ? new Date(Number(exec.last_trade_time) * 1000).toLocaleString() : "--");
 	setOpsValue("opsSelectorProfile", selectorProfile?.calibrated ? "CALIBRATED" : "NOT_CALIBRATED", selectorProfile?.calibrated ? "good" : "warn");
@@ -1546,9 +1859,14 @@ async function updateOpsStatus() {
 	setText("opsSellButtonPrice", sellPriceVal == null || sellPriceVal === "" || Number.isNaN(Number(sellPriceVal)) ? "--" : Number(sellPriceVal).toFixed(2));
 	setOpsValue("opsReconciliationStatus", rec?.status || "--", recStatus.includes("HALT") || recStatus.includes("FAIL") ? "bad" : recStatus.includes("WARN") ? "warn" : "good");
 	setOpsValue("opsEquityStatus", eq?.status || "--", eqStatus.includes("HALT") || eqStatus.includes("FAIL") ? "bad" : eqStatus.includes("WARN") ? "warn" : "good");
-	setText("opsPropMode", behavior?.mode || "--");
+	setText("opsPropMode", behavior?.mode || (propBehaviorData?.unavailable ? "UNAVAILABLE" : "--"));
 	setText("opsPropRiskMult", behavior?.risk_multiplier != null ? Number(behavior.risk_multiplier).toFixed(2) : "--");
-	setOpsChips("opsPropReasons", Array.isArray(behavior?.reasons) && behavior.reasons.length ? behavior.reasons.join(" | ") : "--");
+	setOpsChips(
+		"opsPropReasons",
+		Array.isArray(behavior?.reasons) && behavior.reasons.length
+			? behavior.reasons.join(" | ")
+			: (propBehaviorData?.unavailable ? "prop_auto_behavior_missing" : "--"),
+	);
 	setOpsValue("opsPropOverride", overrideEnabled ? (override?.mode || "CUSTOM") : "NONE", overrideEnabled ? "warn" : "neutral");
 	setText("opsPropOverrideExpiry", override?.enabled && override?.expires_at ? new Date(Number(override.expires_at) * 1000).toLocaleString() : "--");
 	setOpsValue("opsGovCanTrade", prop?.trading_enabled ? "YES" : "NO", prop?.trading_enabled ? "good" : "warn");
@@ -1560,12 +1878,18 @@ async function updateOpsStatus() {
 	const oqHardBlock = Boolean(offsetQuality?.trade_quality?.hard_block);
 	const oqScore = Number(offsetQuality?.trade_quality?.score);
 	const oqSignals = Number(offsetQuality?.signal_detection?.count || 0);
+	const oqMode = String(offsetQuality?.market_data_mode || "--").toUpperCase();
 
 	setText("opsOqSymbol", offsetQuality?.symbol || "--");
 	setText("opsOqFuturesSource", offsetQuality?.sources?.futures_source || "--");
 	setText("opsOqBrokerSymbol", offsetQuality?.sources?.broker_symbol || "--");
 	setOpsValue("opsOqBasisStatus", oqBasisStatus, oqBasisStatus === "LIVE" ? "good" : (oqBasisStatus === "STALE" ? "warn" : "bad"));
 	setOpsValue("opsOqOffsetStatus", oqOffsetStatus, oqOffsetStatus === "OK" ? "good" : (oqOffsetStatus === "HALT" ? "warn" : "bad"));
+	setOpsValue(
+		"opsOqMarketMode",
+		oqMode,
+		oqMode === "CACHED_REALTIME" ? "good" : (oqMode === "FAST_FALLBACK" ? "warn" : "neutral"),
+	);
 	setText(
 		"opsOqOffsetDeviation",
 		offsetQuality?.offset_guard?.deviation == null
@@ -1610,14 +1934,61 @@ async function updateOpsStatus() {
 			: "NONE",
 	);
 
+	const registryRows = Array.isArray(registry?.symbols) ? registry.symbols : [];
+	const selectedRegistrySymbol = canonicalRuntimeSymbolForOps(selectedChartSymbol());
+	const selectedRegistryRow = registryRows.find((row) => String(row?.symbol || "").toUpperCase() === selectedRegistrySymbol) || null;
+	const registryUnresolved = registryRows.filter((row) => {
+		const status = String(row?.last_status || "").toUpperCase();
+		const hasActive = Boolean(row?.resolver?.active_symbol || row?.active_symbol);
+		return !(hasActive && (status === "LIVE" || status === "OK"));
+	}).length;
+	const registrySummaries = registryRows
+		.slice(0, 6)
+		.map((row) => `${row?.symbol || "--"}:${row?.resolver?.active_symbol || row?.active_symbol || "--"}`);
+	setOpsValue(
+		"opsRegistryStatus",
+		registry?.status || "--",
+		!registryRows.length ? "neutral" : (registryUnresolved === 0 ? "good" : "warn"),
+	);
+	setText("opsRegistryUnresolved", registryRows.length ? `${registryUnresolved}/${registryRows.length}` : "--");
+	setOpsChips("opsRegistrySymbols", registrySummaries.length ? registrySummaries.join(" | ") : "--");
+	setOpsValue(
+		"opsRegistrySelectedStatus",
+		selectedRegistryRow?.last_status || "--",
+		String(selectedRegistryRow?.last_status || "").toUpperCase() === "LIVE" ? "good" : "warn",
+	);
+	setText("opsRegistrySelectedActive", selectedRegistryRow?.active_symbol || selectedRegistryRow?.resolver?.active_symbol || "--");
+	setText("opsRegistrySelectedAttempts", selectedRegistryRow?.attempts != null ? String(selectedRegistryRow.attempts) : "--");
+	setText(
+		"opsRegistrySelectedFailures",
+		selectedRegistryRow?.consecutive_failures != null ? String(selectedRegistryRow.consecutive_failures) : "--",
+	);
+	setText(
+		"opsRegistrySelectedLastProbe",
+		selectedRegistryRow?.resolver?.last_probe_at
+			? new Date(Number(selectedRegistryRow.resolver.last_probe_at) * 1000).toLocaleString()
+			: "--",
+	);
+	setOpsChips(
+		"opsRegistrySelectedTried",
+		Array.isArray(selectedRegistryRow?.resolver?.candidates_tried) && selectedRegistryRow.resolver.candidates_tried.length
+			? selectedRegistryRow.resolver.candidates_tried.join(" | ")
+			: "--",
+	);
+	setText("opsRegistrySelectedDisableReason", selectedRegistryRow?.disable_reason || selectedRegistryRow?.resolver?.disable_reason || "--");
+	const registryContractInput = document.getElementById("opsRegistryContractInput");
+	if (registryContractInput && !registryContractInput.value) {
+		registryContractInput.value = String(offsetQuality?.sources?.futures_source || "");
+	}
+
 	// Non-blocking multi-symbol scan (don't wait for slow offset_quality)
-	const scanSymbols = ["XAUUSD", "NQ", "EURUSD", "BTC", "US30"];
+	const scanSymbols = ["XAUUSD", "NQ", "EURUSD", "US30"];
 	const timeoutMs = 4000; // 4s timeout per fetch
 	Promise.allSettled(scanSymbols.map(async (sym) => {
 		try {
 			const controller = new AbortController();
 			const timer = setTimeout(() => controller.abort(), timeoutMs);
-			const r = await fetch(`${window.location.origin || "http://127.0.0.1:8000"}/market/offset_quality?symbol=${encodeURIComponent(sym)}`, { signal: controller.signal });
+			const r = await fetch(`${window.location.origin}/market/offset_quality?symbol=${encodeURIComponent(sym)}`, { signal: controller.signal });
 			clearTimeout(timer);
 			if (!r.ok) return { sym, text: `${sym}: --` };
 			const d = await r.json();
@@ -1714,6 +2085,9 @@ async function updateOpsStatus() {
 	if (simDrawdown && simDrawdown.value === "") {
 		simDrawdown.value = Number(dataOrZero(await safeStatusValue("capital.current_drawdown"))).toFixed(2);
 	}
+	} finally {
+		_opsStatusInFlight = false;
+	}
 }
 
 function dataOrZero(value) {
@@ -1744,7 +2118,6 @@ async function runPropBehaviorScenario() {
 		"GC.FUT": "XAUUSD",
 		"NQ.FUT": "NQ",
 		"6E.FUT": "EURUSD",
-		"BTC.FUT": "BTC",
 		"YM.FUT": "US30",
 	};
 	const canonical = canonicalMap[symbol] || symbol;
@@ -1785,7 +2158,6 @@ async function setPropBehaviorOverride(mode, riskMultiplier, hardBlock, expiresM
 		"GC.FUT": "XAUUSD",
 		"NQ.FUT": "NQ",
 		"6E.FUT": "EURUSD",
-		"BTC.FUT": "BTC",
 		"YM.FUT": "US30",
 	};
 	const canonical = canonicalMap[symbol] || symbol;
@@ -1814,7 +2186,6 @@ async function clearPropBehaviorOverride() {
 		"GC.FUT": "XAUUSD",
 		"NQ.FUT": "NQ",
 		"6E.FUT": "EURUSD",
-		"BTC.FUT": "BTC",
 		"YM.FUT": "US30",
 	};
 	const canonical = canonicalMap[symbol] || symbol;
@@ -1828,15 +2199,222 @@ async function clearPropBehaviorOverride() {
 	await updateOpsStatus();
 }
 
-async function runFeedProbe() {
+async function runFeedProbe(forceDeep = false) {
 	const symbol = selectedChartSymbol();
-	const res = await apiFetch(`/market/symbol_probe?symbol=${encodeURIComponent(symbol)}&lookback_minutes=240&include_contracts=false&max_candidates=4`);
-	if (!res.ok) return;
+	const canonicalMap = {
+		"GC.FUT": "XAUUSD",
+		"NQ.FUT": "NQ",
+		"6E.FUT": "EURUSD",
+		"YM.FUT": "US30",
+	};
+	const canonical = canonicalMap[symbol] || symbol;
+
+	if (forceDeep) {
+		try {
+			const deepRes = await apiFetch(
+				`/status/feed/deep_probe?symbols=${encodeURIComponent(canonical)}&max_candidates=6&lookback_minutes=240&record_limit=400&force_resolve=true&resolve_probe_seconds=2.5`,
+				{},
+				12000,
+			);
+			if (deepRes.ok) {
+				const deep = await deepRes.json();
+				const symbolRow = Array.isArray(deep?.symbols) ? deep.symbols[0] : null;
+				const results = Array.isArray(symbolRow?.results) ? symbolRow.results : [];
+				const summary = symbolRow?.summary || {};
+				const globalSummary = deep?.summary || {};
+				const parts = [];
+				if (symbolRow?.dataset) parts.push(`dataset:${symbolRow.dataset}`);
+				if (symbolRow?.active_after) parts.push(`active:${symbolRow.active_after}`);
+				if (summary?.status) parts.push(`status:${summary.status}`);
+				if (summary?.best_candidate) parts.push(`best:${summary.best_candidate}:${summary?.best_count != null ? summary.best_count : "--"}`);
+				if (summary?.recommendation) parts.push(`action:${summary.recommendation}`);
+				if (globalSummary?.candidates != null && globalSummary?.candidates_with_data != null) {
+					parts.push(`coverage:${globalSummary.candidates_with_data}/${globalSummary.candidates}`);
+				}
+				for (const row of results.slice(0, 8)) {
+					parts.push(`${row?.candidate || "--"}:${row?.count != null ? row.count : "--"}`);
+				}
+				setText("opsProbeSnapshot", parts.length ? parts.join(" | ") : "No deep probe results");
+				await updateOpsStatus();
+				return;
+			}
+		} catch (_) {
+			setText("opsProbeSnapshot", "Deep probe timed out, using lightweight probe...");
+		}
+	}
+
+	const res = await apiFetch(
+		`/market/symbol_probe?symbol=${encodeURIComponent(canonical)}&lookback_minutes=240&include_contracts=false&max_candidates=4`,
+		{},
+		10000,
+	);
+	if (!res.ok) {
+		// Compatibility fallback when symbol_probe endpoint is unavailable.
+		const [offsetRes, registryRes] = await Promise.all([
+			apiFetch(`/market/offset_quality?symbol=${encodeURIComponent(canonical)}`),
+			apiFetch("/status/symbol_registry"),
+		]);
+		if (!offsetRes.ok || !registryRes.ok) return;
+		const offset = await offsetRes.json();
+		const registry = await registryRes.json();
+		const rows = Array.isArray(registry?.symbols) ? registry.symbols : [];
+		const row = rows.find((item) => String(item?.symbol || "").toUpperCase() === String(canonical || "").toUpperCase()) || null;
+		const tried = Array.isArray(row?.resolver?.candidates_tried) ? row.resolver.candidates_tried : [];
+		const fallbackPreview = [];
+		if (offset?.sources?.futures_source) fallbackPreview.push(`active:${offset.sources.futures_source}`);
+		for (const candidate of tried.slice(0, 6)) fallbackPreview.push(`${candidate}:--`);
+		setText("opsProbeSnapshot", fallbackPreview.length ? fallbackPreview.join(" | ") : "Probe endpoint unavailable");
+		await updateOpsStatus();
+		return;
+	}
 	const data = await res.json();
 	const rows = Array.isArray(data?.results) ? data.results : [];
 	const preview = rows.map(r => `${r.candidate}:${r.count}`).join(" | ");
 	setText("opsProbeSnapshot", preview || "No probe results");
 	await updateOpsStatus();
+}
+
+async function runDeepProbeAll() {
+	const symbols = ["XAUUSD", "NQ", "EURUSD", "US30"];
+	const res = await apiFetch(
+		`/status/feed/deep_probe?symbols=${encodeURIComponent(symbols.join(","))}&max_candidates=6&lookback_minutes=240&record_limit=400&force_resolve=true&resolve_probe_seconds=2.5`,
+	);
+	if (!res.ok) {
+		setText("opsProbeMultiSummary", `Deep probe failed (${res.status})`);
+		const body = document.getElementById("opsProbeMultiBody");
+		if (body) body.innerHTML = `<tr><td colspan="5">Deep probe failed (${res.status})</td></tr>`;
+		return;
+	}
+	const payload = await res.json();
+	const rows = Array.isArray(payload?.symbols) ? payload.symbols : [];
+	const summary = [];
+	for (const row of rows) {
+		const sym = String(row?.symbol || "--");
+		const s = row?.summary || {};
+		const st = String(s?.status || "UNKNOWN");
+		const best = s?.best_candidate ? `${s.best_candidate}:${s?.best_count != null ? s.best_count : "--"}` : "--";
+		summary.push(`${sym} ${st} ${best}`);
+	}
+	const globalSummary = payload?.summary || {};
+	const coverage = (globalSummary?.candidates != null && globalSummary?.candidates_with_data != null)
+		? ` coverage=${globalSummary.candidates_with_data}/${globalSummary.candidates}`
+		: "";
+	const action = globalSummary?.recommendation ? ` action=${globalSummary.recommendation}` : "";
+	setText(
+		"opsProbeMultiSummary",
+		summary.length ? `${summary.join(" | ")}${coverage}${action}` : "No deep probe rows",
+	);
+
+	const body = document.getElementById("opsProbeMultiBody");
+	if (body) {
+		if (!rows.length) {
+			body.innerHTML = `<tr><td colspan="5">No deep probe rows</td></tr>`;
+		} else {
+			body.innerHTML = rows
+				.map((row) => {
+					const sym = String(row?.symbol || "--");
+					const s = row?.summary || {};
+					const status = String(s?.status || "UNKNOWN");
+					const best = s?.best_candidate
+						? `${String(s.best_candidate)}:${s?.best_count != null ? s.best_count : "--"}`
+						: "--";
+					const failures = s?.resolver_failures_before != null ? String(s.resolver_failures_before) : "--";
+					const rec = String(s?.recommendation || "--");
+					return `<tr><td>${sym}</td><td>${status}</td><td>${best}</td><td>${failures}</td><td>${rec}</td></tr>`;
+				})
+				.join("");
+		}
+	}
+}
+
+function showOpsToast(message, tone = "info") {
+	if (!message) return;
+	let host = document.getElementById("opsToastHost");
+	if (!host) {
+		host = document.createElement("div");
+		host.id = "opsToastHost";
+		host.style.position = "fixed";
+		host.style.right = "14px";
+		host.style.bottom = "14px";
+		host.style.zIndex = "12000";
+		host.style.display = "flex";
+		host.style.flexDirection = "column";
+		host.style.gap = "8px";
+		document.body.appendChild(host);
+	}
+
+	const toast = document.createElement("div");
+	toast.setAttribute("role", "status");
+	toast.style.padding = "8px 10px";
+	toast.style.borderRadius = "8px";
+	toast.style.fontSize = "12px";
+	toast.style.fontWeight = "700";
+	toast.style.letterSpacing = "0.2px";
+	toast.style.border = "1px solid #2a3b59";
+	toast.style.boxShadow = "0 8px 24px rgba(0,0,0,0.28)";
+	toast.style.background = "#0f1b2f";
+	toast.style.color = "#dbe6f4";
+	if (tone === "success") {
+		toast.style.borderColor = "#22c55e";
+		toast.style.color = "#86efac";
+	}
+	if (tone === "error") {
+		toast.style.borderColor = "#f87171";
+		toast.style.color = "#fca5a5";
+	}
+	toast.textContent = String(message);
+	host.appendChild(toast);
+
+	setTimeout(() => {
+		try {
+			toast.remove();
+			if (host && host.childElementCount === 0) host.remove();
+		} catch (_) {
+			// no-op
+		}
+	}, 2500);
+}
+
+async function copyOpsDiagnostics() {
+	const snapshot = String(document.getElementById("opsProbeSnapshot")?.textContent || "--").trim();
+	const multi = String(document.getElementById("opsProbeMultiSummary")?.textContent || "--").trim();
+	const payload = [
+		`probe_snapshot: ${snapshot}`,
+		`probe_multi: ${multi}`,
+		`copied_at: ${new Date().toISOString()}`,
+	].join("\n");
+
+	let copied = false;
+	try {
+		if (navigator?.clipboard?.writeText) {
+			await navigator.clipboard.writeText(payload);
+			copied = true;
+		}
+	} catch (_) {
+		copied = false;
+	}
+
+	if (!copied) {
+		try {
+			const ta = document.createElement("textarea");
+			ta.value = payload;
+			ta.setAttribute("readonly", "true");
+			ta.style.position = "fixed";
+			ta.style.opacity = "0";
+			document.body.appendChild(ta);
+			ta.select();
+			copied = document.execCommand("copy");
+			ta.remove();
+		} catch (_) {
+			copied = false;
+		}
+	}
+
+	if (copied) {
+		showOpsToast("Diagnostics copied", "success");
+	} else {
+		showOpsToast("Copy failed", "error");
+	}
 }
 
 async function engineAction(action) {
@@ -1849,6 +2427,7 @@ async function engineAction(action) {
 }
 
 async function reconnectExecutionBrowser() {
+	if (typeof window.apiResetCircuit === "function") window.apiResetCircuit();
 	setText("opsProbeSnapshot", "Reconnect requested...");
 	await apiFetch("/execution/reconnect?async_mode=false&force=true", { method: "POST" });
 	setText("opsProbeSnapshot", "Reconnecting browser session...");
@@ -1867,6 +2446,45 @@ window.reconnectExecutionBrowserSafe = function reconnectExecutionBrowserSafe() 
 	reconnectExecutionBrowser().catch((err) => {
 		setText("opsProbeSnapshot", `Reconnect failed: ${String(err || "unknown error")}`);
 	});
+};
+
+window.recoverBrokerBridgeSafe = function recoverBrokerBridgeSafe() {
+	if (typeof window.apiResetCircuit === "function") window.apiResetCircuit();
+	apiFetch("/status/broker_bridge/recover?force_reconnect=true", { method: "POST" })
+		.then((res) => {
+			if (!res.ok) throw new Error("recover endpoint failed");
+			return updateOpsStatus();
+		})
+		.catch((err) => {
+			setText("opsProbeSnapshot", `Bridge recover failed: ${String(err || "unknown error")}`);
+		});
+};
+
+window.openBrokerPage = function openBrokerPage() {
+	// Try to fetch broker URL from backend config endpoint
+	apiFetch("/status/broker_config")
+		.then((res) => {
+			if (!res.ok) {
+				// Fallback to known Maven broker URL
+				const brokerUrl = "https://manager.maven.markets/app/trade";
+				window.open(brokerUrl, "maven_broker", "width=1200,height=800");
+				return;
+			}
+			return res.json();
+		})
+		.then((data) => {
+			if (data && data.broker_url) {
+				window.open(data.broker_url, "maven_broker", "width=1200,height=800");
+			} else if (!data) {
+				// Fallback already opened above
+			}
+		})
+		.catch((err) => {
+			// Fallback to known Maven broker URL on error
+			const brokerUrl = "https://manager.maven.markets/app/trade";
+			window.open(brokerUrl, "maven_broker", "width=1200,height=800");
+			console.warn("Failed to fetch broker config, using fallback URL:", err);
+		});
 };
 async function adminEmergency(action, enabled = null) {
 	const endpointMap = {
@@ -1925,7 +2543,7 @@ async function setGannEngineEnabled(enabled) {
 	await updateOpsStatus();
 }
 
-setInterval(() => {
+setSingletonInterval("governancePanelRefresh", () => {
 	if (!document.getElementById("governancePanel")?.classList.contains("open")) return;
 	loadStatus().catch(console.error);
 	updateVolatility().catch(console.error);
@@ -1936,17 +2554,17 @@ setInterval(() => {
 	updateNewsSeverity().catch(console.error);
 }, 5000);
 
-setInterval(() => {
+setSingletonInterval("systemHealthPanelRefresh", () => {
 	if (!document.getElementById("systemHealthPanel")?.classList.contains("open")) return;
 	updateSystemHealth().catch(console.error);
 }, 5000);
 
-setInterval(() => {
+setSingletonInterval("journalPanelRefresh", () => {
 	if (!document.getElementById("journalPanel")?.classList.contains("open")) return;
 	loadJournal().catch(console.error);
 }, 8000);
 
-setInterval(() => {
+setSingletonInterval("operationsConsoleRefresh", () => {
 	if (!document.getElementById("operationsConsolePanel")?.classList.contains("open")) return;
 	updateBasisOps().catch(console.error);
 	updateOpsStatus().catch(console.error);
@@ -1956,13 +2574,25 @@ setInterval(() => {
 const warmupBtn = document.getElementById("basisWarmupBtn");
 if (warmupBtn) warmupBtn.addEventListener("click", () => warmupContracts().catch(console.error));
 
-const chartSymbolSelect = document.getElementById("chartSymbol");
-if (chartSymbolSelect) {
-	chartSymbolSelect.addEventListener("change", () => updateBasisOps(true).catch(console.error));
-	chartSymbolSelect.addEventListener("change", () => runFeedProbe().catch(console.error));
-	chartSymbolSelect.addEventListener("change", () => updateModelStats().catch(console.error));
-	chartSymbolSelect.addEventListener("change", () => loadJournal().catch(console.error));
-	chartSymbolSelect.addEventListener("change", () => updateOpsStatus().catch(console.error));
+const opsRegistryPrewarmBtn = document.getElementById("opsRegistryPrewarmBtn");
+if (opsRegistryPrewarmBtn) opsRegistryPrewarmBtn.addEventListener("click", () => prewarmSymbolRegistry().catch(console.error));
+
+const opsRegistryPinBtn = document.getElementById("opsRegistryPinBtn");
+if (opsRegistryPinBtn) opsRegistryPinBtn.addEventListener("click", () => pinRegistryActiveContract().catch(console.error));
+
+const chartSymbolControl = document.getElementById("chartSymbolInput") || document.getElementById("chartSymbol");
+if (chartSymbolControl) {
+	let symbolSideEffectsTimer = null;
+	chartSymbolControl.addEventListener("change", () => {
+		if (symbolSideEffectsTimer) clearTimeout(symbolSideEffectsTimer);
+		symbolSideEffectsTimer = setTimeout(() => {
+			// Keep symbol panels in sync without triggering expensive deep probes on every symbol change.
+			updateBasisOps(false).catch(console.error);
+			updateModelStats().catch(console.error);
+			loadJournal().catch(console.error);
+			updateOpsStatus().catch(console.error);
+		}, 300);
+	});
 }
 
 const phase1Btn = document.getElementById("phase1Btn");
@@ -1984,7 +2614,13 @@ const engineStopBtn = document.getElementById("engineStopBtn");
 if (engineStopBtn) engineStopBtn.addEventListener("click", () => engineAction("stop").catch(console.error));
 
 const opsProbeBtn = document.getElementById("opsProbeBtn");
-if (opsProbeBtn) opsProbeBtn.addEventListener("click", () => runFeedProbe().catch(console.error));
+if (opsProbeBtn) opsProbeBtn.addEventListener("click", () => runFeedProbe(true).catch(console.error));
+
+const opsDeepProbeAllBtn = document.getElementById("opsDeepProbeAllBtn");
+if (opsDeepProbeAllBtn) opsDeepProbeAllBtn.addEventListener("click", () => runDeepProbeAll().catch(console.error));
+
+const opsCopyDiagBtn = document.getElementById("opsCopyDiagBtn");
+if (opsCopyDiagBtn) opsCopyDiagBtn.addEventListener("click", () => copyOpsDiagnostics().catch(console.error));
 
 const opsGannOnBtn = document.getElementById("opsGannOnBtn");
 if (opsGannOnBtn) opsGannOnBtn.addEventListener("click", () => setGannEngineEnabled(true).catch(console.error));
@@ -1994,6 +2630,9 @@ if (opsGannOffBtn) opsGannOffBtn.addEventListener("click", () => setGannEngineEn
 
 const opsReconnectBtn = document.getElementById("opsReconnectBtn");
 if (opsReconnectBtn) opsReconnectBtn.addEventListener("click", () => window.reconnectExecutionBrowserSafe());
+
+const opsBridgeRecoverBtn = document.getElementById("opsBridgeRecoverBtn");
+if (opsBridgeRecoverBtn) opsBridgeRecoverBtn.addEventListener("click", () => window.recoverBrokerBridgeSafe());
 
 const opsKillSwitchBtn = document.getElementById("opsKillSwitchBtn");
 if (opsKillSwitchBtn) opsKillSwitchBtn.addEventListener("click", () => adminEmergency("kill").catch(console.error));
@@ -2025,7 +2664,6 @@ if (opsHaltBtn) {
 		["Manual halt override"],
 	).catch(console.error));
 }
-
 const opsClearOverrideBtn = document.getElementById("opsClearOverrideBtn");
 if (opsClearOverrideBtn) {
 	opsClearOverrideBtn.addEventListener("click", () => clearPropBehaviorOverride().catch(console.error));
@@ -2120,8 +2758,40 @@ function initPerfDashboard() {
 
 initPerfDashboard();
 
+function dedupeElementsById(ids) {
+	for (const id of (ids || [])) {
+		const nodes = Array.from(document.querySelectorAll(`#${id}`));
+		if (nodes.length <= 1) continue;
+		for (const node of nodes.slice(1)) {
+			node.remove();
+		}
+	}
+}
+
+function dedupeFloatingPanelsOnLoad() {
+	dedupeElementsById([
+		"governancePanel",
+		"systemHealthPanel",
+		"journalPanel",
+		"microIcebergPanel",
+		"microOrderflowPanel",
+		"microOrderflowSummaryPanel",
+		"microTimeSalesPanel",
+		"microLadderPanel",
+		"propChallengePanel",
+		"openPropChallengeBtn",
+	]);
+
+	const spreadButtons = Array.from(document.querySelectorAll("button")).filter((button) =>
+		String(button.textContent || "").trim().startsWith("Open Spread/Offset:")
+	);
+	for (const button of spreadButtons.slice(1)) {
+		button.remove();
+	}
+}
+
 // Health check: Ping backend every 30 seconds to detect recovery
-setInterval(async () => {
+setSingletonInterval("backendHealthPing", async () => {
     try {
         const res = await apiFetch("/status", {}, 5000);
         if (res && res.ok) {
@@ -2134,6 +2804,7 @@ setInterval(async () => {
 
 // Force-refresh all panels, tables, and feeds on page load
 window.addEventListener("load", () => {
+	dedupeFloatingPanelsOnLoad();
 	// Chart
 	if (typeof loadInstitutionalChart === "function") loadInstitutionalChart();
 	// Micro panels

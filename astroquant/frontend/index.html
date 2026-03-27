@@ -5,6 +5,47 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AstroQuant Institutional Command Center</title>
     <link rel="icon" href="data:," />
+    <script>
+    window.AQ_SCRIPT_VERSION = "aq-v20260344";
+    // Prefer same-origin API calls to avoid cross-origin CORS issues in
+    // browser proxy/forwarding scenarios (e.g., frontend served on :8001).
+    window.AQ_API_BASE = window.location.origin;
+    // Strip ?v= cache-bust param from the address bar — keep a clean permanent URL.
+    (function cleanVersionParam() {
+        if (window.location.search) {
+            const clean = window.location.pathname;
+            history.replaceState(null, "", clean);
+        }
+    })();
+    (function ensureFrontendVersionState() {
+        const version = String(window.AQ_SCRIPT_VERSION || "").trim();
+        const versionKey = "AQ_FRONTEND_VERSION";
+        const previousVersion = String(localStorage.getItem(versionKey) || "").trim();
+        if (previousVersion && previousVersion !== version) {
+            for (const key of Object.keys(localStorage)) {
+                if (key.startsWith("AQ_CACHE_")) {
+                    localStorage.removeItem(key);
+                }
+            }
+            sessionStorage.clear();
+        }
+        localStorage.setItem(versionKey, version);
+    })();
+    </script>
+    <script type="module">
+    import { setupSymbolAutocomplete } from './symbol_autocomplete.js?v=aq-v20260344';
+    import { updateAllPanels } from './symbol_selector.js?v=aq-v20260344';
+    window.addEventListener('DOMContentLoaded', () => {
+        setupSymbolAutocomplete({
+            inputId: 'chartSymbolInput',
+            dropdownId: 'chartSymbolDropdown',
+               apiUrl: '/symbols',
+            onSelect: (symbol) => {
+                updateAllPanels(symbol);
+            }
+        });
+    });
+    </script>
     <style>
         :root {
             --bg: #060b14;
@@ -835,18 +876,15 @@
 </head>
 <body>
     <div class="container">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-    <meta http-equiv="Pragma" content="no-cache" />
-    <meta http-equiv="Expires" content="0" />
         <div class="panel">
-    <link rel="icon" href="data:," />
             <div class="row">
                 <button id="engineStartBtn">Engine Start</button>
                 <button id="engineStopBtn">Engine Stop</button>
                 <button id="mentorToggleBtn" onclick="toggleMentor()">AI Mentor</button>
                 <button id="opsConsoleToggleBtn" onclick="toggleOperationsConsole()">Operations</button>
                 <button id="governanceToggleBtn" onclick="toggleGovernancePanel()">Governance</button>
-                <button id="systemHealthToggleBtn" onclick="toggleSystemHealthPanel()">System Health</button>
+                <button id="systemHealthToggleBtn">System Health</button>
+                <button id="propChallengeBtn" onclick="window.createPropChallengePanel && window.createPropChallengePanel()">Prop Challenge</button>
                 <button id="microIcebergToggleBtn" onclick="toggleMicroPanel('iceberg')">Iceberg</button>
                 <button id="microOrderflowToggleBtn" onclick="toggleMicroPanel('orderflow')">Order Flow</button>
                 <button id="microSummaryToggleBtn" onclick="toggleMicroPanel('summary')">OF Summary</button>
@@ -856,6 +894,12 @@
                 <button id="resetLayoutBtn" onclick="resetFloatingPanelLayout()">Reset Layout</button>
                 <button onclick="window.open('/admin', '_blank')">Admin Control</button>
             </div>
+                <script type="module">
+                    import { createPropChallengePanel } from "./prop_challenge_panel.js?v=aq-v20260344";
+                    import { openSystemHealthPanel } from "./system_health_panel.js?v=aq-v20260344";
+                    window.createPropChallengePanel = createPropChallengePanel;
+                    document.getElementById("systemHealthToggleBtn").onclick = openSystemHealthPanel;
+                </script>
             <div class="row">
                 <div class="badge">Balance: <span id="balance">--</span></div>
                 <div class="badge">Daily Loss: <span id="dailyLoss">--</span></div>
@@ -898,13 +942,29 @@
             <div>
                 <div class="panel">
                     <div class="row">
-                        <select id="chartSymbol">
-                            <option value="GC.FUT">GC.FUT</option>
-                            <option value="NQ.FUT">NQ.FUT</option>
-                            <option value="6E.FUT">6E.FUT</option>
-                            <option value="BTC.FUT">BTC.FUT</option>
-                            <option value="YM.FUT">YM.FUT</option>
-                        </select>
+                        <div style="position:relative;min-width:220px;display:flex;align-items:center;gap:6px;">
+                            <input id="chartSymbolInput" type="text" placeholder="Search symbol..." autocomplete="off" style="width:210px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface-alt);color:var(--text);font-size:1rem;" />
+                            <button id="pinSymbolBtn" title="Pin/unpin favorite symbol" style="background:none;border:none;cursor:pointer;font-size:1.3em;line-height:1;padding:0 4px;color:var(--muted);">
+                                <span id="pinSymbolIcon">☆</span>
+                            </button>
+                            <div id="chartSymbolDropdown" style="position:absolute;top:110%;left:0;width:100%;z-index:99;background:var(--surface);border:1px solid var(--border);border-radius:0 0 8px 8px;box-shadow:0 4px 16px #000a;display:none;"></div>
+                        </div>
+                            <style>
+                            .autocomplete-option {
+                                padding: 6px 10px;
+                                cursor: pointer;
+                                border-bottom: 1px solid var(--border);
+                                background: var(--surface);
+                                color: var(--text);
+                                font-size: 1rem;
+                            }
+                            .autocomplete-option:last-child { border-bottom: none; }
+                            .autocomplete-option:hover, .autocomplete-option:focus {
+                                background: var(--accent-soft);
+                                color: var(--accent);
+                                outline: none;
+                            }
+                            </style>
                         <select id="chartTimeframe">
                             <option value="1m">1m</option>
                             <option value="5m">5m</option>
@@ -939,6 +999,15 @@
                         <label><input type="checkbox" id="toggleVP" />VolumeProfile</label>
                         <label><input type="checkbox" id="toggleGann" />Gann</label>
                         <label><input type="checkbox" id="toggleAstro" />Astro</label>
+                        <label><input type="checkbox" id="toggleDivergence" onchange="window.toggleDivergenceOverlay && window.toggleDivergenceOverlay(this.checked)" />Divergence</label>
+                            <script>
+                            // Expose toggle for divergence overlay
+                            window.toggleDivergenceOverlay = function(enabled) {
+                                if (typeof toggleDivergenceOverlay === "function") {
+                                    toggleDivergenceOverlay(enabled);
+                                }
+                            };
+                            </script>
                     </div>
                     <div class="row">
                         <div class="badge">Instrument: <span id="chartInstrument">--</span></div>
@@ -1213,12 +1282,18 @@
                             <div class="row-list">
                                 <div><span>Playwright Connected</span><strong id="opsPlaywrightConnected">--</strong></div>
                                 <div><span>Browser Heartbeat</span><strong id="opsBrowserHeartbeat">--</strong></div>
+                                <div><span>Bridge Ready</span><strong id="opsBridgeReady">--</strong></div>
+                                <div><span>Same Browser Mode</span><strong id="opsSameBrowserMode">--</strong></div>
+                                <div><span>CDP Reachable</span><strong id="opsCdpReachable">--</strong></div>
+                                <div><span>Broker Tabs</span><strong id="opsBrokerTabs">--</strong></div>
+                                <div><span>Dashboard Tabs</span><strong id="opsDashboardTabs">--</strong></div>
                                 <div><span>Last Execution TS</span><strong id="opsLastExecutionTs">--</strong></div>
                                 <div><span>Feed</span><strong id="opsFeedStatus">--</strong></div>
                                 <div><span>Feed Reason</span><strong id="opsFeedReason">--</strong></div>
                                 <div><span>Feed Last Error</span><strong id="opsFeedError">--</strong></div>
                                 <div><span>Probe Candles</span><strong id="opsFeedCandles">--</strong></div>
                                 <div><span>Probe Snapshot</span><strong id="opsProbeSnapshot">--</strong></div>
+                                <div><span>Probe Multi-Symbol</span><strong id="opsProbeMultiSummary">--</strong></div>
                                 <div><span>Selector Profile</span><strong id="opsSelectorProfile">--</strong></div>
                                 <div><span>Selector Updated</span><strong id="opsSelectorUpdated">--</strong></div>
                                 <div><span>Execution</span><strong id="opsExecutionStatus">--</strong></div>
@@ -1229,8 +1304,29 @@
                                 <div><span>Sell Btn Price</span><strong id="opsSellButtonPrice">--</strong></div>
                                 <div><span>Risk Violations</span><strong id="opsRiskViolations">--</strong></div>
                             </div>
-                        </div>
+                                <div style="margin-top:10px;padding-top:10px;border-top:1px solid #444;display:flex;gap:6px;flex-wrap:wrap;">
+                                    <button id="opsOpenBrokerBtn" style="background:#0a8;color:#fff;padding:6px 12px;border-radius:4px;cursor:pointer;border:none;font-size:0.9em;" title="Opens Maven broker in a new tab" onclick="window.openBrokerPage && window.openBrokerPage()">🌐 Open Broker</button>
+                                    <button id="opsReconnectBtn2" onclick="window.reconnectExecutionBrowserSafe && window.reconnectExecutionBrowserSafe()" style="padding:6px 12px;border-radius:4px;cursor:pointer;border:1px solid #555;background:var(--surface);font-size:0.9em;">↻ Reconnect</button>
+                                    <button id="opsBridgeRecoverBtn2" onclick="window.recoverBrokerBridgeSafe && window.recoverBrokerBridgeSafe()" style="padding:6px 12px;border-radius:4px;cursor:pointer;border:1px solid #555;background:var(--surface);font-size:0.9em;">🔗 Recover Bridge</button>
+                                </div>
+                            <div class="micro-table-wrap" style="margin-top:8px;">
+                                <table id="opsProbeMultiTable">
+                                    <thead>
+                                        <tr>
+                                            <th>Symbol</th>
+                                            <th>Status</th>
+                                            <th>Best</th>
+                                            <th>Failures</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="opsProbeMultiBody">
+                                        <tr><td colspan="5">Run Deep Probe All to populate.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
 
+ 
                         <div class="ops-group">
                             <h4>Config &amp; Safeguards</h4>
                             <div class="row-list">
@@ -1280,6 +1376,7 @@
                             <h4>Offset &amp; Quality</h4>
                             <div class="row-list">
                                 <div><span>Market Symbol</span><strong id="opsOqSymbol">--</strong></div>
+                                <div><span>Market Data Mode</span><strong id="opsOqMarketMode">--</strong></div>
                                 <div><span>Futures Source</span><strong id="opsOqFuturesSource">--</strong></div>
                                 <div><span>Broker Symbol</span><strong id="opsOqBrokerSymbol">--</strong></div>
                                 <div><span>Basis Status</span><strong id="opsOqBasisStatus">--</strong></div>
@@ -1296,6 +1393,22 @@
                                 <div><span>Reasons</span><strong id="opsOqReasons">--</strong></div>
                             </div>
                         </div>
+
+                        <div class="ops-group">
+                            <h4>Symbol Registry</h4>
+                            <div class="row-list">
+                                <div><span>Registry Status</span><strong id="opsRegistryStatus">--</strong></div>
+                                <div><span>Unresolved Symbols</span><strong id="opsRegistryUnresolved">--</strong></div>
+                                <div><span>Active Contracts</span><strong id="opsRegistrySymbols">--</strong></div>
+                                <div><span>Selected Status</span><strong id="opsRegistrySelectedStatus">--</strong></div>
+                                <div><span>Selected Active</span><strong id="opsRegistrySelectedActive">--</strong></div>
+                                <div><span>Selected Attempts</span><strong id="opsRegistrySelectedAttempts">--</strong></div>
+                                <div><span>Selected Failures</span><strong id="opsRegistrySelectedFailures">--</strong></div>
+                                <div><span>Selected Last Probe</span><strong id="opsRegistrySelectedLastProbe">--</strong></div>
+                                <div><span>Selected Tried</span><strong id="opsRegistrySelectedTried">--</strong></div>
+                                <div><span>Selected Disable Reason</span><strong id="opsRegistrySelectedDisableReason">--</strong></div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="ops-actions">
@@ -1306,13 +1419,22 @@
                     </div>
                     <div class="row">
                         <button id="opsProbeBtn">Run Feed Probe</button>
+                        <button id="opsDeepProbeAllBtn">Deep Probe All</button>
+                        <button id="opsCopyDiagBtn">Copy Diagnostics</button>
                         <button id="opsGannOnBtn">GANN ON</button>
                         <button id="opsGannOffBtn">GANN OFF</button>
                         <button id="opsReconnectBtn" onclick="window.reconnectExecutionBrowserSafe && window.reconnectExecutionBrowserSafe()">Reconnect Browser</button>
+                        <button id="opsBridgeRecoverBtn">Recover Bridge</button>
                         <button id="opsKillSwitchBtn">Kill Switch</button>
                         <button id="opsRestartExecBtn">Restart Execution</button>
                         <button id="opsDisableAutoBtn">Disable Auto</button>
                         <button id="basisWarmupBtn">Warmup Contracts</button>
+                        <button id="opsRegistryPrewarmBtn">Prewarm Registry</button>
+                    </div>
+                    <div class="row">
+                        <input id="opsRegistryContractInput" type="text" placeholder="Contract (e.g. GC.c.1)" />
+                        <label style="display:flex;align-items:center;gap:6px;"><input id="opsRegistryForceProbeCb" type="checkbox" />Force Probe</label>
+                        <button id="opsRegistryPinBtn">Pin Active Contract</button>
                     </div>
                     <div class="row">
                         <select id="opsSimPhase"><option value="PHASE1">PHASE1</option><option value="PHASE2">PHASE2</option><option value="FUNDED">FUNDED</option></select>
@@ -1350,12 +1472,11 @@
     <script>
         (function () {
             const existingBase = String(window.AQ_API_BASE || "").trim();
-            window.AQ_API_BASE = existingBase || "http://127.0.0.1:8000";
-            const port = String(window.location.port || "");
-            // Use empty prefix for port 3000 (python http.server), else fallback to /frontend for legacy setups
-            const prefix = (port === "3000" || port === "8080") ? "" : "/frontend";
+            window.AQ_API_BASE = existingBase || window.location.origin;
+            // Always load canonical frontend assets from /frontend.
+            const prefix = "/frontend";
             const scripts = ["api.js", "chart.js", "mentor.js"];
-            const scriptVersion = "aq-v20260310";
+            const scriptVersion = String(window.AQ_SCRIPT_VERSION || "aq-v20260344");
 
             const load = (index) => {
                 if (index >= scripts.length) return;

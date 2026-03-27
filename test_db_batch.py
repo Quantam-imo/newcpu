@@ -1,6 +1,6 @@
 import databento as db
 
-client = db.Historical("db-9YYc6umB6fA7Yv9rF5YjVhFT6Sips")
+client = db.Historical("REDACTED")
 
 try:
     job = client.batch.submit_job(

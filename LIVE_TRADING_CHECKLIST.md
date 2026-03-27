@@ -1,7 +1,7 @@
 # AstroQuant Live Trading Pre-Launch Checklist
 
 **Current Phase:** Preparing for Full Live Trading Setup  
-**Status:** Ready to Deploy  
+**Status:** Ready for supervised live testing; unattended launch requires broker challenge-free bridge  
 **Generated:** March 11, 2026
 
 ---
@@ -113,6 +113,10 @@ CDP_ENDPOINT=ws://127.0.0.1:9222
 # Test CDP connection
 curl -s http://127.0.0.1:9222/json | head -5
 # Should show: "devtools", "type", "id", etc.
+
+# Test broker bridge state
+curl -s http://127.0.0.1:8000/status/broker_bridge | jq .
+# Must not show: broker_tab_title="Just a moment..." or challenge_detected=true
 ```
 
 ### Fix 2: Order Entry Selector Calibration
@@ -137,6 +141,12 @@ Once CDP is running:
 ```bash
 cat astroquant/data/matchtrader_selectors.json
 # Should contain: order_panel, symbol_input, buy_btn, sell_btn, volume_input
+```
+
+**Unattended readiness verification:**
+```bash
+bash preflight_unattended.sh http://127.0.0.1:8000
+# Must return: UNATTENDED PREFLIGHT: READY
 ```
 
 ### Fix 3: Mentor Data Feed Connection
@@ -186,6 +196,7 @@ ORDER_MICRO_LOT_SIZE=0.01
 - [ ] Order logged to console
 - [ ] Position NOT shown in real positions list
 - [ ] Can retry multiple times
+- [ ] If planning unattended launch later, broker bridge is challenge-free before enabling automation
 
 ### Test 2: Live Order Entry (Micro-Lot)
 
@@ -605,7 +616,7 @@ Before clicking the button to go live, confirm:
 
 ---
 
-**Status:** Ready for Live Trading Deployment  
+**Status:** Historical checklist footer only; current state is supervised-live-ready, unattended launch gated on broker bridge readiness  
 **Last Updated:** March 11, 2026  
 **Prepared By:** Copilot - Frontend & Performance Phase 1 & 2
 

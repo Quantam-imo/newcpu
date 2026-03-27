@@ -1,3 +1,8 @@
+# Large data files (too big for GitHub)
+market-causality-lab/data/XAU_*.csv
+market-causality-lab/data/*.parquet
+market-causality-lab/data/*.db
+
 # Python
 __pycache__/
 *.py[cod]

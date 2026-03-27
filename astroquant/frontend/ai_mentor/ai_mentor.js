@@ -1,5 +1,8 @@
 async function loadMentorV3() {
-	const symbol = ((document.getElementById("chartSymbol") || {}).value) || "GC.FUT";
+	const symbol =
+		((document.getElementById("chartSymbolInput") || {}).value) ||
+		((document.getElementById("chartSymbol") || {}).value) ||
+		"GC.FUT";
 	const r = await fetch(`/mentor?symbol=${encodeURIComponent(symbol)}`);
 	const d = await r.json();
 	const c = d.context || {};

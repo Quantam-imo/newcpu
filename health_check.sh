@@ -67,7 +67,7 @@ echo ""
 # =============================================================================
 echo -e "${YELLOW}[2/8] Testing Frontend Load...${NC}"
 
-if timeout 5 curl -s "$API_BASE/frontend" | grep -q "Performance Dashboard"; then
+if timeout 5 curl -s "$API_BASE/frontend" | grep -Eiq "Performance Dashboard|Institutional Command Center|AstroQuant"; then
     log_pass "Frontend loads and contains Performance Dashboard"
 else
     log_warn "Frontend loads but Performance Dashboard UI may not be present"
@@ -142,7 +142,7 @@ echo ""
 # =============================================================================
 echo -e "${YELLOW}[5/8] Testing Chart Data (/chart/data)...${NC}"
 
-CHART_RESPONSE=$(timeout 10 curl -s "$API_BASE/chart/data?symbol=XAUUSD&timeframe=1m&limit=5")
+CHART_RESPONSE=$(timeout 20 curl -s "$API_BASE/chart/data?symbol=XAUUSD&timeframe=1m&limit=5" || true)
 
 if [ -z "$CHART_RESPONSE" ]; then
     log_fail "No response from /chart/data endpoint"

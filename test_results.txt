@@ -1,0 +1,147 @@
+
+====================================================================================================
+ASTROQUANT COMPREHENSIVE TEST REPORT
+====================================================================================================
+Timestamp: 2026-03-22T12:43:51.377119+00:00
+Total Tests: 25
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+📊 AI MENTOR (9/9 PASSED)
+────────────────────────────────────────────────────────────────────────────────────────────────────
+✅ Engine Initialization                    | Mentor engine initialized successfully
+   └─ {
+"aggressive_mode": false,
+"disabled_models": []
+}
+✅ HTF Bias Derivation                      | Derived HTF bias: NEUTRAL
+   └─ {
+"bias": "NEUTRAL"
+}
+✅ LTF Structure Derivation                 | Derived LTF structure: TREND
+   └─ {
+"structure": "TREND"
+}
+✅ Iceberg Pressure Detection               | Iceberg detected: False
+   └─ {
+"iceberg": null
+}
+✅ Context Building                         | Context built with 10 top-level keys
+   └─ {
+"context_keys": [
+"market",
+"model",
+"risk",
+"iceberg",
+"c
+✅ Model Disable Function                   | Disabled models: ['GANN']
+   └─ {
+"status": "ok",
+"disabled_models": [
+"GANN"
+]
+}
+✅ ICT Sub-Engine                           | ICT detection: Sell Turtle Soup
+   └─ {
+"turtle_soup": "Sell Turtle Soup",
+"fvg_zone": "--",
+"orde
+✅ GANN Sub-Engine                          | GANN targets: T1=2050.0, T2=2060.0
+   └─ {
+"cycle": 150,
+"target_100": 2050.0,
+"target_200": 2060.0
+}
+✅ Astro Sub-Engine                         | Astro event: Sun Trine Pluto
+   └─ {
+"harmonic_window": true,
+"planet_event": "Sun Trine Pluto"
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+📊 ASTROLOGY (0/2 PASSED)
+────────────────────────────────────────────────────────────────────────────────────────────────────
+❌ Planet Positions                         | swisseph not installed (optional dependency)
+❌ Planetary Aspects                        | swisseph not installed (optional dependency)
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+📊 DASHBOARD (3/4 PASSED)
+────────────────────────────────────────────────────────────────────────────────────────────────────
+✅ Broker Bridge Endpoint                   | Bridge status: DEGRADED
+   └─ {
+"status": "DEGRADED",
+"bridge_ready": false,
+"same_browser
+✅ System Status Endpoint                   | Phase: PHASE1, Balance: $50000
+   └─ {
+"balance": 50000,
+"phase": "PHASE1",
+"daily_loss": 0.0
+}
+✅ Symbol Registry Endpoint                 | Registry loaded with 2 items
+   └─ {
+"item_count": 2
+}
+❌ AI Mentor Endpoint                       | Error or endpoint not implemented: Command '['curl', '-s', 'http://127.0.0.1:8000/mentor?symbol=GC.FUT']' timed out after 5 seconds
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+📊 GANN (4/4 PASSED)
+────────────────────────────────────────────────────────────────────────────────────────────────────
+✅ Master Gann Analysis                     | Gann score: 0, confidence: 0.0
+   └─ {
+"score": 0,
+"confidence": 0.0
+}
+✅ Square of 9 Calculation                  | Nearest SQ9 level: 2050.5, bias: AT_LEVEL
+   └─ {
+"level": 2050.5,
+"distance": 0.0,
+"bias": "AT_LEVEL"
+}
+✅ Gann Spiral Coordinates                  | Spiral: X=-9.167919, Y=44.344664, Theta=1.774666
+   └─ {
+"x": -9.167919,
+"y": 44.344664,
+"theta": 1.774666,
+"radius
+✅ Price to Degree Conversion               | Price 2050.5 → Degree 101.68089492614257
+   └─ {
+"price": 2050.5,
+"degree": 101.68089492614257
+}
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+📊 ICT (6/6 PASSED)
+────────────────────────────────────────────────────────────────────────────────────────────────────
+✅ Structure Detection                      | Detected structure: BOS_BULLISH
+   └─ {
+"structure": "BOS_BULLISH"
+}
+✅ Liquidity Sweep Detection                | Liquidity sweep: BUY_SIDE_LIQUIDITY_TAKEN
+   └─ {
+"sweep": "BUY_SIDE_LIQUIDITY_TAKEN"
+}
+✅ Fair Value Gap (FVG) Detection           | FVG detected: False
+   └─ {
+"fvg": null
+}
+✅ Order Block Detection                    | Order block detected: True
+   └─ {
+"ob": {
+"type": "BEARISH_OB",
+"high": 2051.0,
+"low": 2047.
+✅ Turtle Soup Detection                    | Turtle soup: None
+   └─ {
+"turtle_soup": null
+}
+✅ ICT Model Signal Generation              | Model signal: True
+   └─ {
+"signal": {
+"model": "ICT",
+"direction": "BUY",
+"confidenc
+
+====================================================================================================
+SUMMARY: 22/25 tests passed (88%)
+====================================================================================================
+

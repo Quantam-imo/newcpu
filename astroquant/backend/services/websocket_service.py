@@ -15,10 +15,12 @@ async def websocket_delta(websocket: WebSocket, symbol: str):
         while True:
             await asyncio.sleep(1)
             try:
-                # Replace with actual delta data fetch logic
                 from astroquant.engine.delta.delta_reader import get_delta_percent
                 delta_percent = get_delta_percent(symbol)
-                await websocket.send_json({"delta_percent": delta_percent})
+                if delta_percent is not None:
+                    await websocket.send_json({"delta_percent": delta_percent})
+                else:
+                    await websocket.send_json({"error": "No delta data available"})
             except Exception as e:
                 logging.error(f"Error fetching delta for {symbol}: {e}")
                 await websocket.send_json({"error": str(e)})
@@ -39,10 +41,12 @@ async def websocket_iceberg(websocket: WebSocket, symbol: str):
         while True:
             await asyncio.sleep(2)
             try:
-                # Replace with actual iceberg data fetch logic
                 from astroquant.engine.iceberg.iceberg_reader import get_iceberg_events
                 events = get_iceberg_events(symbol)
-                await websocket.send_json({"events": events})
+                if events:
+                    await websocket.send_json({"events": events})
+                else:
+                    await websocket.send_json({"error": "No iceberg events found"})
             except Exception as e:
                 logging.error(f"Error fetching iceberg for {symbol}: {e}")
                 await websocket.send_json({"error": str(e)})
@@ -63,10 +67,12 @@ async def websocket_dom_lite(websocket: WebSocket, symbol: str):
         while True:
             await asyncio.sleep(1)
             try:
-                # Replace with actual DOM Lite data fetch logic
                 from astroquant.engine.dom_lite.dom_lite_reader import get_dom_lite
                 dom_data = get_dom_lite(symbol)
-                await websocket.send_json(dom_data)
+                if dom_data:
+                    await websocket.send_json(dom_data)
+                else:
+                    await websocket.send_json({"error": "No DOM Lite data available"})
             except Exception as e:
                 logging.error(f"Error fetching dom_lite for {symbol}: {e}")
                 await websocket.send_json({"error": str(e)})
@@ -87,10 +93,12 @@ async def websocket_confluence(websocket: WebSocket, symbol: str):
         while True:
             await asyncio.sleep(2)
             try:
-                # Replace with actual confluence data fetch logic
                 from astroquant.engine.confluence.confluence_reader import get_confluence_scores
                 conf_data = get_confluence_scores(symbol)
-                await websocket.send_json(conf_data)
+                if conf_data:
+                    await websocket.send_json(conf_data)
+                else:
+                    await websocket.send_json({"error": "No confluence data available"})
             except Exception as e:
                 logging.error(f"Error fetching confluence for {symbol}: {e}")
                 await websocket.send_json({"error": str(e)})
@@ -123,15 +131,52 @@ manager = ConnectionManager()
 
 # --- WebSocket endpoint: Live chart candles ---
 @router.websocket("/ws/chart_live/{symbol}")
+
+@router.websocket("/ws/chart_live/{symbol}")
 async def websocket_chart_live(websocket: WebSocket, symbol: str):
-    await manager.connect(websocket)
-    from astroquant.backend.services.databento_live_service import DatabentoLiveService
+    # Parse schema from query params (default to ohlcv-1s)
     import logging
-    service = DatabentoLiveService()
-    async def send_candle(candle):
-        await websocket.send_json({"candle": candle})
+    await manager.connect(websocket)
     try:
-        await service.stream_ohlcv_1s(symbol, send_candle)
+        # Extract schema from query string
+        schema = None
+        if hasattr(websocket, 'query_params'):
+            schema = websocket.query_params.get('schema')
+        if not schema:
+            # Fallback: parse from raw path
+            import urllib.parse
+            parsed = urllib.parse.urlparse(str(websocket.url))
+            q = urllib.parse.parse_qs(parsed.query)
+            schema = q.get('schema', [None])[0]
+        if not schema:
+            schema = 'ohlcv-1s'
+
+        from astroquant.engine.contract_resolver import ContractResolver
+        contract_resolver = ContractResolver()
+        resolved_symbol = contract_resolver.get_cached(symbol)
+        if not resolved_symbol:
+            from astroquant.engine.multi_symbol_runner import MultiSymbolRunner
+            runner = MultiSymbolRunner([symbol])
+            resolved_symbol = runner.resolve_active_feed_symbol(symbol)
+        if not resolved_symbol:
+            resolved_symbol = symbol
+
+        from astroquant.backend.services.databento_live_service import DatabentoLiveService
+        service = DatabentoLiveService()
+        async def send_candle(candle):
+            await websocket.send_json({"candle": candle})
+
+        # Route based on schema
+        if schema in ("ohlcv-1s", "ohlcv-1m"):
+            # Use 1s for both for now, TODO: implement 1m aggregation if needed
+            await service.stream_ohlcv_1s(resolved_symbol, send_candle)
+        elif schema == "trades":
+            if hasattr(service, "stream_trades"):
+                await service.stream_trades(resolved_symbol, send_candle)
+            else:
+                await websocket.send_json({"error": "Trades schema not supported yet."})
+        else:
+            await websocket.send_json({"error": f"Unsupported schema: {schema}"})
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         logging.info(f"WebSocket disconnected: /ws/chart_live/{symbol}")

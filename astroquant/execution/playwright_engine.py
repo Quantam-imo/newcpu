@@ -1,44 +1,95 @@
+# ...existing code for PlaywrightExecution...
+
+# Move PlaywrightExecutionEngine to the end of the file:
+
 import threading
 import time
+import asyncio
 import re
 import json
 import os
 from pathlib import Path
 from typing import Any
+from urllib.error import URLError
 from urllib.parse import urlparse
 from urllib.request import urlopen
 from astroquant.backend.execution.execution_guard import ExecutionGuard
 
+class PlaywrightExecution:
+        # 🛡️ IMPORTANT: When a trade closes, reset state_manager.position = None
+        # This prevents duplicate trades and keeps state in sync.
+    def __init__(self, page, state_manager, logger):
+        self.page = page
+        self.state = state_manager
+        self.logger = logger
 
-class PlaywrightExecutionEngine:
-    async def connect_to_broker(self):
-        import logging
-        logging.basicConfig(level=logging.INFO)
-        logging.info("[Playwright] connect_to_broker called")
-        """
-        Launch browser, navigate to broker, and login if needed (async).
-        """
-        from playwright.async_api import async_playwright
+    # 🔍 Step 1 — Get correct frame
+    def get_trade_frame(self):
+        for frame in self.page.frames:
+            if "trade" in frame.url or "platform" in frame.url:
+                return frame
+        return self.page
+
+    # 🔍 Step 2 — Smart button finder
+    def find_button(self, frame, keywords):
+        for word in keywords:
+            locator = frame.locator(f"text={word}")
+            if locator.count() > 0:
+                return locator.first
+        return None
+
+    # ⚙️ Step 3 — Set lot size
+    def set_lot(self, frame, lot):
         try:
-            async with async_playwright() as playwright:
-                logging.info("[Playwright] async_playwright context entered")
-                browser = await playwright.chromium.launch(headless=True)
-                logging.info("[Playwright] Browser launched (headless)")
-                page = await browser.new_page()
-                logging.info("[Playwright] New page created")
-                broker_url = os.environ.get("EXECUTION_BROWSER_URL") or os.environ.get("BROKER_URL") or "https://your-broker-login-url.com"
-                await page.goto(broker_url)
-                logging.info(f"[Playwright] Navigated to {broker_url}")
-                self.set_page(page)
-                # Optionally, perform login here using await self.login_if_needed()
-                # username = os.environ.get("BROKER_USERNAME")
-                # password = os.environ.get("BROKER_PASSWORD")
-                # await self.login_if_needed(username, password)
-                logging.info("[Playwright] Broker connection established via Playwright (async).")
-                return True
-        except Exception as exc:
-            logging.error(f"[Playwright] Exception in connect_to_broker: {exc}")
-            raise
+            input_box = frame.locator("input[type='number']").first
+            input_box.fill(str(lot))
+        except:
+            self.logger("Lot size input not found")
+
+    # 🛡 Step 4 — Confirm execution
+    def confirm_execution(self, frame):
+        try:
+            return frame.locator("text=Order").count() > 0
+        except:
+            return False
+
+    # 🚀 Step 5 — Main execution
+    def place_trade(self, direction, lot):
+
+        # ❗ Prevent duplicate trades
+        if self.state.position is not None:
+            self.logger("Trade blocked: already in position")
+            return "BLOCKED"
+
+        frame = self.get_trade_frame()
+
+        # Set lot
+        self.set_lot(frame, lot)
+
+        # Find button
+        if direction == "BUY":
+            btn = self.find_button(frame, ["Buy", "BUY", "Long"])
+        else:
+            btn = self.find_button(frame, ["Sell", "SELL", "Short"])
+
+        if not btn:
+            raise Exception("Trade button not found")
+
+        # Click
+        btn.click()
+
+        time.sleep(1)
+
+        # Confirm
+        if not self.confirm_execution(frame):
+            self.page.screenshot(path="execution_error.png")
+            raise Exception("Trade not confirmed")
+
+        # Update state
+        self.state.position = direction
+
+        self.logger(f"Trade executed: {direction}")
+        return "SUCCESS"
 
     def get_broker_price(self, symbol):
         """
@@ -48,8 +99,13 @@ class PlaywrightExecutionEngine:
         page = self.page
         if page is None:
             return None
-        # TODO: Implement symbol switching if needed
-        # Example: page.click(f"[data-testid='symbol-selector'][data-symbol='{symbol}']")
+        # Implement symbol switching if needed
+        try:
+            # Try to switch symbol in broker UI (example selector)
+            page.click(f"[data-testid='symbol-selector'][data-symbol='{symbol}']")
+            page.wait_for_timeout(500)  # Wait for UI to update
+        except Exception as exc:
+            self.logger(f"Symbol switch failed or not needed: {exc}")
         quote = self.broker_quote_snapshot(expected_symbols=[symbol])
         if quote and quote.get("mid") is not None:
             return quote["mid"]
@@ -58,19 +114,221 @@ class PlaywrightExecutionEngine:
         return None
 
     def execution_health(self):
-        # Stub: Always return healthy status for now
-        return {"execution_status": "OK", "healthy": True}
+        page_available = self.page is not None
+        quote = None
+        panel = None
+        if page_available:
+            try:
+                quote = self.broker_quote_snapshot(expected_symbols=None)
+            except Exception:
+                quote = None
+            try:
+                panel = self.order_panel_snapshot()
+            except Exception:
+                panel = None
+
+        connected = bool(
+            page_available and (
+                (quote and (quote.get("mid") is not None or quote.get("last") is not None))
+                or (panel and panel.get("ready"))
+            )
+        )
+        if connected:
+            execution_status = "CONNECTED"
+        elif self.selector_halted:
+            execution_status = "HALTED"
+        elif bool(self.cdp_url or self.user_data_dir):
+            execution_status = "DISCONNECTED"
+        else:
+            execution_status = "NOT_CONFIGURED"
+
+        return {
+            "execution_status": execution_status,
+            "healthy": connected,
+            "page_available": page_available,
+            "last_browser_heartbeat": self.last_browser_heartbeat,
+            "last_error": self.last_error,
+        }
 
     def set_page(self, page):
         """Set the current Playwright page object."""
         self._page = page
         self.page = page
+        self._page_thread_id = threading.get_ident() if page is not None else None
 
     def set_reconnect_handler(self, handler):
         self._reconnect_handler = handler
+        self.reconnect_handler = handler
 
     def set_task_dispatcher(self, dispatcher):
         self._task_dispatcher = dispatcher
+
+    def _should_dispatch(self):
+        return False
+
+    def _run_thread_affine(self, func, timeout_seconds=4.0):
+        return func()
+
+    def _reset_playwright_handles(self):
+        """Best-effort cleanup so reconnect can reinitialize in the current thread."""
+        try:
+            browser = getattr(self, "_browser", None)
+            if browser is not None:
+                browser.close()
+        except Exception:
+            pass
+        try:
+            playwright = getattr(self, "_playwright", None)
+            if playwright is not None:
+                playwright.stop()
+        except Exception:
+            pass
+        self._browser = None
+        self._playwright = None
+        self.page = None
+        self._page = None
+        self._playwright_thread_id = None
+        self._page_thread_id = None
+
+    def _page_on_current_thread(self):
+        page = getattr(self, "page", None)
+        if page is None:
+            return None
+        current = threading.get_ident()
+        owner = getattr(self, "_page_thread_id", None)
+        if owner is not None and owner != current:
+            # Never touch a Playwright page from a different thread.
+            self.page = None
+            self._page = None
+            self._page_thread_id = None
+            return None
+        return page
+
+    def _resolve_cdp_endpoint(self):
+        text = str(self.cdp_url or "").strip()
+        if not text:
+            return None
+        if text.startswith("http://") or text.startswith("https://"):
+            return text.rstrip("/")
+        if text.startswith("ws://") or text.startswith("wss://"):
+            parsed = urlparse(text)
+            scheme = "https" if parsed.scheme == "wss" else "http"
+            if parsed.hostname and parsed.port:
+                return f"{scheme}://{parsed.hostname}:{parsed.port}"
+            if parsed.hostname:
+                return f"{scheme}://{parsed.hostname}"
+            return None
+        if ":" in text:
+            return f"http://{text}"
+        return f"http://{text}"
+
+    def connect_to_broker(self):
+        # FastAPI async endpoints run inside an event loop; delegate sync Playwright
+        # attachment to a worker thread in that case to avoid loop-affinity errors.
+        try:
+            asyncio.get_running_loop()
+            in_async_loop = True
+        except RuntimeError:
+            in_async_loop = False
+
+        if in_async_loop:
+            result = {"connected": False, "error": None}
+
+            def _worker_connect() -> None:
+                try:
+                    result["connected"] = bool(self.connect_to_broker())
+                except Exception as exc:
+                    result["connected"] = False
+                    result["error"] = str(exc)
+
+            worker = threading.Thread(target=_worker_connect, daemon=True, name="aq-cdp-connect")
+            worker.start()
+            worker.join(timeout=max(2.0, float(self.timeout_ms) / 1000.0))
+            if worker.is_alive():
+                self.last_error = "connect_thread_timeout"
+                return False
+            if result.get("error"):
+                self.last_error = str(result.get("error"))
+                return False
+            return bool(result.get("connected"))
+
+        with self._connect_lock:
+            current_thread = threading.get_ident()
+            playwright_owner = getattr(self, "_playwright_thread_id", None)
+            if playwright_owner is not None and playwright_owner != current_thread:
+                self._reset_playwright_handles()
+
+            if self._page_on_current_thread() is not None:
+                self.last_browser_heartbeat = int(time.time())
+                return True
+
+            endpoint = self._resolve_cdp_endpoint()
+            if not endpoint:
+                self.last_error = "cdp_not_configured"
+                return False
+
+            for attempt in range(2):
+                try:
+                    with urlopen(f"{endpoint}/json/version", timeout=2.5) as response:
+                        payload = json.loads(response.read().decode("utf-8"))
+                    websocket_url = payload.get("webSocketDebuggerUrl")
+                    if not websocket_url:
+                        self.last_error = "missing_websocket_debugger_url"
+                        return False
+
+                    from playwright.sync_api import sync_playwright
+
+                    if getattr(self, "_playwright", None) is None:
+                        self._playwright = sync_playwright().start()
+                        self._playwright_thread_id = current_thread
+
+                    self._browser = self._playwright.chromium.connect_over_cdp(websocket_url)
+                    contexts = list(getattr(self._browser, "contexts", []) or [])
+                    context = contexts[0] if contexts else self._browser.new_context()
+                    pages = list(getattr(context, "pages", []) or [])
+                    preferred_page = None
+                    for candidate in pages:
+                        try:
+                            url = str(candidate.url or "").lower()
+                        except Exception:
+                            url = ""
+                        if "manager.maven.markets/app/trade" in url:
+                            preferred_page = candidate
+                            break
+                        if preferred_page is None and "maven" in url:
+                            preferred_page = candidate
+                    page = preferred_page or (pages[0] if pages else context.new_page())
+                    self.set_page(page)
+
+                    # Self-heal: if CDP attached page is on login, try routing to trade page.
+                    try:
+                        current_url = str((self.page.url if self.page is not None else "") or "").lower()
+                    except Exception:
+                        current_url = ""
+                    if "manager.maven.markets/login" in current_url:
+                        try:
+                            self.page.goto(
+                                "https://manager.maven.markets/app/trade",
+                                wait_until="domcontentloaded",
+                                timeout=int(self.timeout_ms),
+                            )
+                        except Exception:
+                            # Keep existing page handle; session may require manual login.
+                            pass
+
+                    self.last_browser_heartbeat = int(time.time())
+                    self.last_error = None
+                    return True
+                except (OSError, URLError, ValueError) as exc:
+                    self.last_error = str(exc)
+                    return False
+                except Exception as exc:
+                    error_text = str(exc)
+                    self.last_error = error_text
+                    if attempt == 0 and "different thread" in error_text.lower():
+                        self._reset_playwright_handles()
+                        continue
+                    return False
 
     def __init__(
             self,
@@ -132,6 +390,9 @@ class PlaywrightExecutionEngine:
         self.reconnect_handler = None
         self._page = None
         self._reconnect_handler = None
+        self._connect_lock = threading.Lock()
+        self._playwright_thread_id = None
+        self._page_thread_id = None
         self._record_selector_failure("Initialization complete.")
 
     def _has_any_selector(self, page, selectors):
@@ -354,13 +615,15 @@ class PlaywrightExecutionEngine:
                 lambda: self.broker_quote_snapshot(
                     expected_symbols=expected_symbols), timeout_seconds=4.0, )
 
-        page = self.page
+        page = self._page_on_current_thread()
         if page is None:
             if not self._attempt_reconnect():
                 # Quote polling is observational and should not halt execution when
                 # browser attach is temporarily unavailable.
                 return None
-            page = self.page
+            page = self._page_on_current_thread()
+            if page is None:
+                return None
 
         symbol_text = self._first_visible_text(
             page,
@@ -437,7 +700,7 @@ class PlaywrightExecutionEngine:
             return self._run_thread_affine(
                 self.order_panel_snapshot, timeout_seconds=4.0)
 
-        page = self.page
+        page = self._page_on_current_thread()
         if page is None:
             return {
                 "ready": False,
@@ -2425,5 +2688,20 @@ class PlaywrightExecutionEngine:
         return None
 
     def close(self):
-        # Stub: No-op for compatibility
-        pass
+        try:
+            browser = getattr(self, "_browser", None)
+            if browser is not None:
+                browser.close()
+        except Exception:
+            pass
+        try:
+            playwright = getattr(self, "_playwright", None)
+            if playwright is not None:
+                playwright.stop()
+        except Exception:
+            pass
+        self.page = None
+        self._page = None
+
+class PlaywrightExecutionEngine(PlaywrightExecution):
+    pass

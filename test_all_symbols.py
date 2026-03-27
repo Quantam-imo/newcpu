@@ -1,5 +1,5 @@
 import databento
-client = databento.Historical('db-9YYc6umB6fA7Yv9rF5YjVhFT6Sips')
+client = databento.Historical('REDACTED')
 symbols = ['GC.c.1','GC.FUT','GCJ6','GCM6','GCZ6',
            'NQ.c.1','NQ.FUT','NQH6','NQM6','NQZ6',
            '6E.c.1','6E.FUT','6EH6','6EM6','6EZ6',

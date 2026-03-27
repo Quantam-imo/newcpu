@@ -1,11 +1,90 @@
 // --- No-op for missing performance tracking ---
 function trackPerformance() {}
+
+function applyStreamingCandles(rawCandles, timeframe) {
+	const normalized = toSeries(rawCandles || [], timeframe);
+	const volumeRows = sanitizeVolumeRows((normalized || []).map(row => ({
+		time: Number(row.time),
+		value: Math.max(0, Number(row.volume || 0)),
+		color: volumeColorForCandle(row),
+	})));
+	if (candlesSeries && volumeSeries) {
+		updateCandlesSmoothly(normalized, volumeRows, `${selectedSymbol()}|${timeframe}|stream`, timeframe);
+	}
+	return normalized;
+}
+
+function upsertStreamingCandle(buffer, rawCandle, timeframe) {
+	const normalized = toSeries([rawCandle], timeframe);
+	if (!normalized.length) return Array.isArray(buffer) ? buffer : [];
+	const next = Array.isArray(buffer) ? buffer.slice() : [];
+	const incoming = normalized[0];
+	const last = next[next.length - 1];
+	if (last && Number(last.time) === Number(incoming.time)) {
+		next[next.length - 1] = { ...last, ...incoming };
+	} else if (!last || Number(incoming.time) > Number(last.time)) {
+		next.push(incoming);
+		if (next.length > 400) next.splice(0, next.length - 400);
+	}
+	return next;
+}
 // --- Real-time Databento Live integration ---
 function connectLiveChartWebSocket(symbol) {
-	const wsProto = window.location.protocol === "https:" ? "wss" : "ws";
-	const wsUrl = `${wsProto}://${window.location.hostname}:8000/ws/chart_live/${encodeURIComponent(symbol)}`;
+	const configuredApiBase = String(window.AQ_API_BASE || "").trim();
+	let wsProto = window.location.protocol === "https:" ? "wss" : "ws";
+	let wsHost = `${window.location.hostname}:8000`;
+	if (configuredApiBase) {
+		try {
+			const parsed = new URL(configuredApiBase);
+			wsProto = parsed.protocol === "https:" ? "wss" : "ws";
+			wsHost = parsed.host || wsHost;
+		} catch (_) {
+			// Keep default host when AQ_API_BASE is not a parseable URL.
+		}
+	}
+	// Optionally allow schema override for advanced users
+	let schema = window.AQ_CHART_SCHEMA || "ohlcv-1m";
+	if (symbol && symbol.endsWith(".FUT")) schema = "ohlcv-1m";
+	else if (symbol && symbol.endsWith(".SPOT")) schema = "trades";
+	const wsUrl = `${wsProto}://${wsHost}/ws/chart_live/${encodeURIComponent(symbol)}?schema=${encodeURIComponent(schema)}`;
 	const ws = new WebSocket(wsUrl);
 	let candleBuffer = [];
+	// Try to load cached chart data instantly
+	let cacheKey = `chart:${symbol}`;
+	let cached = (typeof getCache === "function") ? getCache(cacheKey) : null;
+	let showingCached = false;
+	const timeframe = selectedTimeframe();
+	if (cached && Array.isArray(cached.candles) && cached.candles.length) {
+		candleBuffer = applyStreamingCandles(cached.candles, timeframe);
+		setChartStateMessage("stale", "Showing cached chart data");
+		showingCached = true;
+	}
+	// Continue with live/REST attempts in background
+	let historyTimeout = setTimeout(() => {
+		setChartStateMessage("loading", "Loading history (fallback)...");
+		// Fallback to REST API for history if WebSocket is slow
+		loadChartHistoryAsync(symbol).then((candles) => {
+			if (candles && candles.length && candlesSeries) {
+				candleBuffer = applyStreamingCandles(candles, timeframe);
+				setChartStateMessage("", "");
+				// Update cache
+				if (typeof setCache === "function") setCache(cacheKey, { candles: candleBuffer }, 60000);
+				showingCached = false;
+			} else {
+				if (showingCached) {
+					setChartStateMessage("stale", "Showing cached chart data");
+				} else {
+					setChartStateMessage("error", "Failed to load chart history");
+				}
+			}
+		}).catch(() => {
+			if (showingCached) {
+				setChartStateMessage("stale", "Showing cached chart data");
+			} else {
+				setChartStateMessage("error", "Failed to load chart history");
+			}
+		});
+	}, 2500);
 	ws.onopen = () => {
 		setChartStateMessage("loading", "🔴 Live data connected");
 		// Request full candle history if supported
@@ -16,37 +95,65 @@ function connectLiveChartWebSocket(symbol) {
 			const data = JSON.parse(event.data);
 			if (Array.isArray(data.candles)) {
 				// Full candle history
-				candleBuffer = data.candles;
-				if (candlesSeries) {
-					candlesSeries.setData(candleBuffer);
-				}
+				candleBuffer = applyStreamingCandles(data.candles, timeframe);
+				clearTimeout(historyTimeout);
+				setChartStateMessage("", "");
+				// Update cache
+				if (typeof setCache === "function") setCache(cacheKey, { candles: candleBuffer }, 60000);
+				showingCached = false;
 			} else if (data.candle) {
 				// New or updated candle
-				if (candlesSeries) {
-					// Try to update or append
-					const last = candleBuffer[candleBuffer.length - 1];
-					if (last && last.time === data.candle.time) {
-						candleBuffer[candleBuffer.length - 1] = data.candle;
-					} else if (!last || data.candle.time > last.time) {
-						candleBuffer.push(data.candle);
-						if (candleBuffer.length > 400) candleBuffer = candleBuffer.slice(-400);
-					}
-					candlesSeries.setData(candleBuffer);
-				}
+				candleBuffer = upsertStreamingCandle(candleBuffer, data.candle, timeframe);
+				applyStreamingCandles(candleBuffer, timeframe);
+				// Update cache
+				if (typeof setCache === "function") setCache(cacheKey, { candles: candleBuffer }, 60000);
+				showingCached = false;
 			}
 			if (data.error) {
-				setChartStateMessage("error", "Live feed error: " + data.error);
+				if (showingCached) {
+					setChartStateMessage("stale", "Showing cached chart data");
+				} else {
+					setChartStateMessage("error", "Live feed error: " + data.error);
+				}
 			}
 		} catch (e) {
+			if (showingCached) {
+				setChartStateMessage("stale", "Showing cached chart data");
+			} else {
+				setChartStateMessage("error", "Live WS parse error");
+			}
 			console.error("Live WS parse error", e);
 		}
 	};
+	// Async loader for chart history (REST fallback)
+	async function loadChartHistoryAsync(symbol) {
+		try {
+			const tf = selectedTimeframe() || "1m";
+			const url = `/chart/data?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(tf)}&limit=80`;
+			const res = await fetch(url);
+			if (!res.ok) throw new Error("HTTP " + res.status);
+			const data = await res.json();
+			if (Array.isArray(data.candles)) return data.candles;
+			return [];
+		} catch (err) {
+			console.error("Chart REST history load failed", err);
+			return [];
+		}
+	}
 	ws.onerror = (e) => {
-		setChartStateMessage("error", "Live WebSocket error");
-		console.error("Live WebSocket error", e);
+		if (showingCached) {
+			setChartStateMessage("stale", "Live stream unavailable, using cached/REST data");
+		} else {
+			setChartStateMessage("loading", "Live stream unavailable, using REST data");
+		}
+		console.warn("Live WebSocket error (fallback to REST)", e);
 	};
 	ws.onclose = () => {
-		setChartStateMessage("error", "Live data disconnected");
+		if (showingCached) {
+			setChartStateMessage("stale", "Live data disconnected, using cached/REST data");
+		} else {
+			setChartStateMessage("loading", "Live data disconnected, using REST data");
+		}
 	};
 	return ws;
 }
@@ -119,17 +226,61 @@ const toggleIds = [
 	"toggleVP",
 	"toggleGann",
 	"toggleAstro",
+	"toggleDivergence",
 ];
 
-const AQ_DEFAULT_CHART_API_ORIGIN = "http://127.0.0.1:8000";
-const AQ_API_BASE_CHART = "http://127.0.0.1:8000";
-
-function chartApiOrigins() {
-	return ["http://127.0.0.1:8000"];
+let divergenceSeries = null;
+let divergenceOverlayEnabled = false;
+// Overlay broker vs system price divergence on chart
+async function renderDivergenceOverlay(symbol, timeframe) {
+	if (!chart || !candlesSeries) return;
+	if (!divergenceOverlayEnabled) {
+		if (divergenceSeries) {
+			try { chart.removeSeries(divergenceSeries); } catch (e) {}
+			divergenceSeries = null;
+		}
+		return;
+	}
+	try {
+			const url = `/spread_offset_history?symbol=${encodeURIComponent(symbol)}&lookback_minutes=240`;
+		const data = await fetchJson(url);
+		if (!data || !Array.isArray(data.spot_candles) || !data.spot_candles.length) return;
+		const spot = data.spot_candles;
+		const basis = data.basis || {};
+		// Build divergence series: time vs raw_basis
+		const points = spot.map((row, idx) => {
+			const t = Number(row.time);
+			const v = Number(basis.raw_basis);
+			return (Number.isFinite(t) && Number.isFinite(v)) ? { time: t, value: v } : null;
+		}).filter(Boolean);
+		if (!divergenceSeries) {
+			divergenceSeries = addLineSeriesCompat(chart, {
+				priceScaleId: "left",
+				color: "#f87171",
+				lineWidth: 2,
+				lineStyle: LightweightCharts.LineStyle.Dotted,
+				priceLineVisible: false,
+				lastValueVisible: false,
+			});
+		}
+		if (divergenceSeries) {
+			divergenceSeries.setData(points);
+		}
+	} catch (e) {
+		console.error("Divergence overlay error", e);
+	}
 }
+
+function toggleDivergenceOverlay(enabled) {
+	divergenceOverlayEnabled = enabled;
+	renderDivergenceOverlay(selectedSymbol(), selectedTimeframe());
+}
+
+const AQ_DEFAULT_CHART_API_ORIGIN = String(window.location.origin || "").trim();
+const AQ_API_BASE_CHART = String(window.AQ_API_BASE || AQ_DEFAULT_CHART_API_ORIGIN || "").trim();
 const AQ_CHART_SETTINGS_KEY = "AQ_CHART_SETTINGS_V2";
 const AQ_CHART_DRAWINGS_KEY = "AQ_CHART_DRAWINGS_V1";
-const CHART_AUTO_REFRESH_MS = 3000;
+let CHART_AUTO_REFRESH_MS = 3000;
 const LIVE_PAINT_INTERVAL_MS = 350;
 let latestLivePrice = null;
 let latestLiveUpdatedAt = 0;
@@ -409,10 +560,13 @@ function findNearestDrawing(clickedTime, clickedPrice) {
 
 function restoreChartSettings() {
 	const settings = readChartSettings();
-	const symbol = document.getElementById("chartSymbol");
+	const symbol = document.getElementById("chartSymbolInput") || document.getElementById("chartSymbol");
 	const timeframe = document.getElementById("chartTimeframe");
 	if (symbol && settings.symbol) {
 		symbol.value = settings.symbol;
+	}
+	if (symbol && !String(symbol.value || "").trim()) {
+		symbol.value = "GC.FUT";
 	}
 	if (timeframe && settings.timeframe) {
 		timeframe.value = settings.timeframe;
@@ -448,7 +602,7 @@ function resetChartSettings() {
 	} catch (_) {
 		// ignore storage failures
 	}
-	const symbol = document.getElementById("chartSymbol");
+	const symbol = document.getElementById("chartSymbolInput") || document.getElementById("chartSymbol");
 	const timeframe = document.getElementById("chartTimeframe");
 	if (symbol) symbol.value = "GC.FUT";
 	if (timeframe) timeframe.value = "1m";
@@ -512,7 +666,7 @@ function createChartIfNeeded() {
 			autoScale: true,
 			scaleMargins: { top: 0.08, bottom: 0.24 },
 		},
-		leftPriceScale: { visible: false, borderColor: "#2b3e5b" },
+		leftPriceScale: { visible: true, borderColor: "#2b3e5b" },
 		height: 520,
 	});
 	attachChartInteractionHandlers(container);
@@ -568,6 +722,12 @@ function createChartIfNeeded() {
 		priceLineVisible: false,
 		lastValueVisible: false,
 	});
+
+	// Divergence overlay initial state
+	if (document.getElementById("toggleDivergence")?.checked) {
+		divergenceOverlayEnabled = true;
+		renderDivergenceOverlay(selectedSymbol(), selectedTimeframe());
+	}
 
 	// Responsive chart resizing using ResizeObserver
 	function resizeChart() {
@@ -761,9 +921,12 @@ function updateTvHud(candle, symbol, timeframe) {
 	].join(" ");
 }
 
+
 function selectedSymbol() {
-	const select = document.getElementById("chartSymbol");
-	return select ? select.value : "GC.FUT";
+	// Use the input box for symbol selection
+	const input = document.getElementById("chartSymbolInput");
+	const value = input ? String(input.value || "").trim().toUpperCase() : "";
+	return value || "GC.FUT";
 }
 
 function selectedTimeframe() {
@@ -773,33 +936,27 @@ function selectedTimeframe() {
 
 function chartApiOrigins() {
 	const existing = String(window.AQ_API_BASE || "").trim();
-	
-	// Priority 1: Use saved working origin
-	if (existing) {
-		return [existing, "http://localhost:8000", "http://127.0.0.1:8000"];
-	}
-	
-	// Priority 2: Build list of origins to try
+
+	// Use same-origin API targets only to avoid cross-origin CORS failures.
 	const origins = [];
 	const uniqueOrigins = new Set();
-	
+
 	const baseOrigins = [
+		existing,
 		String(window.location.origin || "").trim(),
-		"http://localhost:8000",
-		"http://127.0.0.1:8000",
 	];
-	
+
 	for (const origin of baseOrigins) {
 		if (origin && !uniqueOrigins.has(origin)) {
 			uniqueOrigins.add(origin);
 			origins.push(origin);
 		}
 	}
-	
-	return origins.length ? origins : ["http://127.0.0.1:8000"];
+
+	return origins.length ? origins : [String(window.location.origin || "").trim()].filter(Boolean);
 }
 
-async function fetchJson(url, timeoutMs = 30000) {
+async function fetchJson(url, timeoutMs = 30000, externalSignal = null) {
 	const startTime = performance.now();
 	const isAbsolute = String(url || "").startsWith("http");
 
@@ -813,34 +970,55 @@ async function fetchJson(url, timeoutMs = 30000) {
 		}
 	}
 
-	// Always use AQ_API_BASE for /chart/data and similar API calls
+	// Always use AQ_API_BASE for /chart/data and similar API calls.
+	// Canonicalize targets to avoid retrying the same URL twice (relative + absolute).
 	let targets;
 	if (isAbsolute) {
 		targets = [String(url)];
 	} else if (url.startsWith("/chart/data")) {
-		// Use AQ_API_BASE or fallback to localhost:8000
-		const apiBase = window.AQ_API_BASE || "http://localhost:8000";
-		targets = [`${apiBase}${url}`];
-	} else {
-		// Start with relative URL (same origin as page)
+		const apiBase = String(window.AQ_API_BASE || window.location.origin || "").trim();
 		targets = [url];
-		// Add absolute URLs from chartApiOrigins fallback
+		if (apiBase) targets.push(`${apiBase}${url}`);
 		const origins = chartApiOrigins();
 		for (const origin of origins) {
-			const full = `${origin}${url}`;
-			if (targets.indexOf(full) === -1) {
-				targets.push(full);
-			}
+			targets.push(`${origin}${url}`);
+		}
+	} else {
+		targets = [url];
+		const origins = chartApiOrigins();
+		for (const origin of origins) {
+			targets.push(`${origin}${url}`);
 		}
 	}
+	const seenTargets = new Set();
+	targets = targets.filter((target) => {
+		try {
+			const key = new URL(String(target), window.location.origin).href;
+			if (seenTargets.has(key)) return false;
+			seenTargets.add(key);
+			return true;
+		} catch (_) {
+			if (seenTargets.has(String(target))) return false;
+			seenTargets.add(String(target));
+			return true;
+		}
+	});
 
 	let lastError = null;
 	for (const target of targets) {
 		const controller = new AbortController();
+		let externalAbortHandler = null;
+		if (externalSignal && typeof externalSignal.addEventListener === "function") {
+			externalAbortHandler = () => controller.abort();
+			externalSignal.addEventListener("abort", externalAbortHandler, { once: true });
+		}
 		const timer = setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || 30000));
 		try {
 			const res = await fetch(target, { signal: controller.signal });
 			clearTimeout(timer);
+			if (externalAbortHandler && externalSignal) {
+				externalSignal.removeEventListener("abort", externalAbortHandler);
+			}
 			if (!res.ok) throw new Error(`HTTP ${res.status}`);
 			try {
 				const jsonData = await res.json();
@@ -863,6 +1041,9 @@ async function fetchJson(url, timeoutMs = 30000) {
 			}
 		} catch (err) {
 			clearTimeout(timer);
+			if (externalAbortHandler && externalSignal) {
+				externalSignal.removeEventListener("abort", externalAbortHandler);
+			}
 			lastError = err;
 			console.debug(`fetchJson: ${target} failed -`, err.message || err);
 		}
@@ -873,6 +1054,15 @@ async function fetchJson(url, timeoutMs = 30000) {
 
 function toSeries(candles, timeframe) {
 	const out = [];
+	const normalizeTime = (value) => {
+		const num = Number(value);
+		if (Number.isFinite(num) && num > 0) return num;
+		if (typeof value === "string") {
+			const ms = Date.parse(value);
+			if (Number.isFinite(ms) && ms > 0) return ms / 1000;
+		}
+		return NaN;
+	};
 	const normalizePriceLike = (value) => {
 		const n = Number(value);
 		if (!Number.isFinite(n)) return NaN;
@@ -882,7 +1072,7 @@ function toSeries(candles, timeframe) {
 	const tfSec = timeframeToSeconds(timeframe);
 
 	for (const c of (candles || [])) {
-		const time = Number(c?.time);
+		const time = normalizeTime(c?.time ?? c?.timestamp ?? c?.ts);
 		let open = normalizePriceLike(c?.open);
 		let high = normalizePriceLike(c?.high);
 		let low = normalizePriceLike(c?.low);
@@ -1632,7 +1822,7 @@ function updateChartMeta(payload, timeframe, candles) {
 	document.getElementById("chartVolBadge").innerText = meta.volatility_state || "--";
 	document.getElementById("chartPhaseBadge").innerText = meta.phase || "--";
 	document.getElementById("chartNewsBadge").innerText = meta.news || "--";
-	document.getElementById("chartDataSource").innerText = meta.data_source || "--";
+	document.getElementById("chartDataSource").innerText = meta.data_source || meta.source || payload?.source || "--";
 	const gannMeta = meta.gann || {};
 	const gannSignals = (gannMeta.signals && typeof gannMeta.signals === "object") ? gannMeta.signals : {};
 	const gannCross = gannMeta.cross || gannSignals.cross || "--";
@@ -1737,12 +1927,21 @@ function setTableBodyRows(bodyId, rows, emptyText, colCount) {
 	}
 }
 
+function sortRowsByTimeDesc(rows) {
+	if (!Array.isArray(rows)) return [];
+	return [...rows].sort((a, b) => {
+		const at = Number(a?.time || 0);
+		const bt = Number(b?.time || 0);
+		return bt - at;
+	});
+}
+
 function renderMicrostructureTables(payload, candles) {
 	const overlays = payload?.overlays || {};
-	const recent = Array.isArray(candles) ? candles.slice(-20) : [];
-	const newestFirst = [...recent].reverse();
+	const recentAsc = Array.isArray(candles) ? candles.slice(-20) : [];
+	const newestFirst = sortRowsByTimeDesc(recentAsc);
 
-	const icebergRowsRaw = Array.isArray(overlays.iceberg) ? overlays.iceberg.slice(-12).reverse() : [];
+	const icebergRowsRaw = sortRowsByTimeDesc(overlays.iceberg).slice(0, 12);
 	const icebergRows = icebergRowsRaw.map(row => {
 		const strength = Number(row?.absorption_strength || 0);
 		const confidence = Math.max(0, Math.min(99, strength * 45));
@@ -1759,9 +1958,9 @@ function renderMicrostructureTables(payload, candles) {
 		const deltaCls = delta >= 0 ? "delta-pos" : "delta-neg";
 		return `<td>${fmtTimeCell(Number(row?.time || 0))}</td><td class="side-buy">${Math.round(buyVol)}</td><td class="side-sell">${Math.round(sellVol)}</td><td class="${deltaCls}">${delta >= 0 ? "+" : ""}${Math.round(delta)}</td>`;
 	});
-	const deltaRows = Array.isArray(payload?.meta?.delta_candles) ? payload.meta.delta_candles : [];
+	const deltaRows = sortRowsByTimeDesc(payload?.meta?.delta_candles);
 	const orderflowRowsRendered = deltaRows.length
-		? deltaRows.slice(-16).reverse().map(row => {
+		? deltaRows.slice(0, 16).map(row => {
 			const buyVol = Math.max(0, Number(row?.buy_volume || 0));
 			const sellVol = Math.max(0, Number(row?.sell_volume || 0));
 			const delta = Number(row?.delta || (buyVol - sellVol));
@@ -1805,10 +2004,10 @@ function renderMicrostructureTables(payload, candles) {
 	setText("summaryConfidence", `${Number(orderflowSummary?.confidence || 0).toFixed(1)}%`, null);
 	setText("summaryNarrative", String(orderflowSummary?.narrative || "--"), null);
 
-	const tapeSource = Array.isArray(payload?.meta?.time_sales) ? payload.meta.time_sales : [];
+	const tapeSource = sortRowsByTimeDesc(payload?.meta?.time_sales);
 	let tapeRows = [];
 	if (tapeSource.length) {
-		tapeRows = tapeSource.slice(-24).reverse().map(row => {
+		tapeRows = tapeSource.slice(0, 24).map(row => {
 			const side = String(row?.side || "").toUpperCase() === "SELL" ? "SELL" : "BUY";
 			const sideCls = side === "BUY" ? "side-buy" : "side-sell";
 			const delta = Number(row?.delta || 0);
@@ -1830,18 +2029,18 @@ function renderMicrostructureTables(payload, candles) {
 	}
 	setTableBodyRows("timeSalesTableBody", tapeRows, "No time & sales rows", 5);
 
-	const latest = candles[candles.length - 1] || null;
-	const ladderRows = Array.isArray(payload?.meta?.dom_ladder) ? payload.meta.dom_ladder : [];
+	const latest = Array.isArray(candles) && candles.length ? candles[candles.length - 1] : null;
+	const ladderRows = sortRowsByTimeDesc(payload?.meta?.dom_ladder);
 	let ladderRowsRaw = [];
 	if (ladderRows.length) {
-		ladderRowsRaw = ladderRows.slice(-28).map(row => {
+		ladderRowsRaw = ladderRows.slice(0, 28).map(row => {
 			const bid = Math.max(0, Math.round(Number(row?.bid_size || 0)));
 			const ask = Math.max(0, Math.round(Number(row?.ask_size || 0)));
 			return `<td>${fmtTimeCell(Number(row?.time || 0))}</td><td>${Number(row?.price || 0).toFixed(2)}</td><td class="ladder-bid">${bid > 0 ? bid : ""}</td><td class="ladder-ask">${ask > 0 ? ask : ""}</td>`;
 		});
 	} else {
-		const recentSpan = recent.length
-			? (Math.max(...recent.map(c => Number(c?.high || 0))) - Math.min(...recent.map(c => Number(c?.low || 0))))
+		const recentSpan = recentAsc.length
+			? (Math.max(...recentAsc.map(c => Number(c?.high || 0))) - Math.min(...recentAsc.map(c => Number(c?.low || 0))))
 			: 0;
 		const base = latest ? Number(latest.close || 0) : 0;
 		const tick = Math.max(0.01, recentSpan > 0 ? recentSpan / 24 : base * 0.0004 || 0.01);
@@ -2005,7 +2204,6 @@ function applyOverlayVisibility() {
 async function loadInstitutionalChart() {
 	if (chartRequestInFlight) {
 		chartRefreshQueued = true;
-		chartRequestSerial += 1;
 		return;
 	}
 	chartRequestInFlight = true;
@@ -2020,13 +2218,19 @@ async function loadInstitutionalChart() {
 	const symbol = selectedSymbol();
 	const timeframe = selectedTimeframe();
 	const requestSerial = ++chartRequestSerial;
+	const previousPayload = cachedPayload;
 	loadDrawings(symbol, timeframe);
 	const renderKey = `${symbol}|${timeframe}`;
 	updateChartWatermark(symbol, timeframe);
-	const requestLimit = chartInitialLoadDone ? 220 : 80;
+	let requestLimit;
+	if (timeframe === "1") {
+		requestLimit = 2880; // 2 days of 1-minute candles
+	} else {
+		requestLimit = chartInitialLoadDone ? 220 : 80;
+	}
 	let payload, errorMsg = null;
 	try {
-		payload = await fetchJson(`/chart/data?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&limit=${requestLimit}`, { method: "GET" }, 18000);
+		payload = await fetchJson(`/chart/data?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}&limit=${requestLimit}`, 45000);
 	} catch (err) {
 		errorMsg = err && err.message ? err.message : String(err);
 		payload = null;
@@ -2038,9 +2242,14 @@ async function loadInstitutionalChart() {
 		return;
 	}
 	chartAppliedSerial = requestSerial;
-	cachedPayload = payload;
 
 	if (errorMsg) {
+		if (previousPayload) {
+			cachedPayload = previousPayload;
+			setChartStateMessage("loading", `Chart refresh delayed (${errorMsg}). Showing last snapshot.`);
+			return;
+		}
+		cachedPayload = null;
 		setChartStateMessage("error", `Chart data fetch failed: ${errorMsg}`);
 		candlesSeries.setData([]);
 		volumeSeries.setData([]);
@@ -2051,9 +2260,9 @@ async function loadInstitutionalChart() {
 		return;
 	}
 
+	cachedPayload = payload;
+
 	const candles = toSeries(payload?.candles || [], timeframe);
-	console.log("Chart payload:", payload);
-	console.log("Candles after toSeries:", candles);
 	const lastClose = candles.length ? Number(candles[candles.length - 1].close) : NaN;
 	const liveQuotePrice = Number(payload?.meta?.live_quote?.price);
 	const degraded = Boolean(payload?.meta?.degraded_data);
@@ -2145,10 +2354,7 @@ async function loadInstitutionalChart() {
 		
 		if (timeoutLike) {
 			if (chartRetryTimer) clearTimeout(chartRetryTimer);
-			chartRetryTimer = setTimeout(() => {
-				chartRetryTimer = null;
-				loadInstitutionalChart().catch(() => {});
-			}, 1500);
+			chartRetryTimer = null;
 		}
 	} finally {
 		chartRequestInFlight = false;
@@ -2200,17 +2406,37 @@ function bindChartControls() {
 	}
 	const reset = document.getElementById("resetChartSettings");
 	if (reset) reset.addEventListener("click", () => resetChartSettings());
-	const symbolSelect = document.getElementById("chartSymbol");
-	if (symbolSelect) symbolSelect.addEventListener("change", () => {
-		writeChartSettings({ symbol: symbolSelect.value });
+	const symbolSelect = document.getElementById("chartSymbolInput") || document.getElementById("chartSymbol");
+	function onSymbolChange() {
+		const newSym = symbolSelect ? symbolSelect.value : "";
+		writeChartSettings({ symbol: newSym });
+		// Immediately stale-cancel any in-flight request and show loading state
+		chartRequestSerial += 1;
+		cachedPayload = null;
 		latestCandleSnapshot = [];
 		latestLivePrice = null;
 		latestLiveUpdatedAt = 0;
 		lastRenderKey = "";
 		lastRenderedTime = 0;
 		lastPaintedLivePrice = null;
+		// Update watermark immediately so users see the new symbol right away
+		updateChartWatermark(newSym || "GC.FUT", selectedTimeframe());
+		setChartStateMessage("loading", "⏳ Loading chart data...");
 		loadInstitutionalChart().catch(() => {});
-	});
+	}
+	if (symbolSelect) {
+		symbolSelect.addEventListener("change", onSymbolChange);
+		// Also reload on blur (user typed a symbol and clicked away)
+		symbolSelect.addEventListener("blur", () => {
+			if (symbolSelect.value !== (readChartSettings().symbol || "GC.FUT")) {
+				onSymbolChange();
+			}
+		});
+		// Also reload when Enter is pressed in the symbol input
+		symbolSelect.addEventListener("keyup", (e) => {
+			if (e.key === "Enter") onSymbolChange();
+		});
+	}
 	const timeframeSelect = document.getElementById("chartTimeframe");
 	if (timeframeSelect) timeframeSelect.addEventListener("change", () => {
 		writeChartSettings({ timeframe: timeframeSelect.value });
@@ -2231,7 +2457,10 @@ function bindChartControls() {
 		});
 	}
 
-	if (symbolSelect) writeChartSettings({ symbol: symbolSelect.value });
+	if (symbolSelect && !String(symbolSelect.value || "").trim()) {
+		symbolSelect.value = "GC.FUT";
+	}
+	if (symbolSelect) writeChartSettings({ symbol: selectedSymbol() });
 	if (timeframeSelect) writeChartSettings({ timeframe: timeframeSelect.value });
 	captureToggleSettings();
 	bindChartHotkeys();
@@ -2240,15 +2469,79 @@ function bindChartControls() {
 
 bindChartControls();
 loadInstitutionalChart().catch(() => {});
-setInterval(() => loadInstitutionalChart().catch(() => {}), CHART_AUTO_REFRESH_MS);
-setInterval(() => {
+let chartAutoRefreshTimer = null;
+function scheduleAdaptiveChartRefresh() {
+	if (window.__AQ_chartAutoRefreshTimer) {
+		clearTimeout(window.__AQ_chartAutoRefreshTimer);
+	}
+	if (chartAutoRefreshTimer) clearTimeout(chartAutoRefreshTimer);
+	let interval = CHART_AUTO_REFRESH_MS;
+	// If user is not interacting and data is stale, increase interval
+	const ageMs = Date.now() - Number(latestLiveUpdatedAt || 0);
+	if (!chartInteractionState.isUserInteracting && ageMs > 20000) {
+		interval = 9000;
+	} else if (chartInteractionState.isUserInteracting) {
+		interval = 2000;
+	}
+	chartAutoRefreshTimer = setTimeout(() => {
+		if (!chartRequestInFlight) {
+			loadInstitutionalChart().catch(() => {});
+		}
+		scheduleAdaptiveChartRefresh();
+	}, interval);
+	window.__AQ_chartAutoRefreshTimer = chartAutoRefreshTimer;
+}
+scheduleAdaptiveChartRefresh();
+if (window.__AQ_livePaintInterval) {
+	clearInterval(window.__AQ_livePaintInterval);
+}
+window.__AQ_livePaintInterval = setInterval(() => {
 	const ageMs = Date.now() - Number(latestLiveUpdatedAt || 0);
 	if (ageMs > 20000) return;
 	paintLiveCandleFromQuote(selectedTimeframe());
 }, LIVE_PAINT_INTERVAL_MS);
 
 // --- Start live WebSocket for chart ---
-window.addEventListener("DOMContentLoaded", () => {
+
+let liveChartWS = null;
+function startLiveChartWS() {
+	if (liveChartWS) {
+		try { liveChartWS.close(); } catch (_) {}
+		liveChartWS = null;
+	}
 	const symbol = selectedSymbol();
-	connectLiveChartWebSocket(symbol);
-});
+	liveChartWS = connectLiveChartWebSocket(symbol);
+}
+
+// chart.js is loaded dynamically (after DOMContentLoaded has fired), so run
+// init code immediately rather than inside a DOMContentLoaded listener.
+(function initChartLateModules() {
+	// Start the live WebSocket feed
+	startLiveChartWS();
+
+	// Reconnect live WebSocket when symbol changes
+	const input = document.getElementById("chartSymbolInput");
+	if (input) {
+		input.addEventListener("change", () => startLiveChartWS());
+		input.addEventListener("blur",   () => startLiveChartWS());
+		input.addEventListener("keyup",  (e) => {
+			if (e.key === "Enter") startLiveChartWS();
+		});
+	}
+
+	// Load optional panel modules
+	const sym = typeof selectedSymbol === 'function' ? selectedSymbol() : 'GC.FUT';
+	const moduleVersion = encodeURIComponent(String(window.AQ_SCRIPT_VERSION || ''));
+	const moduleSuffix = moduleVersion ? `?v=${moduleVersion}` : '';
+	import(`./add_spread_offset_button.js${moduleSuffix}`)
+		.then(({ addSpreadOffsetButton }) => {
+			if (typeof addSpreadOffsetButton === 'function') addSpreadOffsetButton(sym);
+		})
+		.catch((err) => console.error('Failed to load spread/offset button module', err));
+
+	import(`./prop_challenge_panel.js${moduleSuffix}`)
+		.then(({ addPropChallengeButton }) => {
+			if (typeof addPropChallengeButton === 'function') addPropChallengeButton();
+		})
+		.catch((err) => console.error('Failed to load prop challenge module', err));
+})();

@@ -36,8 +36,8 @@ fi
 
 # 3. Launch live trading
 if [ -x "$LAUNCH_SCRIPT" ]; then
-    log "Launching live trading."
-    bash "$LAUNCH_SCRIPT"
+    log "Launching live trading with unattended readiness required."
+    AQ_REQUIRE_UNATTENDED_READY=true bash "$LAUNCH_SCRIPT"
 else
     log "ERROR: Live launch script not found or not executable: $LAUNCH_SCRIPT"
     exit 1

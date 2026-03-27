@@ -2,28 +2,82 @@
 platform linux -- Python 3.12.1, pytest-9.0.1, pluggy-1.6.0
 rootdir: /workspaces/newcpu
 plugins: anyio-4.11.0
-collected 2 items
-
-test_databento.py EE                                                     [100%]
+collected 2 items / 5 errors
 
 ==================================== ERRORS ====================================
-____________________ ERROR at setup of test_historical_bbo _____________________
-file /workspaces/newcpu/test_databento.py, line 8
-  def test_historical_bbo(client, candidates):
-E       fixture 'client' not found
->       available fixtures: anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, doctest_namespace, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
->       use 'pytest --fixtures [testpath]' for help on them.
-
-/workspaces/newcpu/test_databento.py:8
-_______________________ ERROR at setup of test_live_bbo ________________________
-file /workspaces/newcpu/test_databento.py, line 36
-  def test_live_bbo(key, symbol, listen_seconds=6):
-E       fixture 'key' not found
->       available fixtures: anyio_backend, anyio_backend_name, anyio_backend_options, cache, capfd, capfdbinary, caplog, capsys, capsysbinary, capteesys, doctest_namespace, free_tcp_port, free_tcp_port_factory, free_udp_port, free_udp_port_factory, monkeypatch, pytestconfig, record_property, record_testsuite_property, record_xml_attribute, recwarn, subtests, tmp_path, tmp_path_factory, tmpdir, tmpdir_factory
->       use 'pytest --fixtures [testpath]' for help on them.
-
-/workspaces/newcpu/test_databento.py:36
+___________________ ERROR collecting test_databento_live.py ____________________
+test_databento_live.py:7: in <module>
+    client.subscribe(
+/usr/local/python/3.12.1/lib/python3.12/site-packages/databento/live/client.py:577: in subscribe
+    return self._session.subscribe(
+/usr/local/python/3.12.1/lib/python3.12/site-packages/databento/live/session.py:522: in subscribe
+    self._connect(dataset=dataset)
+/usr/local/python/3.12.1/lib/python3.12/site-packages/databento/live/session.py:615: in _connect
+    ).result()
+      ^^^^^^^^
+/usr/local/python/3.12.1/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/usr/local/python/3.12.1/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+/usr/local/python/3.12.1/lib/python3.12/site-packages/databento/live/session.py:659: in _connect_task
+    session_id = await asyncio.wait_for(
+/usr/local/python/3.12.1/lib/python3.12/asyncio/tasks.py:520: in wait_for
+    return await fut
+           ^^^^^^^^^
+E   databento.common.error.BentoError: Authentication failed.
+_______________ ERROR collecting test_databento_live_verbose.py ________________
+test_databento_live_verbose.py:13: in <module>
+    client.subscribe(
+/usr/local/python/3.12.1/lib/python3.12/site-packages/databento/live/client.py:577: in subscribe
+    return self._session.subscribe(
+/usr/local/python/3.12.1/lib/python3.12/site-packages/databento/live/session.py:522: in subscribe
+    self._connect(dataset=dataset)
+/usr/local/python/3.12.1/lib/python3.12/site-packages/databento/live/session.py:615: in _connect
+    ).result()
+      ^^^^^^^^
+/usr/local/python/3.12.1/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/usr/local/python/3.12.1/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+/usr/local/python/3.12.1/lib/python3.12/site-packages/databento/live/session.py:659: in _connect_task
+    session_id = await asyncio.wait_for(
+/usr/local/python/3.12.1/lib/python3.12/asyncio/tasks.py:520: in wait_for
+    return await fut
+           ^^^^^^^^^
+E   databento.common.error.BentoError: Authentication failed.
+_______________________ ERROR collecting test_db_live.py _______________________
+test_db_live.py:6: in <module>
+    raise RuntimeError("DATABENTO_API_KEY not set in environment.")
+E   RuntimeError: DATABENTO_API_KEY not set in environment.
+___________________ ERROR collecting test_db_live_schema.py ____________________
+test_db_live_schema.py:15: in <module>
+    for i, record in enumerate(client):
+/usr/local/python/3.12.1/lib/python3.12/site-packages/databento/live/client.py:806: in __next__
+    self.client.block_for_close()
+/usr/local/python/3.12.1/lib/python3.12/site-packages/databento/live/client.py:648: in block_for_close
+    ).result(timeout=timeout)
+      ^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/python/3.12.1/lib/python3.12/concurrent/futures/_base.py:456: in result
+    return self.__get_result()
+           ^^^^^^^^^^^^^^^^^^^
+/usr/local/python/3.12.1/lib/python3.12/concurrent/futures/_base.py:401: in __get_result
+    raise self._exception
+/usr/local/python/3.12.1/lib/python3.12/site-packages/databento/live/session.py:566: in wait_for_close
+    raise BentoError(exc) from None
+E   databento.common.error.BentoError: Not authorized for mbo schema
+------------------------------- Captured stdout --------------------------------
+ErrorMsg(rtype=<RType.ERROR: 21>, publisher_id=0, instrument_id=0, ts_event=1774146685480728437, pretty_ts_event='2026-03-22T02:31:25.480728437Z', err='Not authorized for mbo schema', code=<ErrorCode.UNSET: 255>, is_last=255)
+_____________________ ERROR collecting test_db_symbols.py ______________________
+test_db_symbols.py:6: in <module>
+    raise RuntimeError("DATABENTO_API_KEY not set in environment.")
+E   RuntimeError: DATABENTO_API_KEY not set in environment.
 =========================== short test summary info ============================
-ERROR test_databento.py::test_historical_bbo
-ERROR test_databento.py::test_live_bbo
-============================== 2 errors in 10.15s ==============================
+ERROR test_databento_live.py - databento.common.error.BentoError: Authenticat...
+ERROR test_databento_live_verbose.py - databento.common.error.BentoError: Aut...
+ERROR test_db_live.py - RuntimeError: DATABENTO_API_KEY not set in environment.
+ERROR test_db_live_schema.py - databento.common.error.BentoError: Not authori...
+ERROR test_db_symbols.py - RuntimeError: DATABENTO_API_KEY not set in environ...
+!!!!!!!!!!!!!!!!!!! Interrupted: 5 errors during collection !!!!!!!!!!!!!!!!!!!!
+========================= 5 errors in 77.42s (0:01:17) =========================

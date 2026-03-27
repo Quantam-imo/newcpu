@@ -1,0 +1,51 @@
+{
+  "CME.BTC": {
+    "exchange": "CME",
+    "symbol": "BTC",
+    "description": "CME Bitcoin Futures (Full Contract)",
+    "type": "futures",
+    "priority": 1
+  },
+  "CME.MBT": {
+    "exchange": "CME",
+    "symbol": "MBT",
+    "description": "CME Micro Bitcoin Futures",
+    "type": "futures",
+    "priority": 2
+  },
+  "CME.ETH": {
+    "exchange": "CME",
+    "symbol": "ETH",
+    "description": "CME Ether Futures (Full Contract)",
+    "type": "futures",
+    "priority": 3
+  },
+  "CME.MET": {
+    "exchange": "CME",
+    "symbol": "MET",
+    "description": "CME Micro Ether Futures",
+    "type": "futures",
+    "priority": 4
+  },
+  "CME.NQ": {
+    "exchange": "CME",
+    "symbol": "NQ",
+    "description": "CME Nasdaq 100 Futures",
+    "type": "futures",
+    "priority": 5
+  },
+  "CME.ES": {
+    "exchange": "CME",
+    "symbol": "ES",
+    "description": "CME S&P 500 Futures",
+    "type": "futures",
+    "priority": 6
+  },
+  "ICE.DX": {
+    "exchange": "ICE",
+    "symbol": "DX",
+    "description": "ICE Dollar Index Futures (DXY)",
+    "type": "futures",
+    "priority": 7
+  }
+}

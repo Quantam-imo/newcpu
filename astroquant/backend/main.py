@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 import os
 from pathlib import Path
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 # Load environment variables
@@ -12,15 +13,34 @@ load_dotenv(BASE_DIR.parent / ".env")
 
 
 from astroquant.backend import router_market, router_status, router_admin
+from astroquant.backend.config import ADMIN_API_TOKEN
+from astroquant.backend.config import ACCOUNT_CONFIG
+from astroquant.backend.governance.prop_governance import PropConfig, PropGovernance
 from astroquant.backend.services.websocket_service import router as websocket_router
+from astroquant.backend.router_model_weights import router as router_model_weights
+from astroquant.backend.router_spread_offset import router as router_spread_offset
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
+from astroquant.backend.router_export import router as router_export
+from astroquant.backend.router_gann_websocket import router as router_gann_ws
+from astroquant.backend.runtime import get_runner
+
 
 app = FastAPI()
 
+
+class NoCacheStaticFiles(StaticFiles):
+    def file_response(self, *args, **kwargs) -> Response:
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        return response
+
 # Serve frontend static files automatically
-FRONTEND_DIR = BASE_DIR / "astroquant" / "frontend"
+FRONTEND_DIR = BASE_DIR / "frontend"
 if FRONTEND_DIR.exists():
-    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+    app.mount("/frontend", NoCacheStaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -28,21 +48,43 @@ app.add_middleware(
         "http://localhost:8080",
         "http://127.0.0.1:8000",
         "http://localhost:8000",
+        "http://127.0.0.1:8001",
+        "http://localhost:8001",
         "http://127.0.0.1:5500",
         "http://localhost:5500",
         "http://127.0.0.1:3000",
         "http://localhost:3000",
     ],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Ensure router_market is included for /market/orderflow_summary
+# Ensure router_market is included for /chart/data and /market/orderflow_summary
 app.include_router(router_market.router)
 app.include_router(router_status.router)
 app.include_router(router_admin.router)
 app.include_router(websocket_router)
+app.include_router(router_model_weights)
+app.include_router(router_spread_offset)
+app.include_router(router_export)
+app.include_router(router_gann_ws)
+
+runner = get_runner()
+try:
+    if getattr(runner, "prop_engine", None) is None:
+        runner.prop_engine = PropGovernance(
+            PropConfig(
+                account_size=float(ACCOUNT_CONFIG.get("initial_balance", 50000.0)),
+                static_dd_pct=float(ACCOUNT_CONFIG.get("max_drawdown", 4000.0)) / max(1.0, float(ACCOUNT_CONFIG.get("initial_balance", 50000.0))),
+                daily_dd_pct=float(ACCOUNT_CONFIG.get("daily_limit", 1500.0)) / max(1.0, float(ACCOUNT_CONFIG.get("initial_balance", 50000.0))),
+                internal_daily_guard_pct=0.015,
+            )
+        )
+    app.include_router(router_admin.build_admin_router(runner, runner.prop_engine, ADMIN_API_TOKEN))
+except Exception:
+    pass
 
 # --- Mentor Endpoints (ported from legacy) ---
 import types
@@ -72,71 +114,8 @@ app.include_router(router_mentor.router)
 
 @app.get("/status/feed")
 def feed_status():
-    api_key = os.environ.get("DATABENTO_API_KEY")
-    status = {
-        "configured": bool(api_key),
-        "healthy": False,
-        "reason": "Missing DATABENTO_API_KEY" if not api_key else "OK",
-        "last_error": None,
-        "auth_cooldown_seconds": 0
-    }
-    if api_key:
-        import databento as db
-        from datetime import datetime, timedelta, timezone
-        client = db.Historical(api_key)
-        errors = []
-        # 1. Try live window (last 5 min)
-        try:
-            now = datetime.now(timezone.utc)
-            start_time = (now - timedelta(minutes=5)).replace(second=0, microsecond=0).isoformat()
-            end_time = now.replace(second=0, microsecond=0).isoformat()
-            client.timeseries.get_range(
-                dataset="GLBX.MDP3",
-                schema="ohlcv-1m",
-                symbols=["GC.FUT"],
-                start=start_time,
-                end=end_time
-            )
-            status["healthy"] = True
-            status["reason"] = "Databento API reachable (live window)"
-        except Exception as e:
-            import traceback
-            tb = traceback.format_exc()
-            error_str = str(e)
-            # Special handling for data_start_after_available_end
-            if "data_start_after_available_end" in error_str:
-                status["healthy"] = False
-                status["reason"] = "No recent data available from Databento (live window exceeds available dataset)."
-                status["last_error"] = f"Live window: {e}\n{tb}"
-                status["no_recent_data"] = True
-            else:
-                status["healthy"] = False
-                status["reason"] = "Databento API error (live window)"
-                status["last_error"] = f"Live window: {e}\n{tb}"
-            errors.append(f"Live window error: {e}\n{tb}")
-        # 2. Try historical window (known-good)
-        try:
-            hist_start = "2024-03-10T00:00:00+00:00"
-            hist_end = "2024-03-10T00:05:00+00:00"
-            client.timeseries.get_range(
-                dataset="GLBX.MDP3",
-                schema="ohlcv-1m",
-                symbols=["GC.FUT"],
-                start=hist_start,
-                end=hist_end
-            )
-            status["historical_healthy"] = True
-            status["historical_reason"] = "Databento API reachable (historical window)"
-        except Exception as e:
-            tb = traceback.format_exc()
-            errors.append(f"Historical window error: {e}\n{tb}")
-            status["historical_healthy"] = False
-            status["historical_reason"] = f"Databento API error (historical window): {e}"
-            status["historical_last_error"] = f"Historical window: {e}\n{tb}"
-        if errors:
-            status["all_errors"] = errors
-    return status
+    return runner.feed_status()
 
 @app.get("/")
 def root():
-    return {"status": "ok"}
+    return RedirectResponse(url="/frontend/", status_code=307)

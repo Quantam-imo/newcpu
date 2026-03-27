@@ -14,6 +14,9 @@ CDP_URL="ws://127.0.0.1:${CDP_PORT}"
 BROKER_URL="https://manager.maven.markets/app/trade"
 LOG_DIR="$ROOT_DIR/logs"
 STRICT_PREFLIGHT_SCRIPT="$ROOT_DIR/preflight_strict.sh"
+UNATTENDED_PREFLIGHT_SCRIPT="$ROOT_DIR/preflight_unattended.sh"
+REQUIRE_UNATTENDED_READY="${AQ_REQUIRE_UNATTENDED_READY:-false}"
+DISABLE_BROKER_AUTO_OPEN="${AQ_DISABLE_BROKER_AUTO_OPEN:-true}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -137,7 +140,8 @@ EXECUTION_BROWSER_TIMEOUT_MS=30000
 # =============================================================================
 # Market Data Feed (Databento)
 # =============================================================================
-DATABENTO_API_KEY=db-AxnrX99b98fri9ArmGiQSVYmtW78r
+
+DATABENTO_API_KEY=
 DATABENTO_DATASET=GLBX.MDP3
 DATABENTO_STRICT_STARTUP=false
 
@@ -220,12 +224,18 @@ pkill -f "chrome.*remote-debugging-port" || true
 sleep 1
 success "Cleaned up any stray Chrome processes"
 
+# Stop any legacy/old-project processes before launching the current stack.
+pkill -f "AstroQuant_Phase1|restart_both.sh|stop_both.sh" 2>/dev/null || true
+
 # ============================================================================
 # 4. Start Chrome with Remote Debugging
 # ============================================================================
 header "Launching Chrome with Remote Debugging"
 
-if [[ -n "$CHROME_BIN" ]]; then
+if [[ "$DISABLE_BROKER_AUTO_OPEN" == "true" ]]; then
+    warn "Broker auto-open is disabled (AQ_DISABLE_BROKER_AUTO_OPEN=true)."
+    warn "Skipping automatic Chrome launch. Start it manually when needed."
+elif [[ -n "$CHROME_BIN" ]]; then
     # Clean up old profile
     [[ -d "$CHROME_PROFILE" ]] && rm -rf "$CHROME_PROFILE"
     mkdir -p "$CHROME_PROFILE"
@@ -236,6 +246,16 @@ if [[ -n "$CHROME_BIN" ]]; then
     info "  CDP Port: $CDP_PORT"
     info "  Target URL: $BROKER_URL"
 
+    chrome_mode="${AQ_CHROME_MODE:-auto}"
+    chrome_headless_flag=""
+    if [[ "$chrome_mode" == "headless" ]]; then
+        chrome_headless_flag="--headless=new"
+    elif [[ "$chrome_mode" == "headed" ]]; then
+        chrome_headless_flag=""
+    elif [[ -z "$DISPLAY" && -z "$WAYLAND_DISPLAY" ]]; then
+        chrome_headless_flag="--headless=new"
+    fi
+
     # Start Chrome in background with logging
     "$CHROME_BIN" \
         --remote-debugging-port=$CDP_PORT \
@@ -245,13 +265,16 @@ if [[ -n "$CHROME_BIN" ]]; then
         --disable-sync \
         --disable-default-apps \
         --disable-extensions \
-        --headless=new \
+        $chrome_headless_flag \
         "$BROKER_URL" \
         >"$LOG_DIR/chrome.log" 2>&1 &
 
     CHROME_PID=$!
     echo "$CHROME_PID" > "$LOG_DIR/chrome.pid"
     success "Chrome launched with PID: $CHROME_PID"
+    if [[ -n "$chrome_headless_flag" ]]; then
+        warn "Chrome is running headless; broker login / Cloudflare may require AQ_CHROME_MODE=headed in a display session."
+    fi
     info "Chrome logs: $LOG_DIR/chrome.log"
 
     # Wait for Chrome to start
@@ -348,22 +371,30 @@ read -p "Press ENTER when browser is ready and logged into the broker..."
 header "Verifying Browser Connection"
 
 info "Checking browser state..."
-EXEC_STATUS=$(curl -s http://127.0.0.1:8000/status/execution | "$PYTHON_BIN" -c "import json, sys; data=json.load(sys.stdin); print(data.get('browser_title', 'UNKNOWN'))" 2>/dev/null || echo "UNKNOWN")
+BRIDGE_SNAPSHOT=$(curl -s http://127.0.0.1:8000/status/broker_bridge 2>/dev/null || echo "")
+BRIDGE_TITLE=$(BRIDGE_JSON="$BRIDGE_SNAPSHOT" "$PYTHON_BIN" -c "import json, os; data=json.loads(os.environ.get('BRIDGE_JSON') or '{}'); print(data.get('broker_tab_title') or 'UNKNOWN')" 2>/dev/null || echo "UNKNOWN")
+BRIDGE_CHALLENGE=$(BRIDGE_JSON="$BRIDGE_SNAPSHOT" "$PYTHON_BIN" -c "import json, os; data=json.loads(os.environ.get('BRIDGE_JSON') or '{}'); print('yes' if data.get('challenge_detected') else 'no')" 2>/dev/null || echo "unknown")
+BRIDGE_PANEL_REASON=$(BRIDGE_JSON="$BRIDGE_SNAPSHOT" "$PYTHON_BIN" -c "import json, os; data=json.loads(os.environ.get('BRIDGE_JSON') or '{}'); print((data.get('order_panel') or {}).get('reason') or 'n/a')" 2>/dev/null || echo "n/a")
 
-if [[ "$EXEC_STATUS" == *"Just a moment"* ]] || [[ "$EXEC_STATUS" == "UNKNOWN" ]]; then
-    warn "Browser still showing challenge or DOM not loaded"
-    warn "Browser title: $EXEC_STATUS"
+if [[ "$BRIDGE_CHALLENGE" == "yes" ]] || [[ "$BRIDGE_TITLE" == *"Just a moment"* ]] || [[ "$BRIDGE_TITLE" == "UNKNOWN" ]]; then
+    warn "Browser still showing challenge or broker DOM not loaded"
+    warn "Broker tab title: $BRIDGE_TITLE"
+    warn "Order panel reason: $BRIDGE_PANEL_REASON"
     warn "Retrying..."
     sleep 3
 fi
 
 # ============================================================================
-# 8. Strict Preflight Gate
+# 8. Preflight Gates
 # ============================================================================
-header "Strict Preflight Gate"
+header "Preflight Gates"
 
 if [[ ! -x "$STRICT_PREFLIGHT_SCRIPT" ]]; then
     chmod +x "$STRICT_PREFLIGHT_SCRIPT"
+fi
+
+if [[ -f "$UNATTENDED_PREFLIGHT_SCRIPT" && ! -x "$UNATTENDED_PREFLIGHT_SCRIPT" ]]; then
+    chmod +x "$UNATTENDED_PREFLIGHT_SCRIPT"
 fi
 
 info "Running strict preflight checks (feed key + CDP + execution live checks)..."
@@ -372,6 +403,23 @@ if ! bash "$STRICT_PREFLIGHT_SCRIPT" http://127.0.0.1:8000 2>&1 | tee -a "$LOG_F
     exit 1
 fi
 success "Strict preflight passed"
+
+if [[ -f "$UNATTENDED_PREFLIGHT_SCRIPT" ]]; then
+    info "Running unattended bridge readiness gate..."
+    if bash "$UNATTENDED_PREFLIGHT_SCRIPT" http://127.0.0.1:8000 2>&1 | tee -a "$LOG_FILE"; then
+        success "Unattended preflight passed"
+    else
+        if [[ "${REQUIRE_UNATTENDED_READY,,}" == "true" || "${REQUIRE_UNATTENDED_READY,,}" == "1" || "${REQUIRE_UNATTENDED_READY,,}" == "yes" ]]; then
+            error "Unattended preflight failed. Blocking automated launch until broker DOM is fully ready."
+            error "See current broker bridge diagnostics: curl http://127.0.0.1:8000/status/broker_bridge"
+            exit 1
+        fi
+        warn "Unattended preflight failed. System is suitable for supervised live testing only."
+        warn "Set AQ_REQUIRE_UNATTENDED_READY=true to enforce this gate during launch."
+    fi
+else
+    warn "Unattended preflight script not found: $UNATTENDED_PREFLIGHT_SCRIPT"
+fi
 
 # ============================================================================
 # 9. Calibrate Selectors
@@ -452,5 +500,9 @@ sleep 1
 EOFSCRIPT
 chmod +x "$LOG_DIR/restart_backend.sh"
 
-echo -e "${GREEN}🚀 System Ready for Live Trading!${NC}"
+if [[ "${REQUIRE_UNATTENDED_READY,,}" == "true" || "${REQUIRE_UNATTENDED_READY,,}" == "1" || "${REQUIRE_UNATTENDED_READY,,}" == "yes" ]]; then
+    echo -e "${GREEN}🚀 System Ready for Unattended Launch!${NC}"
+else
+    echo -e "${GREEN}🚀 System Ready for Supervised Live Trading!${NC}"
+fi
 echo ""

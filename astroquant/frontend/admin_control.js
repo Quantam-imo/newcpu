@@ -1,21 +1,15 @@
-const AQ_DEFAULT_ADMIN_API_ORIGIN = ["8000", "8001"].includes(String(window.location.port || ""))
-  ? window.location.origin
-  : "http://127.0.0.1:8000";
+const AQ_DEFAULT_ADMIN_API_ORIGIN = String(window.location.origin || "").trim();
 const AQ_API_BASE = window.AQ_API_BASE || AQ_DEFAULT_ADMIN_API_ORIGIN;
 
 function adminApiOrigins() {
   const existing = String(window.AQ_API_BASE || "").trim();
   if (existing) {
-    return [existing, "http://localhost:8000", "http://127.0.0.1:8000", "http://localhost:8001", "http://127.0.0.1:8001"];
+    return [existing, String(window.location.origin || "").trim()].filter(Boolean);
   }
   const origins = [];
   const uniqueOrigins = new Set();
   const baseOrigins = [
     String(window.location.origin || "").trim(),
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-    "http://localhost:8001",
-    "http://127.0.0.1:8001",
   ];
   for (const origin of baseOrigins) {
     if (origin && !uniqueOrigins.has(origin)) {
@@ -23,7 +17,7 @@ function adminApiOrigins() {
       origins.push(origin);
     }
   }
-  return origins.length ? origins : ["http://127.0.0.1:8000", "http://127.0.0.1:8001"];
+  return origins.length ? origins : [String(window.location.origin || "").trim()].filter(Boolean);
 }
 
 function getCreds() {
@@ -51,8 +45,6 @@ function adminFetch(path, options = {}) {
   const priorityOrigins = [
     window.location.origin,
     AQ_API_BASE,
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
   ]
     .filter((v, i, arr) => v && arr.indexOf(v) === i);
   

@@ -16,10 +16,12 @@ if pidof systemd > /dev/null; then
   # Enable services to start on boot
   sudo systemctl enable astroquant_tradingbot.service
   sudo systemctl enable cloudflared_tunnel.service
-  sudo systemctl enable chrome_remote_debug.service
+  # Keep broker Chrome manual to avoid opening separate browser windows at CPU boot.
+  sudo systemctl disable chrome_remote_debug.service 2>/dev/null || true
 
-  # Start Chrome with remote debugging (container/WSL compatible)
-  /workspaces/newcpu/start_chrome_remote_debug.sh
+  # Keep broker Chrome manual by default (start only when needed).
+  echo "Broker Chrome autostart is disabled by default."
+  echo "Manual launch: /workspaces/newcpu/start_chrome_remote_debug.sh"
 else
   echo "systemd is not available. Using service commands and manual steps."
   # Start redis-server if available
@@ -51,3 +53,4 @@ if ! pgrep -f "uvicorn.*astroquant.backend.main:app" > /dev/null; then
 fi
 
 echo "AstroQuant Trading Bot and Cloudflare Tunnel are set to start automatically on CPU boot."
+echo "Broker Chrome is manual by default to prevent separate browser auto-open."

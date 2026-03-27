@@ -2,7 +2,7 @@
 
 This document provides complete instructions to move AstroQuant to live CPU production trading with Chrome debugging setup.
 
-**Status**: ✅ **Project Ready for Live Trading**
+**Status**: ✅ Supervised live testing ready, unattended launch gated on broker challenge clearance
 
 ---
 
@@ -20,7 +20,7 @@ This script will:
 - ✅ Launch Chrome with remote debugging enabled
 - ✅ Start FastAPI backend
 - ✅ Calibrate selector profiles
-- ✅ Run final health checks
+- ✅ Run strict and unattended readiness checks
 
 ### Step 2: Complete Browser Login
 
@@ -43,7 +43,7 @@ When prompted, the script will:
 http://127.0.0.1:8000
 ```
 
-Start trading! Monitor signals, execute orders, verify positions.
+For supervised testing, proceed after broker DOM is visible. For unattended launch, continue only after `preflight_unattended.sh` reports `READY`.
 
 ---
 
@@ -82,7 +82,7 @@ Start trading! Monitor signals, execute orders, verify positions.
 | Component | Status | Details |
 |-----------|--------|---------|
 | **FastAPI Backend** | ✅ Running | Port 8000, live data feeds active |
-| **Chrome CDP** | ⚙️ Manual | Requires login to broker |
+| **Chrome CDP** | ⚙️ Manual | Requires login and challenge clearance in broker tab |
 | **Playwright** | ✅ Connected | Auto-attach to Chrome CDP |
 | **Mentor AI** | ✅ Active | ICT, Iceberg, Institution, Gann signals |
 | **Market Data** | ✅ Live | Databento GLBX.MDP3, 6 symbols |
@@ -150,6 +150,7 @@ What happens:
    - Wait for "Just a moment..." page to load
    - Click "Verify" or solve challenge
    - Page redirects to broker
+   - Do not treat strict preflight alone as sufficient while this page is visible
 
 2. **Log Into Broker**
    - Username: Your MatchTrader account
@@ -189,7 +190,8 @@ Running health check...
 [8/8] File Integrity             ✓ PASS
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✓ ALL SYSTEMS NOMINAL - READY FOR LIVE TRADING!
+✓ STRICT PREFLIGHT READY
+✓ UNATTENDED PREFLIGHT READY only after broker bridge shows no challenge and a live panel/quote
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
@@ -258,6 +260,12 @@ curl http://127.0.0.1:8000/status | jq .
 
 # Execution engine status
 curl http://127.0.0.1:8000/status/execution | jq .
+
+# Broker bridge / challenge state
+curl http://127.0.0.1:8000/status/broker_bridge | jq .
+
+# Full unattended gate
+bash preflight_unattended.sh http://127.0.0.1:8000
 
 # Mentor data for symbol
 curl http://127.0.0.1:8000/mentor/context?symbol=XAUUSD | jq .

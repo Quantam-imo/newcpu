@@ -111,16 +111,18 @@ fi
 if exec_json=$(curl -fsS --max-time 8 "$API_BASE/status/execution" 2>/dev/null); then
   pass "Execution status endpoint reachable"
 
-  eval_result=$(printf '%s' "$exec_json" | /workspaces/newcpu/.venv/bin/python - <<'PY'
-import json,sys
+  eval_result=$(EXEC_JSON="$exec_json" /workspaces/newcpu/.venv/bin/python - <<'PY'
+import json
+import os
+payload = os.environ.get("EXEC_JSON", "")
 try:
-    data=json.load(sys.stdin)
+    data = json.loads(payload)
 except Exception:
     print("BAD_JSON")
     raise SystemExit(0)
-status=str(data.get("execution_status") or "").upper()
-connected=bool(data.get("connected"))
-panel_ready=bool((data.get("order_panel") or {}).get("ready"))
+status = str(data.get("execution_status") or "").upper()
+connected = bool(data.get("connected"))
+panel_ready = bool((data.get("order_panel") or {}).get("ready"))
 if connected or status == "CONNECTED" or panel_ready:
     print("CONNECTED")
 else:
@@ -140,18 +142,20 @@ else
 fi
 
 if sltp_json=$(curl -fsS --max-time 8 "$API_BASE/execution/debug_sl_tp_dom" 2>/dev/null); then
-  sltp_eval=$(printf '%s' "$sltp_json" | /workspaces/newcpu/.venv/bin/python - <<'PY'
-import json,sys
+  sltp_eval=$(SLTP_JSON="$sltp_json" /workspaces/newcpu/.venv/bin/python - <<'PY'
+import json
+import os
+payload = os.environ.get("SLTP_JSON", "")
 try:
-    data=json.load(sys.stdin)
+    data = json.loads(payload)
 except Exception:
     print("BAD_JSON")
     raise SystemExit(0)
-status=str(data.get("status") or "").lower()
+status = str(data.get("status") or "").lower()
 if status != "ok":
     print("NOT_OK")
     raise SystemExit(0)
-inputs=data.get("inputs_found") or []
+inputs = data.get("inputs_found") or []
 print("INPUTS_PRESENT" if len(inputs) > 0 else "NO_INPUTS")
 PY
 )

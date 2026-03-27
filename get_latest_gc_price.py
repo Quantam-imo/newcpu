@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 
 # Set your API key here if not using the environment variable
-API_KEY = "db-9YYc6umB6fA7Yv9rF5YjVhFT6Sips"  # Replace with your actual key if needed
+API_KEY = "REDACTED"  # Replace with your actual key if needed
 client = db.Historical(key=API_KEY)
 
 

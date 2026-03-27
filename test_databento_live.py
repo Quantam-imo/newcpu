@@ -1,7 +1,7 @@
 import databento as db
 
 # Create a live client
-client = db.Live(key="db-9YYc6umB6fA7Yv9rF5YjVhFT6Sips")
+client = db.Live(key="REDACTED")
 
 # Subscribe with a specified start time for intraday replay
 client.subscribe(

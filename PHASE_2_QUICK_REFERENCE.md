@@ -400,4 +400,4 @@ await apiFetch(`/mentor/context?symbol=XAUUSD&t=${now}`);
 ---
 
 **Last Updated:** March 11, 2026  
-**Status:** Production Ready
+**Status:** Historical phase summary only; current unattended readiness must be verified with /status/broker_bridge and preflight_unattended.sh

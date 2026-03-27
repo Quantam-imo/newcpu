@@ -1,6 +1,6 @@
 #!/bin/bash
 # AstroQuant Automated Health Monitor
-# Runs health_check.sh and preflight_strict.sh, sends alert if any check fails
+# Runs health_check.sh, preflight_strict.sh, and preflight_unattended.sh, sends alert if any check fails
 # Add to cron or systemd timer for continuous monitoring
 
 set -euo pipefail
@@ -31,5 +31,6 @@ run_and_alert() {
 
 run_and_alert health_check.sh "Health Check"
 run_and_alert preflight_strict.sh "Preflight Strict"
+run_and_alert preflight_unattended.sh "Preflight Unattended"
 
 # Optionally, add more checks or custom logic here

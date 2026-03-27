@@ -9,6 +9,7 @@ class DraggablePanel {
 
     createPanel() {
         const panel = document.createElement('div');
+        this.panel = panel;
         panel.id = this.id;
         panel.className = 'draggable-panel';
         panel.innerHTML = `
@@ -48,7 +49,7 @@ class DraggablePanel {
 
 import { WSManager } from './ws_manager.js';
 
-function createDeltaPanel(symbol) {
+export function createDeltaPanel(symbol) {
     let wsManager = null;
     let restInterval = null;
     const contentHtml = `<div id="delta-summary">
@@ -58,12 +59,25 @@ function createDeltaPanel(symbol) {
     const panel = new DraggablePanel(
         'delta-panel',
         `Delta: ${symbol}`,
-        contentHtml,
-        () => {
-            if (wsManager) wsManager.close();
-            if (restInterval) clearInterval(restInterval);
-        }
+        contentHtml
     );
+
+    async function loadDelta() {
+        try {
+            const apiBase = window.AQ_API_BASE || window.location.origin;
+            const res = await fetch(`${apiBase}/market/orderflow_summary?symbol=${encodeURIComponent(symbol)}`);
+            const data = await res.json();
+            const summary = data.summary || data || {};
+            const delta = Number(summary.delta || 0);
+            const buy = Number(summary.buy_aggression || 0);
+            const sell = Number(summary.sell_aggression || 0);
+            const total = buy + sell || 1;
+            const deltaPercent = (delta / total) * 100;
+            setDeltaValue(`${deltaPercent >= 0 ? '+' : ''}${deltaPercent.toFixed(1)}%`);
+        } catch (e) {
+            setDeltaValue('Error');
+        }
+    }
 
     function setDeltaError(msg) {
         const el = document.getElementById('delta-error');
@@ -108,14 +122,21 @@ function createDeltaPanel(symbol) {
 
     async function loadDeltaRest() {
         try {
-            const res = await fetchWithRetry(`${window.AQ_BASE}/delta/${symbol}`);
+            const apiBase = window.AQ_API_BASE || window.location.origin;
+            const res = await fetch(`${apiBase}/market/orderflow_summary?symbol=${encodeURIComponent(symbol)}`);
             const data = await res.json();
             if (data.error) {
                 setDeltaError(data.error);
                 setDeltaValue('Error');
                 return;
             }
-            setDeltaValue((data.delta_percent * 100).toFixed(2) + '%');
+            const summary = data.summary || data || {};
+            const delta = Number(summary.delta || 0);
+            const buy = Number(summary.buy_aggression || 0);
+            const sell = Number(summary.sell_aggression || 0);
+            const total = buy + sell || 1;
+            const deltaPercent = (delta / total) * 100;
+            setDeltaValue(`${deltaPercent >= 0 ? '+' : ''}${deltaPercent.toFixed(1)}%`);
             setDeltaError('');
         } catch (e) {
             setDeltaError('REST error');
@@ -123,10 +144,15 @@ function createDeltaPanel(symbol) {
         }
     }
 
-    registerPanel(panel.panel, () => {
-        if (wsManager) wsManager.close();
-        if (restInterval) clearInterval(restInterval);
-    });
+    if (typeof registerPanel === 'function') {
+        registerPanel(panel.panel, () => {
+            if (wsManager) wsManager.close();
+            if (restInterval) clearInterval(restInterval);
+        });
+    }
+
+    // Prime panel with one immediate REST value.
+    loadDelta().catch(() => {});
 }
 
 function addDeltaButton(symbol) {

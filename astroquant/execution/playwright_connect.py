@@ -11,10 +11,15 @@ async def main():
     price_memory = {}
     while True:
         for symbol in SYMBOLS:
-            price = engine.get_broker_price(symbol)  # Implement this method to fetch price from broker UI
-            if price is not None:
-                price_memory[symbol] = price
-                print(f"{symbol}: {price}")
+            try:
+                price = engine.get_broker_price(symbol)
+                if price is not None:
+                    price_memory[symbol] = price
+                    print(f"{symbol}: {price}")
+                else:
+                    print(f"{symbol}: price not available")
+            except Exception as exc:
+                print(f"Error fetching price for {symbol}: {exc}")
         # Optionally, save price_memory to disk or database here
         await asyncio.sleep(5)  # Poll every 5 seconds
 

@@ -34,11 +34,20 @@ from astroquant.backend.config import (
     SPOT_CONFIRMATION_MAX_BPS,
     SPOT_FIDELITY_STRICT,
     SPOT_FIDELITY_SYMBOLS,
+    TRADING_SYMBOL_ALIASES,
     symbol_dataset,
 )
 
 
 class MultiSymbolRunner:
+    def send_backend_alert(self, alert_type, message, extra=None):
+        # Send alert to Telegram
+        if hasattr(self, 'telegram') and self.telegram:
+            self.telegram.send(f"[ALERT] {alert_type}: {message}\n{json.dumps(extra or {}, indent=2)}")
+        # Optionally, log or persist for frontend pickup (e.g., via DB, file, or in-memory queue)
+        # For demo: print to console (could be replaced with a push to a websocket or alert table)
+        print(f"[ALERT] {alert_type}: {message}", extra)
+
 
     SYMBOL_MAP = {
         "XAUUSD": "GC.c.1",
@@ -79,6 +88,63 @@ class MultiSymbolRunner:
         "Z": 12,
     }
 
+    EXECUTION_SYMBOL_ALIASES = {
+        "GC-F": "XAUUSD",
+        "GC": "XAUUSD",
+        "XAU/USD": "XAUUSD",
+        "US100": "NQ",
+        "DJI": "US30",
+        "YM": "US30",
+    }
+
+    def _normalize_execution_symbol(self, symbol):
+        raw = str(symbol or "").strip().upper()
+        if not raw:
+            return raw
+        return self.EXECUTION_SYMBOL_ALIASES.get(raw, raw)
+
+    def _resolve_trade_identity(self, symbol, resolver_snapshot=None, market_data=None):
+        execution_symbol = self._normalize_execution_symbol(symbol)
+        alias_symbol = str(TRADING_SYMBOL_ALIASES.get(execution_symbol, execution_symbol)).upper()
+
+        resolved_contract = None
+        if isinstance(resolver_snapshot, dict):
+            resolved_contract = resolver_snapshot.get("active_symbol")
+        if not resolved_contract and isinstance(market_data, dict):
+            resolved_contract = market_data.get("futures_source")
+        resolved_contract = str(resolved_contract or "").upper() or alias_symbol
+
+        return {
+            "alias": alias_symbol,
+            "contract": resolved_contract,
+            "execution_symbol": execution_symbol,
+            "symbol_chain": f"{alias_symbol} -> {resolved_contract} -> {execution_symbol}",
+        }
+
+    def _validate_trade_identity(self, trade_identity, execution_signal=None):
+        identity = dict(trade_identity or {})
+        alias_symbol = str(identity.get("alias") or "").strip().upper()
+        contract_symbol = str(identity.get("contract") or "").strip().upper()
+        execution_symbol = str(identity.get("execution_symbol") or "").strip().upper()
+
+        if not alias_symbol:
+            return False, "Missing alias symbol"
+        if not contract_symbol:
+            return False, "Missing resolved contract"
+        if not execution_symbol:
+            return False, "Missing execution symbol"
+
+        # If alias and contract are still identical futures aliases, mapping is unresolved.
+        if alias_symbol.endswith(".FUT") and contract_symbol == alias_symbol:
+            return False, "Unresolved contract mapping"
+
+        if execution_signal is not None:
+            signal_symbol = str(execution_signal.get("symbol") or "").strip().upper()
+            if signal_symbol != execution_symbol:
+                return False, "Execution signal symbol mismatch"
+
+        return True, "OK"
+
     def __init__(self, symbols, prop_engine=None):
         self.symbols = symbols
         self.state = SystemState()
@@ -105,6 +171,70 @@ class MultiSymbolRunner:
         self.spot_fidelity_strict = bool(SPOT_FIDELITY_STRICT)
         self.spot_confirmation_max_bps = float(SPOT_CONFIRMATION_MAX_BPS)
         self.spot_tick_history = {str(symbol).upper(): deque(maxlen=600) for symbol in self.symbols}
+        # Persistent broker/spot tick history (SQLite, batch mode)
+        import sqlite3
+        import threading
+        self._tick_db_path = "data/broker_ticks.db"
+        self._tick_buffer = []
+        self._tick_buffer_lock = threading.Lock()
+        self._tick_buffer_flush_size = 50
+        self._tick_buffer_flush_interval = 2.0  # seconds
+        self._init_tick_db()
+        self._start_tick_buffer_flusher()
+
+    def _init_tick_db(self):
+        import os
+        os.makedirs("data", exist_ok=True)
+        import sqlite3
+        conn = sqlite3.connect(self._tick_db_path)
+        c = conn.cursor()
+        c.execute("""
+        CREATE TABLE IF NOT EXISTS broker_ticks (
+            id INTEGER PRIMARY KEY,
+            symbol TEXT,
+            time INTEGER,
+            price REAL,
+            source TEXT
+        )
+        """)
+        conn.commit()
+        conn.close()
+
+    def _persist_spot_tick(self, symbol, price, source, now=None):
+        # Buffer ticks for batch insert
+        if now is None:
+            import time
+            now = int(time.time())
+        tick = (str(symbol).upper(), now, float(price), str(source) if source else None)
+        with self._tick_buffer_lock:
+            self._tick_buffer.append(tick)
+            if len(self._tick_buffer) >= self._tick_buffer_flush_size:
+                self._flush_tick_buffer_locked()
+
+    def _flush_tick_buffer_locked(self):
+        import sqlite3
+        if not self._tick_buffer:
+            return
+        conn = sqlite3.connect(self._tick_db_path)
+        c = conn.cursor()
+        c.executemany(
+            "INSERT INTO broker_ticks (symbol, time, price, source) VALUES (?, ?, ?, ?)",
+            self._tick_buffer
+        )
+        conn.commit()
+        conn.close()
+        self._tick_buffer.clear()
+
+    def _start_tick_buffer_flusher(self):
+        import threading
+        import time
+        def flusher():
+            while True:
+                time.sleep(self._tick_buffer_flush_interval)
+                with self._tick_buffer_lock:
+                    self._flush_tick_buffer_locked()
+        t = threading.Thread(target=flusher, daemon=True, name="aq-tick-buffer-flusher")
+        t.start()
         self.broker_spot_cache = {}
         self.broker_spot_cache_lock = threading.Lock()
         self.broker_spot_refresh_pending = set()
@@ -283,7 +413,15 @@ class MultiSymbolRunner:
             unique.append(key)
         return unique
 
-    def resolve_active_feed_symbol(self, symbol, max_candidates=12, force_probe=False, max_probe_seconds=12.0):
+    def resolve_active_feed_symbol(
+        self,
+        symbol,
+        max_candidates=12,
+        force_probe=False,
+        max_probe_seconds=12.0,
+        probe_lookback_minutes=180,
+        probe_record_limit=400,
+    ):
         """
         Probe all possible contract months and fallback candidates for the symbol.
         Select the first contract that returns data, update resolver, and return it.
@@ -308,14 +446,23 @@ class MultiSymbolRunner:
         probe_start = time.monotonic()
         found = None
         attempted = []
+        bounded_probe_lookback = max(15, min(int(probe_lookback_minutes or 180), 360))
+        # Weekend/off-hours probes need broader lookback windows to avoid false UNRESOLVED states.
+        bounded_probe_lookback = max(15, min(int(probe_lookback_minutes or 180), 60 * 24 * 14))
+        try:
+            if datetime.now(timezone.utc).weekday() >= 5:
+                bounded_probe_lookback = max(bounded_probe_lookback, 60 * 24 * 7)
+        except Exception:
+            pass
+        bounded_probe_limit = max(40, min(int(probe_record_limit or 400), 1200))
         for candidate in candidates:
             if (time.monotonic() - probe_start) > float(max_probe_seconds):
                 break
             candles = self.feed.get_ohlcv(
                 dataset=dataset,
                 symbol=candidate,
-                lookback_minutes=180,
-                record_limit=400,
+                lookback_minutes=bounded_probe_lookback,
+                record_limit=bounded_probe_limit,
             )
             attempted.append(candidate)
             if candles:
@@ -326,14 +473,21 @@ class MultiSymbolRunner:
             self.contract_resolver.mark_unresolved(symbol, candidates_tried=attempted)
         return found or cached or preferred
 
-    def get_futures_candles(self, symbol, lookback_minutes=180, record_limit=1200, prefer_cached=True):
+    def get_futures_candles(
+        self,
+        symbol,
+        lookback_minutes=180,
+        record_limit=1200,
+        prefer_cached=True,
+        max_probe_seconds=12.0,
+    ):
         dataset = symbol_dataset(symbol)
         # Always probe all candidates for automation
         active = self.resolve_active_feed_symbol(
             symbol,
             force_probe=not prefer_cached,
             max_candidates=12,
-            max_probe_seconds=12.0,
+            max_probe_seconds=max(0.5, min(float(max_probe_seconds or 12.0), 20.0)),
         )
 
         bounded_lookback = max(60, min(int(lookback_minutes or 180), 60 * 24 * 3))
@@ -368,6 +522,8 @@ class MultiSymbolRunner:
                 force_probe=force_probe,
                 max_candidates=max(1, min(int(max_candidates or 2), 6)),
                 max_probe_seconds=max(0.5, min(float(max_probe_seconds or 2.0), 6.0)),
+                probe_lookback_minutes=60 * 24 * 7,
+                probe_record_limit=400,
             )
             warmed[symbol] = {
                 "active_symbol": active,
@@ -420,16 +576,38 @@ class MultiSymbolRunner:
     def _record_spot_tick(self, symbol, price, source):
         key = str(symbol).upper()
         series = self.spot_tick_history.setdefault(key, deque(maxlen=600))
+        import time
         now = int(time.time())
         series.append({
             "time": now,
             "price": float(price),
             "source": source,
         })
+        # Persist to SQLite for long-term memory
+        self._persist_spot_tick(symbol, price, source, now)
+    def load_persistent_spot_ticks(self, symbol, lookback_minutes=240):
+        """Load historical broker ticks from SQLite for a symbol."""
+        import sqlite3
+        import time
+        cutoff = int(time.time()) - (max(60, min(int(lookback_minutes or 240), 60 * 24 * 3)) * 60)
+        conn = sqlite3.connect(self._tick_db_path)
+        c = conn.cursor()
+        c.execute(
+            "SELECT time, price, source FROM broker_ticks WHERE symbol=? AND time>=? ORDER BY time ASC",
+            (str(symbol).upper(), cutoff)
+        )
+        rows = c.fetchall()
+        conn.close()
+        return [
+            {"time": t, "price": p, "source": s} for (t, p, s) in rows
+        ]
 
     def _spot_candles_from_ticks(self, symbol, lookback_minutes=240):
         key = str(symbol).upper()
-        ticks = list(self.spot_tick_history.get(key, []))
+        # Combine in-memory and persistent ticks
+        mem_ticks = list(self.spot_tick_history.get(key, []))
+        db_ticks = self.load_persistent_spot_ticks(key, lookback_minutes=lookback_minutes)
+        ticks = db_ticks + mem_ticks
         if not ticks:
             return []
 
@@ -868,7 +1046,14 @@ class MultiSymbolRunner:
             "smooth": guard.get("smooth"),
         }
 
-    def trade_quality_snapshot(self, symbol, market_data=None, basis_snapshot=None, basis_policy=None):
+    def trade_quality_snapshot(
+        self,
+        symbol,
+        market_data=None,
+        basis_snapshot=None,
+        basis_policy=None,
+        include_signal_candidates=True,
+    ):
         data = market_data or self.get_market_data(symbol) or {}
         basis = basis_snapshot or data.get("basis") or self.get_basis_snapshot(symbol)
         policy = basis_policy or self.basis_safety_policy(symbol, basis_snapshot=basis)
@@ -931,17 +1116,18 @@ class MultiSymbolRunner:
         grade = "A" if score >= 80 else ("B" if score >= 65 else ("C" if score >= 50 else "D"))
 
         signal_preview = []
-        try:
-            candidates = self.signal_manager.generate_signals(data, symbol) or []
-            for row in list(candidates)[:5]:
-                signal_preview.append({
-                    "model": str(row.get("model") or "UNKNOWN"),
-                    "direction": str(row.get("direction") or "").upper(),
-                    "confidence": float(row.get("confidence") or 0.0),
-                    "risk_percent": float(row.get("risk_percent") or 0.0),
-                })
-        except Exception:
-            signal_preview = []
+        if bool(include_signal_candidates):
+            try:
+                candidates = self.signal_manager.generate_signals(data, symbol) or []
+                for row in list(candidates)[:5]:
+                    signal_preview.append({
+                        "model": str(row.get("model") or "UNKNOWN"),
+                        "direction": str(row.get("direction") or "").upper(),
+                        "confidence": float(row.get("confidence") or 0.0),
+                        "risk_percent": float(row.get("risk_percent") or 0.0),
+                    })
+            except Exception:
+                signal_preview = []
 
         return {
             "symbol": symbol,
@@ -955,12 +1141,42 @@ class MultiSymbolRunner:
             "signal_candidates": signal_preview,
         }
 
-    def get_market_data(self, symbol):
+    def get_market_data(self, symbol, max_probe_seconds=12.0, realtime_fetch=True):
+        if not bool(realtime_fetch):
+            basis_snapshot = self.get_basis_snapshot(symbol)
+            return {
+                "candles": [],
+                "trend": "UNKNOWN",
+                "dataset": symbol_dataset(symbol),
+                "pricing_source": None,
+                "futures_source": self.SYMBOL_MAP.get(symbol, symbol),
+                "spot_source": None,
+                "spot_primary": str(symbol).upper() in self.spot_fidelity_symbols,
+                "spot_fidelity_strict": bool(self.spot_fidelity_strict and str(symbol).upper() in self.spot_fidelity_symbols),
+                "spot_confirmation_bps": None,
+                "spot_confirmation_max_bps": self.spot_confirmation_max_bps,
+                "spot_guard_block": False,
+                "spot_guard_reason": None,
+                "liquidity_sweep": False,
+                "absorption": False,
+                "absorption_levels": [],
+                "delta_positive": True,
+                "delta": 0.0,
+                "buy_volume": 0.0,
+                "sell_volume": 0.0,
+                "volatility_breakout": False,
+                "time_cycle_alignment": False,
+                "high_impact_news": False,
+                "volume_spike": False,
+                "basis": basis_snapshot,
+            }
+
         feed_symbol, candles = self.get_futures_candles(
             symbol,
             lookback_minutes=240,
             record_limit=2400,
             prefer_cached=True,
+            max_probe_seconds=max_probe_seconds,
         )
         dataset = symbol_dataset(symbol)
 
@@ -1565,11 +1781,13 @@ class MultiSymbolRunner:
         limit_check, limit_reason = self.risk.check_limits()
         if not limit_check:
             self._audit_event("RISK_VIOLATION", "RISK_LIMIT_BLOCK", {"symbol": symbol, "reason": limit_reason})
+            self.send_backend_alert("RISK_LIMIT_BLOCK", f"Risk limit violation for {symbol}: {limit_reason}")
             return {"status": "Blocked", "symbol": symbol, "reason": limit_reason}
 
         floor_check, floor_reason = self.prop.enforce_floor()
         if not floor_check:
             self._audit_event("RISK_VIOLATION", "PROP_FLOOR_BLOCK", {"symbol": symbol, "reason": floor_reason})
+            self.send_backend_alert("PROP_FLOOR_BLOCK", f"Prop floor violation for {symbol}: {floor_reason}")
             return {"status": "Blocked", "symbol": symbol, "reason": floor_reason}
 
         current_phase = self.prop_engine.phase if self.prop_engine else self.state.phase
@@ -1603,17 +1821,55 @@ class MultiSymbolRunner:
         planned_tp = intended_price + 50 if best.get("direction") == "BUY" else intended_price - 50
         planned_sl = intended_price - 50 if best.get("direction") == "BUY" else intended_price + 50
 
+        trade_identity = self._resolve_trade_identity(
+            symbol,
+            resolver_snapshot=resolver_snapshot,
+            market_data=market_data,
+        )
+        execution_symbol = trade_identity["execution_symbol"]
+
         execution_signal = {
             **best,
-            "symbol": symbol,
+            "symbol": execution_symbol,
             "entry_price": intended_price,
             "tp": planned_tp,
             "sl": planned_sl,
         }
 
+        identity_ok, identity_reason = self._validate_trade_identity(
+            trade_identity,
+            execution_signal=execution_signal,
+        )
+        if not identity_ok:
+            self._audit_event(
+                "RISK_VIOLATION",
+                "TRADE_IDENTITY_BLOCK",
+                {
+                    "symbol": symbol,
+                    "reason": identity_reason,
+                    "trade_identity": trade_identity,
+                },
+            )
+            self.send_backend_alert(
+                "TRADE_IDENTITY_BLOCK",
+                f"Trade blocked ({symbol}): {identity_reason}",
+                extra={
+                    "symbol_chain": trade_identity.get("symbol_chain"),
+                    "entry": intended_price,
+                    "sl": planned_sl,
+                    "tp": planned_tp,
+                },
+            )
+            return {
+                "status": "Blocked",
+                "symbol": execution_symbol,
+                "reason": identity_reason,
+                "trade_identity": trade_identity,
+            }
+
 
         # --- Broker price validation before execution ---
-        broker_quote = self.get_broker_spot_quote(symbol)
+        broker_quote = self.get_broker_spot_quote(execution_symbol)
         broker_price = broker_quote.get("price")
         broker_stale = broker_quote.get("stale", True)
         broker_cache_age = broker_quote.get("cache_age_seconds", 999)
@@ -1621,7 +1877,7 @@ class MultiSymbolRunner:
         if broker_price is None or broker_stale or broker_cache_age > 10:
             return {
                 "status": "Blocked",
-                "symbol": symbol,
+                "symbol": execution_symbol,
                 "reason": f"Broker price unavailable or stale (age={broker_cache_age:.1f}s)",
                 "broker_quote": broker_quote,
             }
@@ -1629,7 +1885,7 @@ class MultiSymbolRunner:
         if price_diff_bps > price_threshold_bps:
             return {
                 "status": "Blocked",
-                "symbol": symbol,
+                "symbol": execution_symbol,
                 "reason": f"Broker price deviation too high: {price_diff_bps:.2f}bps",
                 "intended_price": intended_price,
                 "broker_price": broker_price,
@@ -1656,6 +1912,10 @@ class MultiSymbolRunner:
             return {"status": "Blocked", "symbol": symbol, "reason": slippage_reason}
 
         trade["symbol"] = symbol
+        trade["alias"] = trade_identity["alias"]
+        trade["contract"] = trade_identity["contract"]
+        trade["execution_symbol"] = trade_identity["execution_symbol"]
+        trade["symbol_chain"] = trade_identity["symbol_chain"]
         trade["session"] = current_session
         trade["volatility"] = volatility_regime
         trade["volatility_mode"] = self.prop_engine.volatility_mode if self.prop_engine else "NORMAL"
@@ -1674,12 +1934,24 @@ class MultiSymbolRunner:
             "news_mode": mode_now,
             "cooldown_active": self.prop_engine.cooldown_active if self.prop_engine else False,
             "trading_enabled": self.prop_engine.can_trade() if self.prop_engine else True,
+            "trade_identity": trade_identity,
         }
         trade["basis"] = basis_snapshot
         trade["resolver"] = resolver_snapshot
         trade["basis_policy"] = basis_policy
         trade["prop_behavior"] = behavior_profile
         trade["clawbot"] = clawbot_state
+
+        self.send_backend_alert(
+            "TRADE_EXECUTED",
+            f"Trade Executed: {trade_identity.get('symbol_chain')}",
+            extra={
+                "entry": intended_price,
+                "sl": planned_sl,
+                "tp": planned_tp,
+                "direction": best.get("direction"),
+            },
+        )
 
         self.journal.log_trade(trade)
         self.positions.add_position(symbol, trade)

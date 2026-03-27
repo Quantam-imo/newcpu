@@ -4,21 +4,16 @@ const MENTOR_STATE_KEY = "aq_mentor_drawer_open";
 const MENTOR_WIDTH_KEY = "aq_mentor_drawer_width";
 const MENTOR_SECTIONS_KEY = "aq_mentor_sections";
 const MENTOR_COMPACT_KEY = "aq_mentor_compact_mode";
-const AQ_DEFAULT_MENTOR_API_ORIGIN = "http://127.0.0.1:8000";
 
 function mentorApiOrigins() {
     const existing = String(window.AQ_API_BASE || "").trim();
     if (existing) {
-        return [existing, "http://localhost:8000", "http://127.0.0.1:8000", "http://localhost:8001", "http://127.0.0.1:8001"];
+        return [existing, String(window.location.origin || "").trim()].filter(Boolean);
     }
     const origins = [];
     const uniqueOrigins = new Set();
     const baseOrigins = [
         String(window.location.origin || "").trim(),
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "http://localhost:8001",
-        "http://127.0.0.1:8001",
     ];
     for (const origin of baseOrigins) {
         if (origin && !uniqueOrigins.has(origin)) {
@@ -26,12 +21,11 @@ function mentorApiOrigins() {
             origins.push(origin);
         }
     }
-    return origins.length ? origins : ["http://127.0.0.1:8000", "http://127.0.0.1:8001"];
+    return origins.length ? origins : [String(window.location.origin || "").trim()].filter(Boolean);
 }
 
 const mentorFetch = async (path, options, timeoutMs = 25000) => {
     const startTime = performance.now();
-    const pathBase = path.split('?')[0];
     
     // Check cache first for GET requests using getCache from api.js if available
     if ((!options?.method || options?.method === "GET") && typeof getCache === "function") {
@@ -47,20 +41,20 @@ const mentorFetch = async (path, options, timeoutMs = 25000) => {
         }
     }
     
-    // Build comprehensive list of targets to try
+    // Build target list: relative first (same-origin), then absolute same-origin.
+    // Do NOT include hardcoded :8000 origins — they cause CORS blocks when the
+    // page is served from a different port (e.g. 8001).
     const targets = [];
-    
+
     // Always try relative URL first (same origin as page)
     targets.push(path);
-    
-    // Then try absolute URLs in priority order
+
     const uniqueOrigins = new Set();
     const baseOrigins = [
-        window.location.origin,              // Current page origin
-        "http://localhost:8000",              // Localhost
-        "http://127.0.0.1:8000",              // Loopback
-    ];
-    
+        String(window.AQ_API_BASE || window.location.origin || "").trim(),
+        String(window.location.origin || "").trim(),
+    ].filter(Boolean);
+
     for (const origin of baseOrigins) {
         const trimmed = String(origin || "").trim();
         if (trimmed && !uniqueOrigins.has(trimmed)) {
@@ -94,8 +88,8 @@ const mentorFetch = async (path, options, timeoutMs = 25000) => {
                 // Cache successful JSON responses
                 try {
                     const jsonData = await response.clone().json();
-                    if (CACHE_CONFIG[pathBase]) {
-                        cacheResponse(path, jsonData);
+                    if ((!options?.method || options?.method === "GET") && typeof setCache === "function") {
+                        setCache(path, jsonData);
                     }
                 } catch (_) {}
                 
@@ -122,8 +116,10 @@ let mentorRequestSerial = 0;
 let mentorLastRenderSignature = "";
 
 function selectedMentorSymbol() {
+    const input = document.getElementById("chartSymbolInput");
+    if (input && input.value) return input.value;
     const select = document.getElementById("chartSymbol");
-    return select ? select.value : "XAUUSD";
+    return select && select.value ? select.value : "XAUUSD";
 }
 
 function setMentorMeta(text) {
@@ -677,7 +673,7 @@ function initMentorDrawer() {
     const drawer = document.getElementById("mentorDrawer");
     const refreshBtn = document.getElementById("mentorRefreshBtn");
     const compactBtn = document.getElementById("mentorCompactBtn");
-    const symbolSelect = document.getElementById("chartSymbol");
+    const symbolSelect = document.getElementById("chartSymbolInput") || document.getElementById("chartSymbol");
     if (!drawer) return;
 
     const savedOpen = localStorage.getItem(MENTOR_STATE_KEY) === "1";

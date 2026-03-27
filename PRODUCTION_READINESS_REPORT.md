@@ -33,14 +33,26 @@ Latest Verification Update: 2026-03-07 (crash/halt hardening validated under rec
 - Frontend status endpoint: reachable
 
 ### Execution readiness
-- `/status/execution` reports:
-  - `connected: false` (current CDP URL host no longer resolves)
-  - `execution_status: DISCONNECTED` (stable, non-halting)
-  - `order_panel.ready: false` until browser attach restored
-  - `selector_profile.calibrated: true`
+- `preflight_strict.sh`: passing
+- `/status/execution` is sufficient for supervised live testing when strict preflight is green
+- Reconnect and recovery routes are restored in the active backend
+- Playwright CDP attach now prefers the Maven trade tab instead of an arbitrary first page
+
+### Broker bridge readiness
+- `/status/broker_bridge` is the unattended production gate source of truth
+- Current known blocking state:
+  - `same_browser_mode: true`
+  - `debugger_reachable: true`
+  - `broker_tab_title: Just a moment...`
+  - `challenge_detected: true`
+  - `challenge_reason: cloudflare_challenge`
+  - `order_panel.ready: false`
+  - `quote: null`
+- Result: supervised live testing is viable, unattended launch is not yet viable
 
 ### Reconnect/recovery path
 - Reconnect endpoint is now blocking by default (safer than async mode for Playwright Sync API)
+- Recovery endpoint actively attempts reconnect and selector recovery
 - Repeated reconnect failures no longer self-halt execution via quote polling
 - Recovery path remains available and clears historical halt state
 
@@ -51,7 +63,12 @@ Latest Verification Update: 2026-03-07 (crash/halt hardening validated under rec
 
 ## 3) Pending Items Before Production
 
-1. Controlled live micro-lot validation (optional but recommended)
+1. Broker challenge clearance in the remote-debug Chrome session
+  - The Maven tab must no longer show `Just a moment...`
+  - `/status/broker_bridge` must report `challenge_detected: false`
+  - `preflight_unattended.sh` must return `UNATTENDED PREFLIGHT: READY`
+
+2. Controlled live micro-lot validation (optional but recommended)
   - Dry-run BUY/SELL checks pass with `execute=false`
   - Explicit confirm-token live submit reached `result.status=EXECUTED` in manual-relaxed mode when CDP was healthy, with:
     - `confirm_clicked: true` (confirm selector handled)
@@ -59,15 +76,15 @@ Latest Verification Update: 2026-03-07 (crash/halt hardening validated under rec
     - position row detected from open positions widget
   - Symbol-lock enforcement is now implemented: mismatched symbols are rejected before submit
 
-2. Mentor data realism validation
+3. Mentor data realism validation
 	- Verify non-placeholder market values in `/mentor` and UI
 	- Confirm data source mapping is stable under live feed
 
-3. Working tree hygiene and release packaging
+4. Working tree hygiene and release packaging
 	- Separate runtime artifacts from source changes
 	- Exclude transient files (`browser_session`, `__pycache__`, runtime data) from release scope
 
-4. Final regression sweep
+5. Final regression sweep
 	- Ops UI status fields
 	- Mentor drawer render path (`/mentor/context` + `/mentor` fallback)
 	- Reconnect button flow
@@ -89,6 +106,7 @@ Latest Verification Update: 2026-03-07 (crash/halt hardening validated under rec
 
 ## 5) Immediate Critical Blocker
 
-- Previous blocker resolved: CDP attach now reaches live trade DOM and panel selectors are visible.
-- Remaining production steps are external CDP endpoint refresh, mentor data realism verification under live feed, and release hygiene.
+- Immediate blocker: broker-side challenge page in the Maven tab prevents unattended execution readiness.
+- Technical paths are now hardened enough to report and gate this condition correctly.
+- Remaining production steps are: clear broker challenge, confirm unattended preflight, verify mentor data realism, and complete release hygiene.
 

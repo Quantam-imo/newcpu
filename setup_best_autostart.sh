@@ -16,7 +16,7 @@ sudo cp astroquant_livesync.service /etc/systemd/system/
 sudo systemctl daemon-reload
 
 sudo systemctl enable astroquant_tradingbot.service
-sudo systemctl enable chrome_remote_debug.service
+sudo systemctl disable chrome_remote_debug.service 2>/dev/null || true
 sudo systemctl enable cloudflared_tunnel.service
 sudo systemctl enable astroquant_orchestrator.service
 sudo systemctl enable astroquant_celery.service
@@ -26,3 +26,4 @@ sudo systemctl enable astroquant_livesync.service
 
 echo "All AstroQuant services registered and enabled for autostart."
 echo "On next CPU boot, the full stack will launch automatically."
+echo "Broker Chrome autostart is disabled (manual launch only)."

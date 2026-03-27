@@ -8,6 +8,7 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from astroquant.backend.admin_control_store import AdminControlStore
+from astroquant.backend.governance.dynamic_prop_engine import DynamicPropEngine
 
 
 ROLE_ORDER = {
@@ -80,6 +81,32 @@ class EmergencyAutoTradingRequest(BaseModel):
 class ChallengeBootstrapRequest(BaseModel):
 	account_size: float = Field(default=50000.0)
 	strict_mode: bool = Field(default=True)
+
+
+class DynamicPropEngineConfigureRequest(BaseModel):
+	active_accounts: list[str] = Field(default_factory=list)
+	primary_account: str = Field(default="50K")
+	mode_map: dict = Field(default_factory=dict)
+	default_mode: str = Field(default="STANDARD")
+
+
+dynamic_prop_engine = DynamicPropEngine()
+
+
+@router.get("/prop_engine/state")
+def prop_engine_state():
+	return {"state": dynamic_prop_engine.snapshot()}
+
+
+@router.post("/prop_engine/configure")
+def prop_engine_configure(data: DynamicPropEngineConfigureRequest):
+	dynamic_prop_engine.configure(
+		active_accounts=data.active_accounts,
+		primary_account=data.primary_account,
+		mode_map=data.mode_map,
+		default_mode=data.default_mode,
+	)
+	return {"status": "ok", "state": dynamic_prop_engine.snapshot()}
 
 
 def build_admin_router(runner, prop_engine, admin_token: str, default_role: str = "ADMIN"):

@@ -15,10 +15,20 @@ class DummyRiskManager:
         # Dummy implementation
         return 1.0
 
-class DummyExecutionManager:
-    def execute_trade(self, signal, lot_size):
-        # Dummy implementation
-        return {"signal": signal, "lot_size": lot_size, "status": "executed"}
+
+# --- Playwright/Execution Imports ---
+from astroquant.execution.playwright_engine import PlaywrightExecution
+from astroquant.execution.safe_trade import safe_trade
+from astroquant.execution.position_detector import PositionDetector
+from astroquant.execution.sl_tp_manager import SLTPManager
+from astroquant.core.sl_tp_calculator import calculate_sl_tp
+
+class StateManager:
+    def __init__(self):
+        self.position = None
+
+def dummy_logger(msg):
+    print(f"[EXECUTION LOG] {msg}")
 
 
 
@@ -26,7 +36,7 @@ class DummyExecutionManager:
 from astroquant.engine.candle.candle_reader import get_latest_candle
 
 class SignalOrchestrator:
-    def __init__(self):
+    def __init__(self, page=None):
         self.engine_manager = EngineManager()
         self.engine_manager.load_engines()
         self.engine_names = self.engine_manager.get_engine_names() if hasattr(self.engine_manager, 'get_engine_names') else ["ICT", "Gann", "Astro"]
@@ -34,7 +44,12 @@ class SignalOrchestrator:
         self.regime = MarketRegimeEngine()
         self.trade_filter = PropSafeTradeFilter()
         self.risk_manager = DummyRiskManager()
-        self.execution = DummyExecutionManager()
+        # --- Execution system ---
+        self.page = page  # Playwright page object (should be set externally)
+        self.state_manager = StateManager()
+        self.position_detector = PositionDetector(self.page, dummy_logger) if self.page else None
+        self.exec_engine = PlaywrightExecution(self.page, self.state_manager, dummy_logger) if self.page else None
+        self.sl_tp_manager = SLTPManager(self.page, dummy_logger) if self.page else None
 
     def get_market_data(self):
         symbol = "GC.FUT"
@@ -60,21 +75,18 @@ class SignalOrchestrator:
             return
         # Run all engines and collect signals as a dict
         engine_results = await self.engine_manager.run_engines(market_data)
-        # engine_results should be a dict {engine_name: signal or None}
         if isinstance(engine_results, list):
-            # fallback for legacy: map to engine names
             engine_results = {name: res for name, res in zip(self.engine_names, engine_results)}
         signals = {k: v for k, v in engine_results.items() if v}
         if not signals:
             print("No signals")
             return
-        # Use strategy brain to select best signal
         best_signal, best_engine, weights = self.strategy_brain.decide(signals)
         print(f"[STRATEGY BRAIN] Weights: {weights}")
         if not best_signal:
             print("No valid strategy decision")
             return
-        regime = self.regime  # .detect(market_data.get("volatility", 0), market_data.get("trend_strength", 0))
+        regime = self.regime
         print("Market regime:", regime)
         approved, reason = self.trade_filter.is_trade_allowed(
             best_signal.get("entry", market_data["price"]),
@@ -92,11 +104,35 @@ class SignalOrchestrator:
             entry=best_signal.get("entry", market_data["price"]),
             stop_loss=best_signal.get("stop_loss", market_data["price"] - 5)
         )
-        order = self.execution.execute_trade(best_signal, lot_size)
-        print(f"Trade executed by {best_engine}: {order}")
-        # Example: update performance (dummy, should be based on real PnL)
+
+        # --- Position Detection & State Sync ---
+        if self.position_detector:
+            current_position = self.position_detector.detect_position()
+            self.state_manager.position = current_position
+            if current_position is not None:
+                print("ALREADY IN TRADE (UI detected)")
+                return "ALREADY IN TRADE"
+
+        # --- Trade Execution ---
+        direction = best_signal.get("direction", "BUY")
+        entry_price = best_signal.get("entry", market_data["price"])
+        result = None
+        if self.exec_engine:
+            result = safe_trade(self.exec_engine, direction, lot_size)
+        else:
+            print("[WARN] No execution engine attached!")
+            return
+
+        # --- SL/TP Calculation & Automation ---
+        if result == "SUCCESS" and self.sl_tp_manager:
+            sl_price, tp_price = calculate_sl_tp(entry_price, direction)
+            sl_tp_applied = self.sl_tp_manager.set_sl_tp(sl_price, tp_price)
+            if sl_tp_applied != "SUCCESS":
+                print("[CRITICAL] SL/TP not applied, closing trade!")
+                # Optionally: self.exec_engine.close_trade()  # Implement as needed
+
+        print(f"Trade executed by {best_engine}: {result}")
         self.strategy_brain.update_performance(best_engine, 1)
-        # self.trade_filter.register_trade()  # Add if you implement trade registration
 
     async def run(self):
         while True:

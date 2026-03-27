@@ -1,6 +1,6 @@
 # AstroQuant Production Deployment - Complete Package
 
-**Status:** ✅ Ready for Live Trading Deployment  
+**Status:** ✅ Ready for supervised live trading deployment; unattended launch remains gated on broker bridge readiness  
 **Generated:** March 11, 2026  
 **Target:** Full Live Trading Setup with Error Handling & Performance Optimization
 
@@ -75,7 +75,12 @@ nano .env  # or use your editor
 # Run strict launch gate (must pass)
 ./preflight_strict.sh
 
-# Expected output: "✓ All critical tests passed!" 
+# Run unattended launch gate (required for automation)
+./preflight_unattended.sh
+
+# Expected output:
+# - strict gate passes for supervised live testing
+# - unattended gate passes only when broker bridge is challenge-free and panel/quote is live
 # If issues: Follow remediation steps shown
 ```
 
@@ -83,6 +88,12 @@ nano .env  # or use your editor
 - `DATABENTO_API_KEY` is present and non-placeholder
 - CDP endpoint is configured and reachable via `/json/version`
 - `/status/execution` indicates live execution connectivity
+
+`preflight_unattended.sh` additionally requires all of these:
+- `/status/broker_bridge` is reachable
+- broker and dashboard tabs are in the same remote-debug Chrome session
+- broker tab is not on a challenge page such as `Just a moment...`
+- order panel or live broker quote is available
 
 ### 4. Start Backend (1 minute)
 
@@ -117,6 +128,8 @@ Follow the **"Testing Phase"** section in LIVE_TRADING_CHECKLIST.md:
 ### 7. Go Live! 🚀
 
 Once all tests pass, follow **"Live Trading Start Procedure"** in checklist.
+
+For unattended launch, do not proceed until `preflight_unattended.sh` returns `UNATTENDED PREFLIGHT: READY`.
 
 ---
 
@@ -369,7 +382,7 @@ The system will run but:
                    ▼
             All Tests Pass?
                │
-               ├─ YES → Ready for Live Trading 🚀
+               ├─ YES → Ready for supervised live trading
                │
                └─ NO → Fix Issues, Re-test
                        (See Troubleshooting sec)

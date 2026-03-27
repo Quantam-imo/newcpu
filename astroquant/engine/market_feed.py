@@ -2,6 +2,7 @@ import databento as db
 import datetime
 import time
 import re
+import os
 import threading
 from collections import defaultdict
 
@@ -86,21 +87,30 @@ class MarketFeed:
 
     def _extract_available_end(self, error_text):
         text = str(error_text or "")
-        if "data_end_after_available_end" not in text:
+        if (
+            "data_end_after_available_end" not in text
+            and "data_start_after_available_end" not in text
+        ):
             return None
-        match = re.search(r"available up to '([^']+)'", text)
-        if not match:
-            return None
-        raw_ts = str(match.group(1)).strip()
-        try:
-            normalized = raw_ts.replace(" ", "T")
-            if normalized.endswith("+00:00"):
+        patterns = [
+            r"available up to '([^']+)'",
+            r"available end of dataset [^']+\('([^']+)'\)",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text)
+            if not match:
+                continue
+            raw_ts = str(match.group(1)).strip()
+            try:
+                normalized = raw_ts.replace(" ", "T")
+                if normalized.endswith("+00:00"):
+                    return datetime.datetime.fromisoformat(normalized)
+                if normalized.endswith("Z"):
+                    return datetime.datetime.fromisoformat(normalized.replace("Z", "+00:00"))
                 return datetime.datetime.fromisoformat(normalized)
-            if normalized.endswith("Z"):
-                return datetime.datetime.fromisoformat(normalized.replace("Z", "+00:00"))
-            return datetime.datetime.fromisoformat(normalized)
-        except Exception:
-            return None
+            except Exception:
+                continue
+        return None
 
     def _row_time_seconds(self, row):
         raw = getattr(row, "ts_event", None)
@@ -386,12 +396,14 @@ class MarketFeed:
         bounded_lookback = max(10, min(int(lookback_minutes or 60), 60 * 24 * 14))
         start = end - datetime.timedelta(minutes=bounded_lookback)
 
+        symbol_text = str(symbol or "").strip()
+        symbol_lower = symbol_text.lower()
         candidate_stypes = []
         if stype_in:
             candidate_stypes = [stype_in]
-        elif symbol.endswith(".FUT"):
+        elif symbol_lower.endswith(".fut"):
             candidate_stypes = ["parent", "continuous", "raw_symbol"]
-        elif ".c." in symbol:
+        elif ".c." in symbol_lower:
             candidate_stypes = ["continuous", "parent", "raw_symbol"]
         else:
             candidate_stypes = ["raw_symbol", "parent"]
@@ -400,9 +412,12 @@ class MarketFeed:
         if record_limit is not None:
             bounded_record_limit = max(100, min(int(record_limit), 10000))
 
+        enable_live_stream = str(os.getenv("DATABENTO_ENABLE_LIVE_STREAM", "false")).strip().lower() in {"1", "true", "yes", "on"}
+
         last_exc = None
         for candidate_stype in candidate_stypes:
-            self.ensure_live_subscription_async(dataset=dataset, symbol=symbol, stype_in=candidate_stype)
+            if enable_live_stream:
+                self.ensure_live_subscription_async(dataset=dataset, symbol=symbol, stype_in=candidate_stype)
             current_end = end
             current_start = start
             try:
@@ -488,6 +503,47 @@ class MarketFeed:
                         return retry_candles
                     except Exception as retry_error:
                         last_exc = retry_error
+
+        # Historical fallback: if ohlcv-1m is unavailable, use final engine fallback
+        # and normalize to the feed candle shape expected by callers.
+        if last_exc is None:
+            try:
+                from astroquant.backend.services.databento_utility import fetch_candles_unified
+
+                fallback_limit = int(bounded_record_limit or 400)
+                fallback_limit = max(100, min(fallback_limit, 4000))
+                fallback_minutes = max(60, min(int(bounded_lookback or 60), 60 * 24 * 14))
+                candles, _meta = fetch_candles_unified(
+                    symbol=str(symbol or ""),
+                    limit=fallback_limit,
+                    minutes=fallback_minutes,
+                )
+                normalized = []
+                for row in list(candles or []):
+                    ts = row.get("time") or row.get("timestamp")
+                    epoch = int(time.time())
+                    if isinstance(ts, (int, float)):
+                        epoch = int(ts)
+                    elif isinstance(ts, str) and ts:
+                        try:
+                            epoch = int(datetime.datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp())
+                        except Exception:
+                            epoch = int(time.time())
+                    normalized.append(
+                        {
+                            "time": epoch,
+                            "open": float(row.get("open", 0.0) or 0.0),
+                            "high": float(row.get("high", 0.0) or 0.0),
+                            "low": float(row.get("low", 0.0) or 0.0),
+                            "close": float(row.get("close", 0.0) or 0.0),
+                            "volume": float(row.get("volume", 0.0) or 0.0),
+                        }
+                    )
+                if normalized:
+                    self.last_error = None
+                    return normalized
+            except Exception as fallback_exc:
+                last_exc = fallback_exc
 
         self.last_error = str(last_exc) if last_exc else None
         return []

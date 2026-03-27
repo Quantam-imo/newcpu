@@ -5,3 +5,4 @@ requests
 pydantic
 databento
 playwright
+git+https://github.com/astrorigin/pyswisseph.git
