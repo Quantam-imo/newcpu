@@ -17,6 +17,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Run secret scan
+        run: |
+          chmod +x ./secret_scan.sh
+          ./secret_scan.sh
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
