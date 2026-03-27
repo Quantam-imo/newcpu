@@ -133,7 +133,12 @@ app.include_router(router_spread_offset)
 app.include_router(router_export)
 app.include_router(router_gann_ws)
 
+logging.info(
+    "Core routers mounted: market,status,admin,websocket,model_weights,spread_offset,export,gann_ws"
+)
+
 runner = get_runner()
+admin_control_enabled = False
 try:
     if getattr(runner, "prop_engine", None) is None:
         runner.prop_engine = PropGovernance(
@@ -147,34 +152,21 @@ try:
     secure_admin_token = str(ADMIN_API_TOKEN or "").strip()
     if secure_admin_token and secure_admin_token != "dev-admin-token":
         app.include_router(router_admin.build_admin_router(runner, runner.prop_engine, secure_admin_token))
+        admin_control_enabled = True
 except Exception:
     logging.exception("Admin router setup failed; admin control routes may be unavailable")
-
-# --- Mentor Endpoints (ported from legacy) ---
-import types
-import sys
-from fastapi import Request
-
-# Dynamically load legacy mentor logic
-MENTOR_LEGACY_PATH = BASE_DIR / "astroquant" / "backend" / "main.py.legacy.bak"
-if MENTOR_LEGACY_PATH.exists():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("mentor_legacy", str(MENTOR_LEGACY_PATH))
-    mentor_legacy = importlib.util.module_from_spec(spec)
-    sys.modules["mentor_legacy"] = mentor_legacy
-    spec.loader.exec_module(mentor_legacy)
-else:
-    mentor_legacy = None
-
-
-
-# --- Mentor Endpoints (direct implementation, using APIRouter) ---
-from fastapi import APIRouter
-from astroquant.backend.ai.mentor_engine import MentorEngine
 
 # Register only the external mentor router
 from astroquant.backend import router_mentor
 app.include_router(router_mentor.router)
+
+posture = _security_posture()
+logging.info(
+    "Startup security posture: env=%s admin_control_routes_enabled=%s production_ready=%s",
+    posture.get("environment"),
+    admin_control_enabled,
+    posture.get("production_ready"),
+)
 
 @app.get("/status/feed")
 def feed_status():
