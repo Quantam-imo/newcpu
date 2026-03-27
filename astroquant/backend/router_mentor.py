@@ -3,22 +3,10 @@ from fastapi import APIRouter
 from astroquant.backend.ai.mentor_engine import MentorEngine
 from functools import lru_cache
 import time
-# Ensure .env variables are loaded and Databento API key is set in os.environ
+# Ensure .env variables are loaded through standard dotenv resolution.
 try:
     from dotenv import load_dotenv
     load_dotenv()
-    import os
-    import pathlib
-    env_path = pathlib.Path(__file__).parent.parent.parent / '.env'
-    if env_path.exists():
-        with open(env_path) as f:
-            for line in f:
-                if line.startswith('DATABENTO_API_KEY='):
-                    key = line.strip().split('=', 1)[1]
-                    os.environ['DATABENTO_API_KEY'] = key
-                if line.startswith('DATABENTO_DATASET='):
-                    dataset = line.strip().split('=', 1)[1]
-                    os.environ['DATABENTO_DATASET'] = dataset
 except ImportError:
     pass
 
