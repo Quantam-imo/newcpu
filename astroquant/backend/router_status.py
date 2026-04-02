@@ -346,6 +346,7 @@ def get_system_health():
 import asyncio
 import json
 import threading
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
@@ -393,6 +394,50 @@ def _fetch_debug_json(base_url: str, path: str):
 	with urlopen(url, timeout=2.5) as resp:
 		payload = resp.read().decode("utf-8")
 		return json.loads(payload)
+
+
+def _news_snapshot(limit: int = 5) -> dict[str, Any]:
+	runner = get_runner()
+	now = datetime.now(timezone.utc)
+	halt_active = bool(getattr(runner.state, "news_halt", False))
+	items: list[dict[str, Any]] = []
+
+	try:
+		news_engine = getattr(getattr(runner, "governance", None), "news", None)
+		if news_engine is None:
+			return {"news_halt": halt_active, "next_news": []}
+
+		last_fetch = getattr(news_engine, "last_fetch", None)
+		if last_fetch is None or (now - last_fetch).total_seconds() > 600:
+			try:
+				news_engine.fetch_news()
+			except Exception:
+				pass
+
+		events = list(getattr(news_engine, "events", []) or [])
+		future_events = [e for e in events if e.get("time") and e.get("time") >= now]
+		future_events.sort(key=lambda e: e.get("time"))
+
+		for event in future_events[: max(1, int(limit or 5))]:
+			event_time = event.get("time")
+			try:
+				minutes_to_event = round((event_time - now).total_seconds() / 60.0, 1)
+			except Exception:
+				minutes_to_event = None
+
+			items.append(
+				{
+					"title": str(event.get("title") or ""),
+					"currency": str(event.get("currency") or ""),
+					"impact": str(event.get("impact") or ""),
+					"time_utc": event_time.isoformat() if hasattr(event_time, "isoformat") else None,
+					"minutes_to_event": minutes_to_event,
+				}
+			)
+	except Exception:
+		return {"news_halt": halt_active, "next_news": []}
+
+	return {"news_halt": halt_active, "next_news": items}
 
 
 # Real status endpoint with Playwright broker health
@@ -448,16 +493,59 @@ async def get_status() -> Any:
 			"broker": None
 		}
 
+	news_view = _news_snapshot(limit=5)
+
 	return {
 		"balance": 50000,
 		"phase": "PHASE1",
 		"daily_loss": 0.0,
-		"news_halt": False,
-		"next_news": [],
+		"news_halt": bool(news_view.get("news_halt", False)),
+		"next_news": list(news_view.get("next_news", [])),
 		"system_health": system_health,
 		"broker_status": broker_status,
 		"connected_broker": broker_status["connected"],
 	}
+
+
+@router.get("/news")
+async def get_news(limit: int = Query(10, ge=1, le=100)) -> Any:
+	view = _news_snapshot(limit=limit)
+	return {
+		"news_halt": bool(view.get("news_halt", False)),
+		"events": list(view.get("next_news", [])),
+		"count": len(list(view.get("next_news", []))),
+	}
+
+
+@router.get("/news/upcoming")
+async def get_news_upcoming(limit: int = Query(10, ge=1, le=100)) -> Any:
+	view = _news_snapshot(limit=limit)
+	return {
+		"upcoming": list(view.get("next_news", [])),
+		"count": len(list(view.get("next_news", []))),
+	}
+
+
+@router.get("/clawbot/status")
+async def get_clawbot_status() -> Any:
+	runner = get_runner()
+	if not hasattr(runner, "clawbot_status"):
+		return {"active": False, "mode": "UNKNOWN", "risk_multiplier": 1.0, "reason": "Clawbot unavailable"}
+	try:
+		snapshot = runner.clawbot_status() or {}
+		return {
+			"active": True,
+			"mode": str(snapshot.get("mode") or "CLEAR"),
+			"risk_multiplier": float(snapshot.get("risk_multiplier", 1.0) or 1.0),
+			"reason": str(snapshot.get("reason") or ""),
+		}
+	except Exception as exc:
+		return {
+			"active": False,
+			"mode": "ERROR",
+			"risk_multiplier": 1.0,
+			"reason": f"Clawbot status error: {exc}",
+		}
 
 
 def _execution_status_payload() -> dict[str, Any]:
