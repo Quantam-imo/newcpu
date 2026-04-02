@@ -42,6 +42,25 @@ install_shell_fallback_hook() {
   echo "Shell fallback hook installed: $HOME/.bashrc, $HOME/.profile"
 }
 
+install_cron_reboot_fallback() {
+  local bootstrap_script="$WORKSPACE/non_systemd_autostart_bootstrap.sh"
+  [ -f "$bootstrap_script" ] && chmod +x "$bootstrap_script" || true
+
+  if ! command -v crontab >/dev/null 2>&1; then
+    echo "Cron fallback skipped: crontab not available"
+    return 0
+  fi
+
+  local tmp_cron
+  tmp_cron=$(mktemp)
+  # Remove older AstroQuant reboot entries before adding the canonical one.
+  crontab -l 2>/dev/null | grep -v "astroquant reboot bootstrap" | grep -v "npvps_auto_start.sh" > "$tmp_cron" || true
+  echo "@reboot cd $WORKSPACE && /bin/bash $bootstrap_script >> $WORKSPACE/data/logs/reboot_autostart.log 2>&1 # astroquant reboot bootstrap" >> "$tmp_cron"
+  crontab "$tmp_cron"
+  rm -f "$tmp_cron"
+  echo "Cron reboot fallback installed: @reboot -> $bootstrap_script"
+}
+
 enable_service_link() {
   local service_name="$1"
   sudo mkdir -p /etc/systemd/system/multi-user.target.wants
@@ -57,11 +76,13 @@ if [ "$(ps -p 1 -o comm= 2>/dev/null)" = "systemd" ]; then
   echo "Detected: systemd active"
   echo "Applying: systemd services autostart"
   sudo bash "$WORKSPACE/setup_best_autostart.sh"
+  install_cron_reboot_fallback
   echo ""
   echo "Autostart status (systemd):"
   sudo systemctl is-enabled astroquant_tradingbot.service || true
   sudo systemctl is-enabled cloudflared_tunnel.service || true
   sudo systemctl is-enabled novpn_connector.service || true
+  crontab -l 2>/dev/null | grep "astroquant reboot bootstrap" || true
   echo ""
   echo "Result: On CPU reboot, project + remote connectors will auto-start."
   exit 0
@@ -85,7 +106,9 @@ if [ -d /etc/systemd/system ] && command -v sudo >/dev/null 2>&1; then
   echo "Autostart status (offline systemd files):"
   ls -l /etc/systemd/system/astroquant_tradingbot.service || true
   ls -l /etc/systemd/system/multi-user.target.wants/astroquant_tradingbot.service || true
+  install_cron_reboot_fallback
   install_shell_fallback_hook
+  crontab -l 2>/dev/null | grep "astroquant reboot bootstrap" || true
   echo ""
   echo "Result: boot units are pre-enabled; on a real systemd host reboot they auto-start."
   echo "Result: in this non-systemd runtime, AstroQuant auto-starts at terminal/login open."
@@ -96,16 +119,11 @@ fi
 if command -v crontab >/dev/null 2>&1; then
   echo "Detected: no active systemd"
   echo "Applying: cron @reboot fallback"
-
-  TMP_CRON=$(mktemp)
-  crontab -l 2>/dev/null | grep -v "npvps_auto_start.sh" > "$TMP_CRON" || true
-  echo "@reboot cd $WORKSPACE && /bin/bash $WORKSPACE/npvps_auto_start.sh >> $WORKSPACE/data/logs/reboot_autostart.log 2>&1" >> "$TMP_CRON"
-  crontab "$TMP_CRON"
-  rm -f "$TMP_CRON"
+  install_cron_reboot_fallback
 
   echo ""
   echo "Autostart status (cron):"
-  crontab -l | grep "npvps_auto_start.sh" || true
+  crontab -l | grep "astroquant reboot bootstrap" || true
   echo ""
   echo "Result: On CPU reboot, project + remote connectors will auto-start."
   exit 0

@@ -29,12 +29,15 @@ echo "[1/7] Installing system packages..."
 sudo apt-get update -qq 2>/dev/null
 sudo apt-get install -y -qq \
     python3 python3-pip python3-venv \
-    redis-server git curl wget unzip \
+    redis-server git curl wget unzip cron \
     build-essential libssl-dev libffi-dev \
     libpq-dev libjpeg-dev zlib1g-dev \
     xvfb x11vnc x11-utils \
     2>/dev/null
 echo "  [OK] System packages installed"
+
+# Ensure cron service is enabled where systemd is active.
+sudo systemctl enable cron 2>/dev/null || true
 
 # ── 2. Google Chrome ────────────────────────────────────────
 echo "[2/7] Checking Google Chrome..."
