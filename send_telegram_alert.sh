@@ -14,6 +14,7 @@ LOG_DIR="$DATA_DIR/logs"
 ENV_FILE="$WORKSPACE/.env"
 LOG_FILE="$LOG_DIR/telegram_alert.log"
 LAST_HASH_FILE="$DATA_DIR/last_telegram_alert.hash"
+LOCK_DIR="/tmp/astroquant_telegram_alert.lock"
 
 mkdir -p "$LOG_DIR" "$DATA_DIR"
 
@@ -60,6 +61,13 @@ Remote desktop: ${NOVNC_URL}
 EOF
 )
 PAYLOAD_HASH=$(printf '%s' "$DEDUP_BASIS" | sha256sum | awk '{print $1}')
+
+# Prevent concurrent send races from emitting duplicate alerts.
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  echo "[$(date)] Telegram alert skipped: lock busy" >> "$LOG_FILE"
+  exit 0
+fi
+trap 'rmdir "$LOCK_DIR" >/dev/null 2>&1 || true' EXIT
 
 if [ "${FORCE_ALERT:-0}" != "1" ] && [ -f "$LAST_HASH_FILE" ] && [ "$(cat "$LAST_HASH_FILE" 2>/dev/null)" = "$PAYLOAD_HASH" ]; then
   echo "[$(date)] Telegram alert skipped: unchanged payload" >> "$LOG_FILE"

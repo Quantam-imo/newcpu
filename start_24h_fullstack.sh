@@ -127,7 +127,7 @@ fi
 # Step 3: Orchestrator
 log BLUE "Starting multi-symbol orchestrator..."
 # Enforce singleton orchestrator across repeated boots/recovery runs.
-pkill -f "python start_astroquant.py" 2>/dev/null || true
+pkill -f "start_astroquant.py" 2>/dev/null || true
 sleep 1
 nohup python start_astroquant.py > "$LOG_DIR/orchestrator.log" 2>&1 &
 ORCH_PID=$!
@@ -311,9 +311,19 @@ while true; do
   fi
   
   # Check Orchestrator
-  if ! kill -0 $(cat "$LOG_DIR/orchestrator.pid" 2>/dev/null) 2>/dev/null; then
+  ORCH_PIDS="$(pgrep -f "start_astroquant.py" || true)"
+  ORCH_COUNT="$(printf "%s\n" "$ORCH_PIDS" | sed '/^$/d' | wc -l)"
+  if [ "$ORCH_COUNT" -gt 1 ]; then
+    log RED "✗ Orchestrator duplicate instances detected ($ORCH_COUNT). Restarting singleton..."
+    pkill -f "start_astroquant.py" 2>/dev/null || true
+    sleep 1
+    nohup python start_astroquant.py > "$LOG_DIR/orchestrator.log" 2>&1 &
+    echo $! > "$LOG_DIR/orchestrator.pid"
+    sleep 3
+  elif [ "$ORCH_COUNT" -eq 0 ]; then
     log RED "✗ Orchestrator down! Restarting..."
     nohup python start_astroquant.py > "$LOG_DIR/orchestrator.log" 2>&1 &
+    echo $! > "$LOG_DIR/orchestrator.pid"
     sleep 3
   fi
   
