@@ -282,7 +282,7 @@ if [ "${NO_TUNNEL}" != true ]; then
 fi
 
 # Send startup/reboot alert with current remote URLs if configured.
-FORCE_ALERT=1 bash "$WORKSPACE/send_telegram_alert.sh" reboot-startup >> "$LOG_DIR/fullstack.log" 2>&1 || true
+bash "$WORKSPACE/send_telegram_alert.sh" reboot-startup >> "$LOG_DIR/fullstack.log" 2>&1 || true
 
 # Health check loop
 log BLUE "Starting health monitoring (interval: ${HEALTHCHECK_INTERVAL}s)..."

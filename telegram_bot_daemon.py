@@ -120,6 +120,13 @@ def _daemon_health_interval() -> int:
         return 300
 
 
+def _startup_online_cooldown_sec() -> int:
+    try:
+        return max(60, int(os.getenv("TELEGRAM_STARTUP_ALERT_COOLDOWN_SEC", "900")))
+    except Exception:
+        return 900
+
+
 def _send_message(text: str) -> bool:
     token = _token()
     chat_id = _chat_id()
@@ -224,6 +231,7 @@ def _load_state() -> Dict[str, Any]:
         "last_update_id": 0,
         "last_report_ts": 0,
         "last_daemon_health_ts": 0,
+        "last_online_alert_ts": 0,
         "last_bias": None,
         "last_news_halt": None,
         "last_news_sig": "",
@@ -692,9 +700,17 @@ def main() -> int:
 
     _prepare_polling()
     _log("Telegram daemon started")
-    _send_message("AstroQuant Telegram daemon online. Send /help for commands.")
-
     state = _load_state()
+    now = int(time.time())
+    cooldown = _startup_online_cooldown_sec()
+    last_online = int(state.get("last_online_alert_ts", 0) or 0)
+    if now - last_online >= cooldown:
+        if _send_message("AstroQuant Telegram daemon online. Send /help for commands."):
+            state["last_online_alert_ts"] = now
+            _save_state(state)
+    else:
+        _log("startup online alert suppressed by cooldown")
+
     while True:
         try:
             state = _poll_updates(state)

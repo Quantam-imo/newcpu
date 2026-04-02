@@ -50,7 +50,16 @@ Remote desktop: ${NOVNC_URL}
 EOF
 )
 
-PAYLOAD_HASH=$(printf '%s' "$MESSAGE" | sha256sum | awk '{print $1}')
+# Deduplicate by stable fields only (exclude timestamp) so repeated restarts
+# with unchanged URLs do not spam Telegram.
+DEDUP_BASIS=$(cat <<EOF
+AstroQuant ${EVENT_NAME} alert
+Host: ${HOSTNAME_VALUE}
+App: ${APP_URL}
+Remote desktop: ${NOVNC_URL}
+EOF
+)
+PAYLOAD_HASH=$(printf '%s' "$DEDUP_BASIS" | sha256sum | awk '{print $1}')
 
 if [ "${FORCE_ALERT:-0}" != "1" ] && [ -f "$LAST_HASH_FILE" ] && [ "$(cat "$LAST_HASH_FILE" 2>/dev/null)" = "$PAYLOAD_HASH" ]; then
   echo "[$(date)] Telegram alert skipped: unchanged payload" >> "$LOG_FILE"
