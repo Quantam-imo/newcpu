@@ -16,6 +16,22 @@ PID_FILE="$WORKSPACE/data/cloudflare_tunnel.pid"
 
 mkdir -p "$(dirname "$LOG_FILE")" "$(dirname "$TUNNEL_URL_FILE")"
 
+wait_for_new_quick_url() {
+  local start_line="$1"
+  local waited=0
+  local url=""
+  while [ "$waited" -lt 45 ]; do
+    url=$(awk -v s="$start_line" 'NR>s {if (match($0, /https:\/\/[a-z0-9\-]*\.trycloudflare\.com/)) {print substr($0, RSTART, RLENGTH)}}' "$LOG_FILE" | tail -1)
+    if [ -n "$url" ]; then
+      echo "$url"
+      return 0
+    fi
+    sleep 3
+    waited=$((waited + 3))
+  done
+  return 1
+}
+
 echo "[$(date)] Starting Cloudflare Tunnel for AstroQuant remote access..." | tee -a "$LOG_FILE"
 
 if [ "$CF_TUNNEL_MODE" = "named" ]; then
@@ -64,10 +80,8 @@ if [ -n "$EXISTING_PID" ] && kill -0 "$EXISTING_PID" 2>/dev/null; then
     fi
   done
   echo "$EXISTING_PID" > "$PID_FILE"
-  TUNNEL_URL=$(grep -o "https://[a-z0-9\-]*\.trycloudflare\.com" "$LOG_FILE" 2>/dev/null | tail -1 || true)
-  if [ -n "$TUNNEL_URL" ]; then
-    echo "$TUNNEL_URL" > "$TUNNEL_URL_FILE"
-  fi
+  # Reuse the last known URL file for an already-running process; avoid stale grep from old log sessions.
+  [ -f "$TUNNEL_URL_FILE" ] || echo "PENDING" > "$TUNNEL_URL_FILE"
   echo "[$(date)] Tunnel already running (PID: $EXISTING_PID)" | tee -a "$LOG_FILE"
   cat "$TUNNEL_URL_FILE" 2>/dev/null || true
   exit 0
@@ -81,6 +95,7 @@ if [ -f "$PID_FILE" ] && kill -0 "$(cat $PID_FILE)" 2>/dev/null; then
 fi
 
 # Start tunnel with URL capture
+START_LINE=$(wc -l < "$LOG_FILE" 2>/dev/null || echo 0)
 (
   cloudflared tunnel --url http://localhost:8000 2>&1 | tee -a "$LOG_FILE"
 ) &
@@ -97,8 +112,8 @@ sleep 3
 if kill -0 $TUNNEL_PID 2>/dev/null; then
   echo "[$(date)] ✓ Tunnel is running" | tee -a "$LOG_FILE"
   
-  # Try to extract the public URL from logs
-  TUNNEL_URL=$(grep -o "https://[a-z0-9\-]*\.trycloudflare\.com" "$LOG_FILE" 2>/dev/null | tail -1 || echo "PENDING")
+  # Extract only the URL created in this launch session.
+  TUNNEL_URL=$(wait_for_new_quick_url "$START_LINE" || echo "PENDING")
   echo "[$(date)] Public URL: $TUNNEL_URL" | tee -a "$LOG_FILE"
   echo "$TUNNEL_URL" > "$TUNNEL_URL_FILE"
   

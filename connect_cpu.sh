@@ -7,12 +7,18 @@ set -e
 
 # Configuration - EDIT THESE
 CPU_USER="${CPU_USER:-cpu}"
-CPU_IP="${CPU_IP:-192.168.1.100}"  # Replace with your NPVPS CPU internal IP
+CPU_IP="${CPU_IP:-192.168.1.33}"  # Replace with your CPU internal/public IP
 CPU_SSH_PORT="${CPU_SSH_PORT:-22}"
 CPU_HOSTNAME="${CPU_HOSTNAME:-astroquant-cpu}"
 
 # Derived settings
-SSH_KEY="${HOME}/.ssh/id_rsa"
+if [ -n "${SSH_KEY:-}" ]; then
+  SSH_KEY="$SSH_KEY"
+elif [ -f "${HOME}/.ssh/id_ed25519" ]; then
+  SSH_KEY="${HOME}/.ssh/id_ed25519"
+else
+  SSH_KEY="${HOME}/.ssh/id_rsa"
+fi
 WORK_DIR="/home/${CPU_USER}/newcpu"
 
 # Colors
@@ -21,6 +27,19 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
+
+is_private_ip() {
+  case "$1" in
+    10.*|192.168.*|172.16.*|172.17.*|172.18.*|172.19.*|172.2[0-9].*|172.3[0-1].*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+in_codespaces() {
+  [ "${CODESPACES:-false}" = "true" ] && return 0
+  hostname 2>/dev/null | grep -qi 'codespaces' && return 0
+  return 1
+}
 
 # Show menu if no argument
 if [ -z "$1" ]; then
@@ -53,24 +72,48 @@ if [ -z "$1" ]; then
   echo "  ./connect_cpu.sh info          - Connection info"
   echo "  ./connect_cpu.sh config        - Show configuration"
   echo ""
+  echo "Environment overrides: CPU_IP, CPU_USER, CPU_SSH_PORT, SSH_KEY"
+  echo ""
   exit 0
 fi
 
 # Test SSH connectivity
 test_connection() {
-  if ! timeout 5 ssh \
+  if [ ! -f "$SSH_KEY" ]; then
+    echo -e "${RED}✗ SSH private key not found${NC}"
+    echo "  Expected key: $SSH_KEY"
+    echo "  Try: export SSH_KEY=~/.ssh/id_ed25519"
+    echo "  Or create one: ssh-keygen -t ed25519"
+    exit 1
+  fi
+
+  if ! timeout 5 bash -lc "cat < /dev/null > /dev/tcp/$CPU_IP/$CPU_SSH_PORT" 2>/dev/null; then
+    echo -e "${RED}✗ TCP port $CPU_SSH_PORT unreachable at $CPU_IP${NC}"
+    if in_codespaces && is_private_ip "$CPU_IP"; then
+      echo "  Reason: This shell is in GitHub Codespaces (cloud), but $CPU_IP is a private LAN IP."
+      echo "  Private LAN addresses are not reachable from cloud by default."
+      echo "  Use Cloudflare URLs for remote UI, or run SSH locally on your Windows/WSL machine."
+    fi
+    echo "  Check:"
+    echo "  1. CPU IP address is correct (current: $CPU_IP)"
+    echo "  2. SSH server is running on the CPU"
+    echo "  3. Router/firewall allows port $CPU_SSH_PORT if using public IP"
+    exit 1
+  fi
+
+  if ! timeout 7 ssh \
     -p "$CPU_SSH_PORT" \
     -i "$SSH_KEY" \
     -o ConnectTimeout=5 \
     -o StrictHostKeyChecking=no \
     "$CPU_USER@$CPU_IP" "echo 'OK'" > /dev/null 2>&1; then
-    
-    echo -e "${RED}✗ Cannot connect to CPU${NC}"
+    echo -e "${RED}✗ SSH handshake/authentication failed${NC}"
+    echo "  Target: $CPU_USER@$CPU_IP:$CPU_SSH_PORT"
+    echo "  Key:    $SSH_KEY"
     echo "  Check:"
-    echo "  1. CPU IP address: $CPU_IP"
-    echo "  2. SSH is running on CPU"
-    echo "  3. SSH key exists: $SSH_KEY"
-    echo "  4. Network connectivity"
+    echo "  1. Correct username ($CPU_USER)"
+    echo "  2. Public key installed in ~/.ssh/authorized_keys on CPU"
+    echo "  3. SSHD allows key auth (PubkeyAuthentication yes)"
     exit 1
   fi
 }
@@ -281,9 +324,12 @@ cmd_config() {
   echo "  CPU_IP=\"$CPU_IP\""
   echo "  CPU_SSH_PORT=\"$CPU_SSH_PORT\""
   echo "  CPU_HOSTNAME=\"$CPU_HOSTNAME\""
+  echo "  SSH_KEY=\"$SSH_KEY\""
   echo ""
   echo "Or use environment variables:"
-  echo "  export CPU_IP=192.168.1.100"
+  echo "  export CPU_IP=192.168.1.33"
+  echo "  export CPU_USER=astroquant"
+  echo "  export SSH_KEY=~/.ssh/id_ed25519"
   echo "  ./connect_cpu.sh ssh"
   echo ""
 }

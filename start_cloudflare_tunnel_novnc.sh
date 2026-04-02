@@ -16,6 +16,22 @@ URL_FILE="$WORKSPACE/data/novnc_tunnel_url.txt"
 
 mkdir -p "$WORKSPACE/data/logs" "$WORKSPACE/data"
 
+wait_for_new_quick_url() {
+  local start_line="$1"
+  local waited=0
+  local url=""
+  while [ "$waited" -lt 45 ]; do
+    url=$(awk -v s="$start_line" 'NR>s {if (match($0, /https:\/\/[a-z0-9\-]*\.trycloudflare\.com/)) {print substr($0, RSTART, RLENGTH)}}' "$LOG_FILE" | tail -1)
+    if [ -n "$url" ]; then
+      echo "$url"
+      return 0
+    fi
+    sleep 3
+    waited=$((waited + 3))
+  done
+  return 1
+}
+
 echo "[$(date)] Starting Cloudflare Tunnel for noVNC (http://localhost:6080)..." | tee -a "$LOG_FILE"
 
 if [ "$CF_TUNNEL_MODE" = "named" ]; then
@@ -56,13 +72,14 @@ fi
 EXISTING_PID=$(pgrep -f "cloudflared tunnel --url http://localhost:6080" | head -1 || true)
 if [ -n "$EXISTING_PID" ] && kill -0 "$EXISTING_PID" 2>/dev/null; then
   echo "$EXISTING_PID" > "$PID_FILE"
-  URL=$(grep -o "https://[a-z0-9\-]*\.trycloudflare\.com" "$LOG_FILE" 2>/dev/null | tail -1 || true)
-  [ -n "$URL" ] && echo "$URL" > "$URL_FILE"
+  # Reuse last known URL file for an already-running process; avoid stale grep from old sessions.
+  [ -f "$URL_FILE" ] || echo "PENDING" > "$URL_FILE"
   echo "[$(date)] noVNC tunnel already running (PID: $EXISTING_PID)" | tee -a "$LOG_FILE"
   cat "$URL_FILE" 2>/dev/null || true
   exit 0
 fi
 
+START_LINE=$(wc -l < "$LOG_FILE" 2>/dev/null || echo 0)
 (
   cloudflared tunnel --url http://localhost:6080 2>&1 | tee -a "$LOG_FILE"
 ) &
@@ -71,7 +88,7 @@ echo "$PID" > "$PID_FILE"
 
 sleep 4
 if kill -0 "$PID" 2>/dev/null; then
-  URL=$(grep -o "https://[a-z0-9\-]*\.trycloudflare\.com" "$LOG_FILE" 2>/dev/null | tail -1 || echo "PENDING")
+  URL=$(wait_for_new_quick_url "$START_LINE" || echo "PENDING")
   echo "$URL" > "$URL_FILE"
   echo "[$(date)] noVNC tunnel running (PID: $PID) URL: $URL" | tee -a "$LOG_FILE"
   echo "$URL"
