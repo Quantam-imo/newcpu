@@ -2,28 +2,33 @@
 # Best-practice AstroQuant autostart setup: registers all services for full automation
 set -e
 
-cd /workspaces/newcpu
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE="${AQ_WORKSPACE:-$SCRIPT_DIR}"
+SERVICE_USER="${AQ_SERVICE_USER:-${SUDO_USER:-$USER}}"
 
-sudo cp astroquant_tradingbot.service /etc/systemd/system/
-sudo cp chrome_remote_debug.service /etc/systemd/system/
-sudo cp cloudflared_tunnel.service /etc/systemd/system/
-sudo cp astroquant_orchestrator.service /etc/systemd/system/
-sudo cp astroquant_celery.service /etc/systemd/system/
-sudo cp astroquant_calibrate.service /etc/systemd/system/
-sudo cp astroquant_healthcheck.service /etc/systemd/system/
-sudo cp astroquant_livesync.service /etc/systemd/system/
+install_service_template() {
+	local template_name="$1"
+	sudo sed \
+		-e "s|__WORKSPACE__|$WORKSPACE|g" \
+		-e "s|__SERVICE_USER__|$SERVICE_USER|g" \
+		"$WORKSPACE/$template_name" > "/tmp/$template_name"
+	sudo mv "/tmp/$template_name" "/etc/systemd/system/$template_name"
+}
+
+cd "$WORKSPACE"
+chmod +x "$WORKSPACE/watchdog_autorecover.sh" 2>/dev/null || true
+
+install_service_template astroquant_tradingbot.service
+install_service_template astroquant_watchdog.service
+install_service_template astroquant_watchdog.timer
 
 sudo systemctl daemon-reload
 
+# Single startup authority: only tradingbot starts the full stack.
 sudo systemctl enable astroquant_tradingbot.service
-sudo systemctl disable chrome_remote_debug.service 2>/dev/null || true
-sudo systemctl enable cloudflared_tunnel.service
-sudo systemctl enable astroquant_orchestrator.service
-sudo systemctl enable astroquant_celery.service
-sudo systemctl enable astroquant_calibrate.service
-sudo systemctl enable astroquant_healthcheck.service
-sudo systemctl enable astroquant_livesync.service
+sudo systemctl enable astroquant_watchdog.timer
 
-echo "All AstroQuant services registered and enabled for autostart."
-echo "On next CPU boot, the full stack will launch automatically."
-echo "Broker Chrome autostart is disabled (manual launch only)."
+echo "AstroQuant autostart configured with single startup authority."
+echo "Enabled services: astroquant_tradingbot.service + astroquant_watchdog.timer"
+echo ""
+echo "NOTE: For dev containers without systemd (docker-init), use ./start_24h.sh instead."

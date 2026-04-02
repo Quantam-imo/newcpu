@@ -2,26 +2,35 @@
 # Setup script for AstroQuant Trading Bot systemd services
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE="${AQ_WORKSPACE:-$SCRIPT_DIR}"
+SERVICE_USER="${AQ_SERVICE_USER:-${SUDO_USER:-$USER}}"
+chmod +x "$WORKSPACE/watchdog_autorecover.sh" 2>/dev/null || true
+
+install_service_template() {
+  local template_name="$1"
+  sudo sed \
+    -e "s|__WORKSPACE__|$WORKSPACE|g" \
+    -e "s|__SERVICE_USER__|$SERVICE_USER|g" \
+    "$WORKSPACE/$template_name" > "/tmp/$template_name"
+  sudo mv "/tmp/$template_name" "/etc/systemd/system/$template_name"
+}
+
 
 # Check if systemd is available
 if pidof systemd > /dev/null; then
   # Copy service files to systemd directory
-  sudo cp /workspaces/newcpu/astroquant_tradingbot.service /etc/systemd/system/
-  sudo cp /workspaces/newcpu/cloudflared_tunnel.service /etc/systemd/system/
-  sudo cp /workspaces/newcpu/chrome_remote_debug.service /etc/systemd/system/
+  install_service_template astroquant_tradingbot.service
+  install_service_template astroquant_watchdog.service
+  install_service_template astroquant_watchdog.timer
 
   # Reload systemd to recognize new services
   sudo systemctl daemon-reload
 
   # Enable services to start on boot
   sudo systemctl enable astroquant_tradingbot.service
-  sudo systemctl enable cloudflared_tunnel.service
-  # Keep broker Chrome manual to avoid opening separate browser windows at CPU boot.
-  sudo systemctl disable chrome_remote_debug.service 2>/dev/null || true
-
-  # Keep broker Chrome manual by default (start only when needed).
-  echo "Broker Chrome autostart is disabled by default."
-  echo "Manual launch: /workspaces/newcpu/start_chrome_remote_debug.sh"
+  sudo systemctl enable astroquant_watchdog.timer
+  echo "Enabled: astroquant_tradingbot.service + astroquant_watchdog.timer"
 else
   echo "systemd is not available. Using service commands and manual steps."
   # Start redis-server if available
@@ -30,9 +39,9 @@ else
   fi
   # Start backend manually if not running
   if ! pgrep -f "uvicorn.*astroquant.backend.main:app" > /dev/null; then
-    if [ -f "/workspaces/newcpu/.venv/bin/activate" ]; then
-      source /workspaces/newcpu/.venv/bin/activate
-      export PYTHONPATH=/workspaces/newcpu
+    if [ -f "$WORKSPACE/.venv/bin/activate" ]; then
+      source "$WORKSPACE/.venv/bin/activate"
+      export PYTHONPATH="$WORKSPACE"
       nohup uvicorn astroquant.backend.main:app --host 0.0.0.0 --port 8000 > /tmp/uvicorn.log 2>&1 &
       echo "Uvicorn backend started in fallback mode."
     fi
@@ -44,13 +53,12 @@ fi
 
 # Fallback: Start backend with uvicorn if systemd is not available
 if ! pgrep -f "uvicorn.*astroquant.backend.main:app" > /dev/null; then
-  if [ -f "/workspaces/newcpu/.venv/bin/activate" ]; then
-    source /workspaces/newcpu/.venv/bin/activate
-    export PYTHONPATH=/workspaces/newcpu
+  if [ -f "$WORKSPACE/.venv/bin/activate" ]; then
+    source "$WORKSPACE/.venv/bin/activate"
+    export PYTHONPATH="$WORKSPACE"
     nohup uvicorn astroquant.backend.main:app --host 0.0.0.0 --port 8000 > /tmp/uvicorn.log 2>&1 &
     echo "Uvicorn backend started in fallback mode."
   fi
 fi
 
-echo "AstroQuant Trading Bot and Cloudflare Tunnel are set to start automatically on CPU boot."
-echo "Broker Chrome is manual by default to prevent separate browser auto-open."
+echo "AstroQuant autostart configured with single startup authority."

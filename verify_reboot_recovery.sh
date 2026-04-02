@@ -137,6 +137,88 @@ check_runtime_health() {
   else
     record_warn "telegram daemon process not running"
   fi
+
+  check_singleton "start_astroquant.py" "orchestrator"
+  check_singleton "uvicorn.*astroquant.backend.main:app" "backend"
+  check_singleton "celery.*astroquant.backend.tasks.celery_worker" "celery"
+  check_singleton "telegram_bot_daemon.py" "telegram daemon"
+  check_singleton "cloudflared tunnel --url http://localhost:8000" "app tunnel"
+}
+
+check_singleton() {
+  local pattern="$1"
+  local label="$2"
+  local pids
+  local count
+  pids="$(pgrep -f "$pattern" || true)"
+  count="$(printf "%s\n" "$pids" | sed '/^$/d' | wc -l)"
+
+  if [ "$count" -eq 1 ]; then
+    record_ok "$label singleton count=1"
+  elif [ "$count" -eq 0 ]; then
+    record_warn "$label process not running"
+  else
+    record_fail "$label duplicate instances detected (count=$count)"
+  fi
+}
+
+check_required_env() {
+  step "Checking required environment keys"
+  local env_file="$WORKSPACE/.env"
+  if [ ! -f "$env_file" ]; then
+    record_warn ".env file missing ($env_file)"
+    return
+  fi
+
+  local required=(
+    DATABENTO_API_KEY
+    TELEGRAM_ALERT_ENABLED
+    TELEGRAM_BOT_TOKEN
+    TELEGRAM_CHAT_ID
+    TELEGRAM_SIGNAL_SYMBOLS
+    TELEGRAM_DAY_BOUNDARY_REPORTS_ENABLED
+    TELEGRAM_DAY_START_UTC
+    TELEGRAM_DAY_END_UTC
+  )
+
+  local missing=0
+  for key in "${required[@]}"; do
+    if grep -Eq "^${key}=.+" "$env_file"; then
+      record_ok "env key present: $key"
+    else
+      record_warn "env key missing/empty: $key"
+      missing=$((missing + 1))
+    fi
+  done
+
+  if [ "$missing" -eq 0 ]; then
+    record_ok "required environment keys complete"
+  fi
+}
+
+check_watchdog_provisioning() {
+  step "Checking watchdog provisioning"
+  local unit_file="/etc/systemd/system/astroquant_watchdog.service"
+  local timer_file="/etc/systemd/system/astroquant_watchdog.timer"
+  local timer_link="/etc/systemd/system/timers.target.wants/astroquant_watchdog.timer"
+
+  if [ -f "$unit_file" ]; then
+    record_ok "watchdog unit exists ($unit_file)"
+  else
+    record_warn "watchdog unit missing ($unit_file)"
+  fi
+
+  if [ -f "$timer_file" ]; then
+    record_ok "watchdog timer exists ($timer_file)"
+  else
+    record_warn "watchdog timer missing ($timer_file)"
+  fi
+
+  if [ -L "$timer_link" ] || [ -f "$timer_link" ]; then
+    record_ok "watchdog timer enabled link exists ($timer_link)"
+  else
+    record_warn "watchdog timer enable link missing ($timer_link)"
+  fi
 }
 
 chaos_test() {
@@ -192,8 +274,10 @@ main() {
   check_file_exec "$AUTOSTART_SETUP" "autostart setup script"
   check_file_exec "$BOOTSTRAP" "bootstrap script"
   check_systemd_units
+  check_watchdog_provisioning
   check_cron_reboot
   check_shell_hooks
+  check_required_env
   check_runtime_health
 
   if [ "$run_chaos" -eq 1 ]; then

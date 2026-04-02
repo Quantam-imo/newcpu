@@ -1,0 +1,11 @@
+[Unit]
+Description=AstroQuant Watchdog Auto-Recovery
+After=network.target astroquant_tradingbot.service
+Wants=astroquant_tradingbot.service
+
+[Service]
+Type=oneshot
+User=__SERVICE_USER__
+WorkingDirectory=__WORKSPACE__
+ExecStart=/bin/bash __WORKSPACE__/watchdog_autorecover.sh
+TimeoutSec=90

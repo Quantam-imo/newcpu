@@ -63,8 +63,29 @@ install_cron_reboot_fallback() {
 
 enable_service_link() {
   local service_name="$1"
-  sudo mkdir -p /etc/systemd/system/multi-user.target.wants
-  sudo ln -sf "/etc/systemd/system/$service_name" "/etc/systemd/system/multi-user.target.wants/$service_name"
+  local target_dir="${2:-multi-user.target.wants}"
+  sudo mkdir -p "/etc/systemd/system/$target_dir"
+  sudo ln -sf "/etc/systemd/system/$service_name" "/etc/systemd/system/$target_dir/$service_name"
+}
+
+install_rc_local_fallback() {
+  local bootstrap_script="$WORKSPACE/non_systemd_autostart_bootstrap.sh"
+  [ -f "$bootstrap_script" ] && chmod +x "$bootstrap_script" || true
+
+  if ! command -v sudo >/dev/null 2>&1; then
+    echo "rc.local fallback skipped: sudo unavailable"
+    return 0
+  fi
+
+  sudo tee /etc/rc.local >/dev/null <<EOF
+#!/bin/bash
+# AstroQuant boot autostart (rc.local fallback)
+sleep 10
+nohup /bin/bash "$bootstrap_script" >> "$WORKSPACE/data/logs/rclocal_autostart.log" 2>&1 &
+exit 0
+EOF
+  sudo chmod +x /etc/rc.local
+  echo "rc.local fallback installed: /etc/rc.local"
 }
 
 echo "========================================="
@@ -76,6 +97,7 @@ if [ "$(ps -p 1 -o comm= 2>/dev/null)" = "systemd" ]; then
   echo "Detected: systemd active"
   echo "Applying: systemd services autostart"
   sudo bash "$WORKSPACE/setup_best_autostart.sh"
+  install_rc_local_fallback
   install_cron_reboot_fallback
   echo ""
   echo "Autostart status (systemd):"
@@ -95,17 +117,19 @@ if [ -d /etc/systemd/system ] && command -v sudo >/dev/null 2>&1; then
   echo "Applying: offline systemd unit + enable-link provisioning"
 
   install_service_template astroquant_tradingbot.service
-  install_service_template cloudflared_tunnel.service
-  install_service_template novpn_connector.service
+  install_service_template astroquant_watchdog.service
+  install_service_template astroquant_watchdog.timer
 
   enable_service_link astroquant_tradingbot.service
-  enable_service_link cloudflared_tunnel.service
-  enable_service_link novpn_connector.service
+  enable_service_link astroquant_watchdog.timer timers.target.wants
 
   echo ""
   echo "Autostart status (offline systemd files):"
   ls -l /etc/systemd/system/astroquant_tradingbot.service || true
   ls -l /etc/systemd/system/multi-user.target.wants/astroquant_tradingbot.service || true
+  ls -l /etc/systemd/system/astroquant_watchdog.timer || true
+  ls -l /etc/systemd/system/timers.target.wants/astroquant_watchdog.timer || true
+  install_rc_local_fallback
   install_cron_reboot_fallback
   install_shell_fallback_hook
   crontab -l 2>/dev/null | grep "astroquant reboot bootstrap" || true
@@ -120,6 +144,7 @@ if command -v crontab >/dev/null 2>&1; then
   echo "Detected: no active systemd"
   echo "Applying: cron @reboot fallback"
   install_cron_reboot_fallback
+  install_rc_local_fallback
 
   echo ""
   echo "Autostart status (cron):"
@@ -132,6 +157,7 @@ fi
 echo "Detected: no active systemd and no crontab"
 echo "Applying: shell-login bootstrap fallback"
 install_shell_fallback_hook
+install_rc_local_fallback
 
 echo ""
 echo "Autostart status (shell fallback):"
