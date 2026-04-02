@@ -28,6 +28,7 @@ import time
 import atexit
 import signal
 import subprocess
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -41,6 +42,7 @@ ENV_FILE = WORKSPACE / ".env"
 STATE_FILE = DATA_DIR / "telegram_daemon_state.json"
 LOG_FILE = LOG_DIR / "telegram_daemon.log"
 PID_FILE = DATA_DIR / "telegram_daemon.pid"
+_TOKEN_LOCK_FILE: Optional[Path] = None
 
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -146,6 +148,45 @@ def _prepare_polling() -> None:
         requests.post(url, data={"drop_pending_updates": "false"}, timeout=12)
     except Exception as exc:
         _throttled_error("telegram:deleteWebhook", f"deleteWebhook failed: {exc}", every_sec=600)
+
+
+def _token_lock_path() -> Optional[Path]:
+    token = _token()
+    if not token:
+        return None
+    digest = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+    return Path(f"/tmp/astroquant_telegram_{digest}.lock")
+
+
+def _acquire_lock_file(lock_file: Path, pid: int) -> bool:
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+    try:
+        fd = os.open(str(lock_file), flags)
+        os.write(fd, str(pid).encode("utf-8"))
+        os.close(fd)
+        return True
+    except FileExistsError:
+        pass
+    except Exception:
+        return False
+
+    try:
+        old_pid = int(lock_file.read_text(encoding="utf-8").strip())
+        os.kill(old_pid, 0)
+        return False
+    except Exception:
+        try:
+            lock_file.unlink(missing_ok=True)
+        except Exception:
+            return False
+
+    try:
+        fd = os.open(str(lock_file), flags)
+        os.write(fd, str(pid).encode("utf-8"))
+        os.close(fd)
+        return True
+    except Exception:
+        return False
 
 
 def _api_timeout(path: str) -> int:
@@ -477,10 +518,23 @@ def _poll_updates(state: Dict[str, Any]) -> Dict[str, Any]:
     if not token or not chat_id:
         return state
 
+    backoff_until = int(state.get("poll_backoff_until", 0) or 0)
+    if backoff_until and int(time.time()) < backoff_until:
+        return state
+
     offset = int(state.get("last_update_id", 0)) + 1
     url = f"https://api.telegram.org/bot{token}/getUpdates"
     try:
         r = requests.get(url, params={"timeout": 5, "offset": offset}, timeout=12)
+        if r.status_code == 409:
+            _throttled_error(
+                "telegram:getUpdates:409",
+                "getUpdates conflict (409): another poller/webhook is active for this bot token. Backing off 30s.",
+                every_sec=60,
+            )
+            _prepare_polling()
+            state["poll_backoff_until"] = int(time.time()) + 30
+            return state
         r.raise_for_status()
         payload = r.json()
     except Exception as exc:
@@ -542,37 +596,23 @@ def _event_alerts(state: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _acquire_pid_lock() -> bool:
+    global _TOKEN_LOCK_FILE
     # Use O_EXCL for atomic singleton lock to avoid startup race duplicates.
-    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
-    try:
-        fd = os.open(str(PID_FILE), flags)
-        os.write(fd, str(os.getpid()).encode("utf-8"))
-        os.close(fd)
-        return True
-    except FileExistsError:
-        pass
-    except Exception:
+    if not _acquire_lock_file(PID_FILE, os.getpid()):
         return False
 
-    # Existing PID file: if stale, remove and retry once.
-    try:
-        pid_txt = PID_FILE.read_text(encoding="utf-8").strip()
-        old_pid = int(pid_txt)
-        os.kill(old_pid, 0)
-        return False
-    except Exception:
-        try:
-            PID_FILE.unlink(missing_ok=True)
-        except Exception:
+    token_lock = _token_lock_path()
+    if token_lock is not None:
+        if not _acquire_lock_file(token_lock, os.getpid()):
+            # Release local PID lock if token lock fails.
+            try:
+                PID_FILE.unlink(missing_ok=True)
+            except Exception:
+                pass
             return False
+        _TOKEN_LOCK_FILE = token_lock
 
-    try:
-        fd = os.open(str(PID_FILE), flags)
-        os.write(fd, str(os.getpid()).encode("utf-8"))
-        os.close(fd)
-        return True
-    except Exception:
-        return False
+    return True
 
 
 def _cleanup_pid(*_: Any) -> None:
@@ -581,6 +621,13 @@ def _cleanup_pid(*_: Any) -> None:
             pid_txt = PID_FILE.read_text(encoding="utf-8").strip()
             if pid_txt == str(os.getpid()):
                 PID_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
+    try:
+        if _TOKEN_LOCK_FILE and _TOKEN_LOCK_FILE.exists():
+            pid_txt = _TOKEN_LOCK_FILE.read_text(encoding="utf-8").strip()
+            if pid_txt == str(os.getpid()):
+                _TOKEN_LOCK_FILE.unlink(missing_ok=True)
     except Exception:
         pass
 
