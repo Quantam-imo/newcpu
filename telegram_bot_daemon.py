@@ -575,7 +575,25 @@ def _event_alerts(state: Dict[str, Any]) -> Dict[str, Any]:
     status = _get_json("/status")
     news_halt = status.get("news_halt", None)
     next_news = status.get("next_news", [])
-    news_sig = json.dumps(next_news[:3] if isinstance(next_news, list) else next_news, ensure_ascii=True)
+    # Build a stable signature so countdown fields (e.g. minutes_to_event)
+    # do not trigger repeated "news update" messages every poll cycle.
+    if isinstance(next_news, list):
+        normalized_news = []
+        for item in next_news[:3]:
+            if isinstance(item, dict):
+                normalized_news.append(
+                    {
+                        "title": item.get("title"),
+                        "time_utc": item.get("time_utc"),
+                        "impact": item.get("impact"),
+                        "currency": item.get("currency"),
+                    }
+                )
+            else:
+                normalized_news.append(item)
+        news_sig = json.dumps(normalized_news, ensure_ascii=True, sort_keys=True)
+    else:
+        news_sig = json.dumps(next_news, ensure_ascii=True, sort_keys=True)
 
     mentor = _get_json("/ai/mentor", params={"symbol": _signal_symbol()})
     sig = _extract_signal_context(mentor)
