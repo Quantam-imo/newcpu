@@ -1,0 +1,4 @@
+{
+  "name": "AstroQuant",
+  "postStartCommand": "nohup bash /workspaces/newcpu/non_systemd_autostart_bootstrap.sh >> /workspaces/newcpu/data/logs/poststart.log 2>&1 &"
+}
