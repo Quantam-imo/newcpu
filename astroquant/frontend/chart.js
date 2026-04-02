@@ -210,6 +210,7 @@ let orderBlockLines = [];
 let fvgLines = [];
 let icebergLines = [];
 let gannLines = [];
+let astroLines = [];
 let vpLines = [];
 let latestVpProfile = null;
 let tradeLines = [];
@@ -244,15 +245,25 @@ async function renderDivergenceOverlay(symbol, timeframe) {
 	try {
 			const url = `/spread_offset_history?symbol=${encodeURIComponent(symbol)}&lookback_minutes=240`;
 		const data = await fetchJson(url);
-		if (!data || !Array.isArray(data.spot_candles) || !data.spot_candles.length) return;
-		const spot = data.spot_candles;
-		const basis = data.basis || {};
-		// Build divergence series: time vs raw_basis
-		const points = spot.map((row, idx) => {
-			const t = Number(row.time);
-			const v = Number(basis.raw_basis);
-			return (Number.isFinite(t) && Number.isFinite(v)) ? { time: t, value: v } : null;
-		}).filter(Boolean);
+		let points = [];
+		if (data && Array.isArray(data.spot_candles) && data.spot_candles.length) {
+			const spot = data.spot_candles;
+			const basis = data.basis || {};
+			// Build divergence series: time vs basis. Use row-level value when provided.
+			points = spot.map((row) => {
+				const t = Number(row.time);
+				const rowValue = Number(row.raw_basis);
+				const basisValue = Number(basis.raw_basis);
+				const v = Number.isFinite(rowValue) ? rowValue : basisValue;
+				return (Number.isFinite(t) && Number.isFinite(v)) ? { time: t, value: v } : null;
+			}).filter(Boolean);
+		} else if (Array.isArray(latestCandleSnapshot) && latestCandleSnapshot.length) {
+			// Fallback: show zero-baseline divergence so toggle remains visually active while basis feed is unavailable.
+			points = latestCandleSnapshot
+				.map(row => ({ time: Number(row.time), value: 0 }))
+				.filter(p => Number.isFinite(p.time));
+		}
+		if (!points.length) return;
 		if (!divergenceSeries) {
 			divergenceSeries = addLineSeriesCompat(chart, {
 				priceScaleId: "left",
@@ -1048,7 +1059,12 @@ async function fetchJson(url, timeoutMs = 30000, externalSignal = null) {
 			console.debug(`fetchJson: ${target} failed -`, err.message || err);
 		}
 	}
-	console.warn("fetchJson failed on all targets:", targets, "lastError:", lastError);
+	const isAbort = lastError && (lastError.name === "AbortError" || /aborted/i.test(String(lastError.message || "")));
+	if (isAbort) {
+		console.debug("fetchJson aborted:", targets, "lastError:", lastError);
+	} else {
+		console.warn("fetchJson failed on all targets:", targets, "lastError:", lastError);
+	}
 	throw lastError || new Error("Chart request failed");
 }
 
@@ -1673,6 +1689,7 @@ function renderOverlayPriceLines(overlays, meta) {
 		.filter(row => Number.isFinite(row.price));
 	const gannRows = rawGannRows.length ? rawGannRows : fallbackRows;
 	setLineGroupFromPrices(gannLines, gannRows, "#a78bfa", row => row.label || "Gann");
+	setLineGroupFromPrices(astroLines, overlays?.astro_lines || [], "#f59e0b", row => row.label || "Astro");
 }
 
 function renderTradeLines(meta, candles) {
@@ -2182,6 +2199,7 @@ function applyOverlayVisibility() {
 	show(fvgLines, on("toggleFVG"));
 	show(icebergLines, on("toggleIceberg"));
 	show(gannLines, on("toggleGann"));
+	show(astroLines, on("toggleAstro"));
 	show(vpLines, on("toggleVP"));
 	if (on("toggleVP")) {
 		if (!latestVpProfile && Array.isArray(latestCandleSnapshot) && latestCandleSnapshot.length) {
@@ -2303,6 +2321,7 @@ async function loadInstitutionalChart() {
 		       clearPriceLines(fvgLines);
 		       clearPriceLines(icebergLines);
 		       clearPriceLines(gannLines);
+		       clearPriceLines(astroLines);
 		       clearPriceLines(vpLines);
 		       clearPriceLines(tradeLines);
 		       latestVpProfile = null;

@@ -4,7 +4,8 @@ set -euo pipefail
 # AstroQuant CPU Mode - Integrated Setup & Validation
 # Complete system initialization with Chrome debugging and live trading setup
 
-ROOT_DIR="/workspaces/newcpu"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${AQ_WORKSPACE:-$SCRIPT_DIR}"
 ASTROQUANT_DIR="$ROOT_DIR/astroquant"
 PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
 API_BASE="http://127.0.0.1:8000"
@@ -309,12 +310,12 @@ header "PHASE 5: Backend API Server Startup"
 
 section "Starting FastAPI Backend"
 
-cd "/workspaces/newcpu"
+cd "$ROOT_DIR"
 info "Working directory: $ASTROQUANT_DIR"
 info "Starting: python -m uvicorn astroquant.backend.main:app --host 127.0.0.1 --port 8000"
 
 
-export PYTHONPATH=/workspaces/newcpu
+export PYTHONPATH="$ROOT_DIR"
 "$PYTHON_BIN" -m uvicorn astroquant.backend.main:app \
     --host 127.0.0.1 \
     --port 8000 \

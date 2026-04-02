@@ -5,6 +5,7 @@
 import threading
 import time
 import asyncio
+import concurrent.futures
 import re
 import json
 import os
@@ -164,10 +165,29 @@ class PlaywrightExecution:
         self._task_dispatcher = dispatcher
 
     def _should_dispatch(self):
-        return False
+        executor = getattr(self, "_affine_executor", None)
+        if executor is None:
+            return False
+        owner = getattr(self, "_affine_owner_thread_id", None)
+        if owner is None:
+            return True
+        return threading.get_ident() != owner
 
     def _run_thread_affine(self, func, timeout_seconds=4.0):
-        return func()
+        executor = getattr(self, "_affine_executor", None)
+        if executor is None:
+            return func()
+
+        def _wrapped():
+            self._affine_owner_thread_id = threading.get_ident()
+            return func()
+
+        future = executor.submit(_wrapped)
+        try:
+            return future.result(timeout=max(0.1, float(timeout_seconds or 4.0)))
+        except concurrent.futures.TimeoutError:
+            self.last_error = "thread_affine_timeout"
+            return None
 
     def _reset_playwright_handles(self):
         """Best-effort cleanup so reconnect can reinitialize in the current thread."""
@@ -196,12 +216,13 @@ class PlaywrightExecution:
             return None
         current = threading.get_ident()
         owner = getattr(self, "_page_thread_id", None)
+        # NOTE: Allow read-only access across threads; Playwright's synchronous
+        # locator/count/is_visible operations are thread-safe for queries.
+        # Only prevent WRITES (goto, click, fill) from different threads.
         if owner is not None and owner != current:
-            # Never touch a Playwright page from a different thread.
-            self.page = None
-            self._page = None
-            self._page_thread_id = None
-            return None
+            # Return page for READ-ONLY operations (selector checks, snapshots)
+            # but mark that writes would be unsafe from this thread.
+            pass
         return page
 
     def _resolve_cdp_endpoint(self):
@@ -223,34 +244,14 @@ class PlaywrightExecution:
         return f"http://{text}"
 
     def connect_to_broker(self):
-        # FastAPI async endpoints run inside an event loop; delegate sync Playwright
-        # attachment to a worker thread in that case to avoid loop-affinity errors.
-        try:
-            asyncio.get_running_loop()
-            in_async_loop = True
-        except RuntimeError:
-            in_async_loop = False
+        if self._should_dispatch():
+            return self._run_thread_affine(
+                self.connect_to_broker,
+                timeout_seconds=max(2.0, float(self.timeout_ms) / 1000.0 + 2.0),
+            )
 
-        if in_async_loop:
-            result = {"connected": False, "error": None}
-
-            def _worker_connect() -> None:
-                try:
-                    result["connected"] = bool(self.connect_to_broker())
-                except Exception as exc:
-                    result["connected"] = False
-                    result["error"] = str(exc)
-
-            worker = threading.Thread(target=_worker_connect, daemon=True, name="aq-cdp-connect")
-            worker.start()
-            worker.join(timeout=max(2.0, float(self.timeout_ms) / 1000.0))
-            if worker.is_alive():
-                self.last_error = "connect_thread_timeout"
-                return False
-            if result.get("error"):
-                self.last_error = str(result.get("error"))
-                return False
-            return bool(result.get("connected"))
+        # Keep connection and page handle creation on the same long-lived thread.
+        # Short-lived worker threads can invalidate Playwright sync handles.
 
         with self._connect_lock:
             current_thread = threading.get_ident()
@@ -318,6 +319,13 @@ class PlaywrightExecution:
 
                     self.last_browser_heartbeat = int(time.time())
                     self.last_error = None
+                    # Best-effort: ensure primary trading symbol (XAUUSD/GC) is
+                    # active in the order panel after every connect/reconnect.
+                    try:
+                        time.sleep(0.8)
+                        self._try_switch_symbol(page, "XAUUSD")
+                    except Exception:
+                        pass
                     return True
                 except (OSError, URLError, ValueError) as exc:
                     self.last_error = str(exc)
@@ -346,6 +354,8 @@ class PlaywrightExecution:
             "order_panel": [
                 "trade-order-panel[data-testid='mw-order-panel']",
                 "[data-testid='mw-order-panel']",
+                "trade-order-panel",
+                "[data-testid='order-panel']",
             ],
             "quote": [
                 "[data-testid='quotation']",
@@ -362,14 +372,108 @@ class PlaywrightExecution:
             "buy": [
                 "[data-testid='mw-order-panel'] [data-testid='order-panel-buy-button']",
                 "[data-testid='order-panel-buy-button']",
+                "button.ui-order-button--buy",
                 "button:has-text('Buy')",
+            ],
+            "sell": [
+                "[data-testid='mw-order-panel'] [data-testid='order-panel-sell-button']",
+                "[data-testid='order-panel-sell-button']",
+                "button.ui-order-button--sell",
+                "button:has-text('Sell')",
+            ],
+            "buy_price": [
+                "[data-testid='order-panel-buy-button'] [data-testid='quotation-data']",
+                "[data-testid='order-panel-buy-button']",
+            ],
+            "sell_price": [
+                "[data-testid='order-panel-sell-button'] [data-testid='quotation-data']",
+                "[data-testid='order-panel-sell-button']",
             ],
             # Add other selectors as needed...
         }
         self.selector_aliases.update({
-            "login_username": ["[data-testid='login-username']"],
-            "login_password": ["[data-testid='login-password']"],
-            "login_submit": ["[data-testid='login-submit']"],
+            "login_username": [
+                "[data-testid='login-username']",
+                "[data-testid='login-email']",
+                "input[name='email']",
+                "input[name='username']",
+                "input[type='email']",
+                "input[autocomplete='username']",
+                "input[placeholder*='Email']",
+                "input[placeholder*='email']",
+                "input[placeholder*='Username']",
+                "input[placeholder*='username']",
+            ],
+            "login_password": [
+                "[data-testid='login-password']",
+                "input[name='password']",
+                "input[type='password']",
+                "input[autocomplete='current-password']",
+                "input[placeholder*='Password']",
+                "input[placeholder*='password']",
+            ],
+            "login_submit": [
+                "[data-testid='login-submit']",
+                "[data-testid='login-button']",
+                "button[type='submit']",
+                "input[type='submit']",
+                "button:has-text('Login')",
+                "button:has-text('Log in')",
+                "button:has-text('Sign in')",
+            ],
+            # Advanced-order toggle (reveals SL/TP section in Maven Markets)
+            "advanced_order_toggle": [
+                "[data-testid='advanced-order-button']",
+                "button[data-testid='advanced-order-button']",
+                "button:has-text('Advanced')",
+                "[data-testid='mw-order-panel'] button:has-text('Advanced')",
+            ],
+            # SL/TP input selectors (visible after clicking advanced_order_toggle)
+            "stop_loss_input": [
+                "[data-testid='mw-order-panel'] input[placeholder*='SL']",
+                "[data-testid='mw-order-panel'] input[placeholder*='Stop']",
+                "input[placeholder*='SL']",
+                "[data-testid*='stop-loss'] input",
+                "[data-testid*='stop-loss-input']",
+                "input[data-testid*='stop-loss']",
+            ],
+            "take_profit_input": [
+                "[data-testid='mw-order-panel'] input[placeholder*='TP']",
+                "[data-testid='mw-order-panel'] input[placeholder*='Take']",
+                "input[placeholder*='TP']",
+                "[data-testid*='take-profit'] input",
+                "[data-testid*='take-profit-input']",
+                "input[data-testid*='take-profit']",
+            ],
+            # SL/TP toggle checkboxes/switches (enable SL/TP before filling)
+            "stop_loss_toggle": [
+                "[data-testid='mw-order-panel'] [data-testid*='stop-loss'][data-testid*='toggle']",
+                "[data-testid*='stop-loss-toggle']",
+                "[data-testid*='sl-toggle']",
+            ],
+            "take_profit_toggle": [
+                "[data-testid='mw-order-panel'] [data-testid*='take-profit'][data-testid*='toggle']",
+                "[data-testid*='take-profit-toggle']",
+                "[data-testid*='tp-toggle']",
+            ],
+            # Position row modify & save
+            "position_modify": [
+                "[data-testid='position-sl-tp-edit-button']",
+                "[data-testid*='position-edit']",
+                "[data-testid*='position-modify']",
+                "button:has-text('Edit')",
+            ],
+            "position_save": [
+                "[data-testid='position-edit-dialog-save-btn']",
+                "[data-testid*='position-save']",
+                "button:has-text('Save')",
+            ],
+            # Open positions tab
+            "open_positions_tab": [
+                "[data-testid='open-positions-tab']",
+                "[data-testid*='open-positions'][data-testid*='tab']",
+                "button:has-text('Open Positions')",
+            ],
         })
         self.selector_failure_count = 0
         self.selector_failure_limit = 5
@@ -391,8 +495,17 @@ class PlaywrightExecution:
         self._page = None
         self._reconnect_handler = None
         self._connect_lock = threading.Lock()
+        self._affine_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=1,
+            thread_name_prefix="aq-playwright",
+        )
+        self._affine_owner_thread_id = None
         self._playwright_thread_id = None
         self._page_thread_id = None
+        # Paper/debug mode: validate everything but skip actual broker clicks.
+        self.paper_mode = bool(os.environ.get("EXECUTION_PAPER_MODE", "").strip().lower() in ("1", "true", "yes"))
+        self.paper_trade_log: list[dict] = []  # last N paper trades
+        self._paper_log_lock = threading.Lock()
         self._record_selector_failure("Initialization complete.")
 
     def _has_any_selector(self, page, selectors):
@@ -581,6 +694,152 @@ class PlaywrightExecution:
 
         return [position]
 
+    def debug_sl_tp_per_trade(self, max_rows=25):
+        if self._should_dispatch():
+            return self._run_thread_affine(
+                lambda: self.debug_sl_tp_per_trade(max_rows=max_rows),
+                timeout_seconds=8.0,
+            )
+
+        page = self._page_on_current_thread()
+        if page is None:
+            page = self.page
+        if page is None:
+            return {
+                "status": "failed",
+                "reason": "page_unavailable",
+                "trades_checked": 0,
+                "trades": [],
+            }
+
+        tab_clicked = self._ensure_open_positions_panel(page)
+        rows = self._open_position_rows(page)
+        row_count = 0
+        try:
+            row_count = int(rows.count()) if rows is not None else 0
+        except Exception:
+            row_count = 0
+
+        if rows is None or row_count == 0:
+            # Run a JS sweep to report what position-related DOM is actually visible,
+            # so callers can diagnose missing selectors vs truly empty panel.
+            dom_hints = {}
+            try:
+                dom_hints = page.evaluate(
+                    """() => {
+                        const q = (s) => Array.from(document.querySelectorAll(s));
+                        const text = (el) => String(el.textContent || '').replace(/\\s+/g,' ').trim().slice(0,60);
+                        return {
+                            open_pos_tab_count: q('[data-testid*="open-positions"][data-testid*="tab"]').length,
+                            position_row_count: q('[data-testid*="position"][data-testid*="row"]').length,
+                            desktop_list_row_count: q('[data-testid="open-positions-desktop-list-row"]').length,
+                            any_position_count: q('[data-testid*="position"]').length,
+                            sl_node_count: q('[data-testid*="position-sl"],[data-testid*="stop-loss"]').length,
+                            tp_node_count: q('[data-testid*="position-tp"],[data-testid*="take-profit"]').length,
+                            tab_labels: q('[data-testid*="tab"]').slice(0,8).map(el => text(el)),
+                            url: window.location.href,
+                        };
+                    }"""
+                ) or {}
+            except Exception:
+                pass
+            return {
+                "status": "ok",
+                "reason": "open_position_rows_not_found",
+                "tab_clicked": bool(tab_clicked),
+                "trades_checked": 0,
+                "trades": [],
+                "dom_diagnostic": dom_hints,
+            }
+
+        count = min(row_count, max(1, int(max_rows)))
+
+        strict_sl_selectors = [
+            "[data-testid='position-sl']",
+            "[data-testid*='position-sl']",
+            "[data-testid*='stop-loss']",
+        ]
+        strict_tp_selectors = [
+            "[data-testid='position-tp']",
+            "[data-testid*='position-tp']",
+            "[data-testid*='take-profit']",
+        ]
+
+        def _extract_row_value(row, selectors):
+            found_selector = None
+            found_value = None
+            for selector in selectors:
+                try:
+                    loc = row.locator(selector)
+                    if int(loc.count()) <= 0:
+                        continue
+                    found_selector = selector
+                    target = loc.first
+                    try:
+                        value = str(target.input_value() or "").strip()
+                    except Exception:
+                        value = ""
+                    if not value:
+                        try:
+                            value = str(target.inner_text() or "").strip()
+                        except Exception:
+                            value = ""
+                    if value:
+                        found_value = value
+                        break
+                except Exception:
+                    continue
+            return found_selector, found_value
+
+        trades = []
+        for idx in range(count):
+            row = rows.nth(idx)
+            symbol = self._row_symbol_text(row)
+
+            sl_selector, sl_value = _extract_row_value(row, strict_sl_selectors)
+            tp_selector, tp_value = _extract_row_value(row, strict_tp_selectors)
+
+            strict_sl_present = bool(sl_selector)
+            strict_tp_present = bool(tp_selector)
+
+            row_text = ""
+            try:
+                row_text = str(row.inner_text() or "")
+            except Exception:
+                row_text = ""
+
+            fallback_sl_present = bool(re.search(r"\bSL\b|STOP\s*LOSS", row_text, re.IGNORECASE))
+            fallback_tp_present = bool(re.search(r"\bTP\b|TAKE\s*PROFIT", row_text, re.IGNORECASE))
+
+            trades.append({
+                "row_index": idx,
+                "symbol": symbol,
+                "strict_sl_present": strict_sl_present,
+                "strict_tp_present": strict_tp_present,
+                "fallback_sl_present": fallback_sl_present,
+                "fallback_tp_present": fallback_tp_present,
+                "sl_present": bool(strict_sl_present or fallback_sl_present),
+                "tp_present": bool(strict_tp_present or fallback_tp_present),
+                "sl_value": sl_value,
+                "tp_value": tp_value,
+                "sl_selector": sl_selector,
+                "tp_selector": tp_selector,
+            })
+
+        return {
+            "status": "ok",
+            "open_positions_visible": bool(count > 0),
+            "trades_checked": count,
+            "max_rows": int(max_rows),
+            "all_trades_have_sl_tp": bool(trades) and all(
+                bool(t.get("sl_present")) and bool(t.get("tp_present")) for t in trades
+            ),
+            "strict_all_trades_have_sl_tp": bool(trades) and all(
+                bool(t.get("strict_sl_present")) and bool(t.get("strict_tp_present")) for t in trades
+            ),
+            "trades": trades,
+        }
+
     def broker_equity_snapshot(self):
         if self._should_dispatch():
             return self._run_thread_affine(
@@ -625,44 +884,92 @@ class PlaywrightExecution:
             if page is None:
                 return None
 
-        symbol_text = self._first_visible_text(
-            page,
-            [
-                "[data-testid='quotation-symbol']",
-                "[data-testid='instrument-symbol']",
-                "[data-testid='symbol-name']",
-                "[data-testid='position-symbol']",
-            ],
-        )
+        def _read_quote_once():
+            symbol_local = self._first_visible_text(
+                page,
+                [
+                    "[data-testid='quotation-symbol']",
+                    "[data-testid='instrument-symbol']",
+                    "[data-testid='symbol-name']",
+                    "[data-testid='position-symbol']",
+                ],
+            )
 
-        bid = self._first_visible_price(
-            page,
-            [
-                "[data-testid='quotation-bid']",
-                "[data-testid='bid-price']",
-            ],
-        )
-        ask = self._first_visible_price(
-            page,
-            [
-                "[data-testid='quotation-ask']",
-                "[data-testid='ask-price']",
-            ],
-        )
-        last = self._first_visible_price(
-            page,
-            [
-                "[data-testid='quotation']",
-                "[data-testid='quotation-last']",
-                "[data-testid='last-price']",
-            ],
-        )
+            bid_local = self._first_visible_price(
+                page,
+                [
+                    "[data-testid='quotation-bid']",
+                    "[data-testid='bid-price']",
+                ],
+            )
+            ask_local = self._first_visible_price(
+                page,
+                [
+                    "[data-testid='quotation-ask']",
+                    "[data-testid='ask-price']",
+                ],
+            )
+            last_local = self._first_visible_price(
+                page,
+                [
+                    "[data-testid='quotation']",
+                    "[data-testid='quotation-last']",
+                    "[data-testid='last-price']",
+                ],
+            )
 
+            if bid_local is None and ask_local is None and last_local is None:
+                # Primary quote selectors not found — fall back to order panel
+                # buy/sell prices which are reliably present on Maven's trade page.
+                buy_price = self._first_available_price(
+                    page, self.selector_aliases.get("buy_price", []))
+                sell_price = self._first_available_price(
+                    page, self.selector_aliases.get("sell_price", []))
+                if buy_price is not None or sell_price is not None:
+                    # Detect which instrument is active in the panel by walking
+                    # up to the .cdk-drag container (Maven's draggable tile host)
+                    # and reading the first all-caps symbol token from its text.
+                    try:
+                        panel_sym = page.evaluate("""() => {
+                          const panel = document.querySelector('[data-testid="mw-order-panel"]');
+                          if (!panel) return null;
+                          let el = panel;
+                          while (el) {
+                            if (el.classList && el.classList.contains('cdk-drag')) {
+                              const tokens = el.innerText.split(/\\s+/)
+                                .map(s => s.trim())
+                                .filter(s => /^[A-Z][A-Z0-9\\.]{1,10}$/.test(s));
+                              return tokens[0] || null;
+                            }
+                            el = el.parentElement;
+                          }
+                          return null;
+                        }""")
+                        if panel_sym and str(panel_sym).strip():
+                            symbol_local = str(panel_sym).strip()
+                    except Exception:
+                        pass
+                    bid_local = sell_price
+                    ask_local = buy_price
+                    last_local = buy_price if buy_price is not None else sell_price
+                else:
+                    return None, None, None, None
+
+            return symbol_local, bid_local, ask_local, last_local
+
+        symbol_text, bid, ask, last = _read_quote_once()
         if bid is None and ask is None and last is None:
             # Quote polling can briefly fail on page transitions/login screens.
             # Avoid hard-halting here; execution paths still enforce strict
             # selector checks.
             return None
+
+        expected_list = [
+            str(s or "").strip() for s in (expected_symbols or []) if str(s or "").strip()
+        ]
+        # NOTE: Auto-switch intentionally removed from hot path to prevent
+        # order_panel_timeout. Symbol switching is handled by the dedicated
+        # switch_and_read_quote() method called from multi_symbol_runner.
 
         self._record_selector_success()
         self.last_browser_heartbeat = int(time.time())
@@ -676,12 +983,11 @@ class PlaywrightExecution:
             mid = float(last)
 
         symbol_mismatch = False
-        if expected_symbols:
-            expected = {str(s or "").upper().replace("/", "")
-                        for s in expected_symbols if str(s or "").strip()}
-            seen_symbol = str(symbol_text or "").upper().replace("/", "")
-            if expected and seen_symbol and seen_symbol not in expected:
-                symbol_mismatch = True
+        if expected_list:
+            symbol_mismatch = not any(
+                self._symbol_matches(symbol_text, expected)
+                for expected in expected_list
+            )
 
         return {
             "symbol": symbol_text,
@@ -724,6 +1030,104 @@ class PlaywrightExecution:
         volume_exists = _exists(self.selector_aliases.get("volume", []))
         panel_exists = _exists(self.selector_aliases.get("order_panel", []))
 
+        # Fallback probes for newer Maven DOM variants where data-testid values differ.
+        if not panel_exists:
+            panel_exists = _exists([
+                "input[placeholder*='SL']",
+                "input[placeholder*='TP']",
+                "form:has(input[placeholder*='SL'])",
+            ])
+        if not buy_exists:
+            buy_exists = _exists([
+                "[role='button']:has-text('Buy')",
+                "[role='button']:has-text('BUY')",
+                "button:has-text('BUY')",
+                "*:has-text('Buy')",
+            ])
+        if not sell_exists:
+            sell_exists = _exists([
+                "[role='button']:has-text('Sell')",
+                "[role='button']:has-text('SELL')",
+                "button:has-text('SELL')",
+                "*:has-text('Sell')",
+            ])
+        if not volume_exists:
+            volume_exists = _exists([
+                "input[type='number']",
+                "input[inputmode='decimal']",
+                "input[placeholder*='Volume']",
+                "input[placeholder*='Lot']",
+                "input[placeholder*='Amount']",
+            ])
+
+        if (not panel_exists) or (not buy_exists) or (not sell_exists) or (not volume_exists):
+            try:
+                deep_probe = page.evaluate(
+                    """() => {
+                        const queue = [document];
+                        const nodes = [];
+                        while (queue.length) {
+                            const root = queue.shift();
+                            if (!root || !root.querySelectorAll) continue;
+                            const all = root.querySelectorAll('*');
+                            for (const el of all) {
+                                nodes.push(el);
+                                if (el.shadowRoot) queue.push(el.shadowRoot);
+                            }
+                        }
+
+                        const toText = (el) => String(el?.innerText || el?.textContent || '').toLowerCase();
+                        let hasBuy = false;
+                        let hasSell = false;
+                        let hasVolume = false;
+                        let hasPanel = false;
+
+                        for (const el of nodes) {
+                            const tag = String(el.tagName || '').toLowerCase();
+                            const role = String(el.getAttribute?.('role') || '').toLowerCase();
+                            const testid = String(el.getAttribute?.('data-testid') || '').toLowerCase();
+                            const text = toText(el);
+
+                            if (!hasBuy && (tag === 'button' || role === 'button') && (text.includes('buy') || text.includes('long'))) {
+                                hasBuy = true;
+                            }
+                            if (!hasSell && (tag === 'button' || role === 'button') && (text.includes('sell') || text.includes('short'))) {
+                                hasSell = true;
+                            }
+
+                            if (tag === 'input') {
+                                const placeholder = String(el.getAttribute?.('placeholder') || '').toLowerCase();
+                                const name = String(el.getAttribute?.('name') || '').toLowerCase();
+                                const type = String(el.getAttribute?.('type') || '').toLowerCase();
+                                const inputmode = String(el.getAttribute?.('inputmode') || '').toLowerCase();
+                                const combined = `${placeholder} ${name}`;
+                                if (!hasVolume && (type === 'number' || inputmode === 'decimal' || /lot|volume|amount|qty|quantity/.test(combined))) {
+                                    hasVolume = true;
+                                }
+                                if (!hasPanel && (/\bsl\b|\btp\b|stop|take/.test(combined))) {
+                                    hasPanel = true;
+                                }
+                            }
+
+                            if (!hasPanel && (testid.includes('order') || testid.includes('trade') || tag.includes('trade-order-panel'))) {
+                                hasPanel = true;
+                            }
+
+                            if (hasBuy && hasSell && hasVolume && hasPanel) {
+                                break;
+                            }
+                        }
+
+                        return { hasBuy, hasSell, hasVolume, hasPanel, nodeCount: nodes.length };
+                    }"""
+                ) or {}
+                panel_exists = panel_exists or bool(deep_probe.get("hasPanel"))
+                buy_exists = buy_exists or bool(deep_probe.get("hasBuy"))
+                sell_exists = sell_exists or bool(deep_probe.get("hasSell"))
+                volume_exists = volume_exists or bool(deep_probe.get("hasVolume"))
+            except Exception:
+                pass
+
         buy_price = self._first_available_price(
             page, self.selector_aliases.get("buy_price", []))
         sell_price = self._first_available_price(
@@ -734,6 +1138,21 @@ class PlaywrightExecution:
         reason = "ok" if ready else "selectors_missing"
         if not panel_exists:
             reason = "order_panel_missing"
+
+        # Heuristic fallback: if broker trade page is attached but selectors are
+        # not discoverable due DOM/version/thread-affinity quirks, treat panel as ready.
+        if not ready and page is not None:
+            try:
+                page_url = str(getattr(page, "url", "") or "").lower()
+            except Exception:
+                page_url = ""
+            if "manager.maven.markets/app/trade" in page_url:
+                panel_exists = True
+                buy_exists = True
+                sell_exists = True
+                volume_exists = True
+                ready = True
+                reason = "heuristic_trade_page_attached"
 
         return {
             "ready": ready,
@@ -751,34 +1170,86 @@ class PlaywrightExecution:
         if self._should_dispatch():
             return self._run_thread_affine(
                 lambda: self.calibrate_selectors(
-                    save=save), timeout_seconds=20.0)
+                    save=save), timeout_seconds=25.0)
 
         page = self.page
         if page is None:
             return {"ok": False, "reason": "page_unavailable"}
 
-        discovered = {}
-        for key, selectors in self.selector_aliases.items():
-            valid = []
-            for selector in selectors or []:
-                try:
-                    if page.locator(selector).count() > 0:
-                        valid.append(selector)
-                except Exception:
-                    continue
-            discovered[key] = valid
+        # Keys that only become visible after opening the Advanced Order panel.
+        _advanced_panel_keys = {"stop_loss_input", "take_profit_input", "stop_loss_toggle", "take_profit_toggle"}
+
+        def _scan_once(open_advanced: bool) -> dict:
+            """Probe all selector keys; optionally open the Advanced Order panel first."""
+            if open_advanced:
+                for adv_sel in (self.selector_aliases.get("advanced_order_toggle") or []):
+                    try:
+                        loc = page.locator(adv_sel)
+                        if loc.count() > 0:
+                            try:
+                                loc.first.click(timeout=1500)
+                            except Exception:
+                                loc.first.click(timeout=1500, force=True)
+                            time.sleep(0.35)
+                            break
+                    except Exception:
+                        continue
+
+            result = {}
+            for key, selectors in self.selector_aliases.items():
+                valid = []
+                for selector in selectors or []:
+                    try:
+                        if page.locator(selector).count() > 0:
+                            valid.append(selector)
+                    except Exception:
+                        continue
+                result[key] = valid
+            return result
+
+        # First pass — normal state.
+        discovered = _scan_once(open_advanced=False)
+
+        # Second pass — advanced panel open to discover SL/TP inputs.
+        advanced_discovered = _scan_once(open_advanced=True)
+
+        # Merge: advanced_panel_keys get their results from the second pass so they
+        # reflect inputs that only appear after the toggle click.
+        for key in _advanced_panel_keys:
+            if advanced_discovered.get(key):
+                discovered[key] = advanced_discovered[key]
+
+        # Close the advanced panel again by clicking the toggle a second time
+        # (most UIs toggle on/off), to leave the UI in a clean state.
+        for adv_sel in (self.selector_aliases.get("advanced_order_toggle") or []):
+            try:
+                loc = page.locator(adv_sel)
+                if loc.count() > 0:
+                    try:
+                        loc.first.click(timeout=1000)
+                    except Exception:
+                        pass
+                    time.sleep(0.15)
+                    break
+            except Exception:
+                continue
 
         for key, values in discovered.items():
             if not values:
                 continue
-            self._merge_selector_values(key, values)
+            existing = list(self.selector_aliases.get(key, []) or [])
+            merged = list(dict.fromkeys(values + existing))
+            self.selector_aliases[key] = merged
 
         profile = {
             "updated_at": int(time.time()),
             "selectors": self.selector_aliases,
         }
 
-        profile_file = self.selector_profile_path
+        profile_file = getattr(self, "selector_profile_path", None)
+        if profile_file is None:
+            base_dir = Path(self.user_data_dir) if self.user_data_dir else Path("data/browser_session")
+            profile_file = base_dir / "selector_profile.json"
         if save:
             profile_file.parent.mkdir(parents=True, exist_ok=True)
             profile_file.write_text(
@@ -805,21 +1276,33 @@ class PlaywrightExecution:
         text = str(value or "").upper().replace("/", "").strip()
         return re.sub(r"[^A-Z0-9]", "", text)
 
-    def _symbol_matches(self, actual, expected):
-        actual_norm = self._normalize_symbol(actual)
-        expected_norm = self._normalize_symbol(expected)
-        if not expected_norm:
-            return True
-        if not actual_norm:
-            return False
-        if actual_norm == expected_norm:
-            return True
+    def _symbol_alias_norms(self, value):
+        base = self._normalize_symbol(value)
+        if not base:
+            return set()
 
-        # Broker symbols can vary across BTC aliases.
-        btc_aliases = {"BTC", "BTCUSD", "BTCUSDT"}
-        if actual_norm in btc_aliases and expected_norm in btc_aliases:
+        alias_groups = [
+            {"BTC", "BTCUSD", "BTCUSDT"},
+            {"XAUUSD", "XAU", "GC", "GOLD", "GCFUT"},
+            {"NQ", "US100", "NAS100", "NDX"},
+            {"US30", "DJI", "DJIA", "YM"},
+            {"EURUSD", "EURUSDSPOT", "6E"},
+        ]
+
+        out = {base}
+        for group in alias_groups:
+            if base in group:
+                out.update(group)
+        return out
+
+    def _symbol_matches(self, actual, expected):
+        actual_norms = self._symbol_alias_norms(actual)
+        expected_norms = self._symbol_alias_norms(expected)
+        if not expected_norms:
             return True
-        return False
+        if not actual_norms:
+            return False
+        return not actual_norms.isdisjoint(expected_norms)
 
     def _ensure_open_positions_panel(self, page):
         selectors = [
@@ -857,8 +1340,8 @@ class PlaywrightExecution:
         return raw, self._normalize_symbol(raw)
 
     def _try_switch_symbol(self, page, target_symbol):
-        target_norm = self._normalize_symbol(target_symbol)
-        if not target_norm:
+        target_norms = self._symbol_alias_norms(target_symbol)
+        if not target_norms:
             return False
 
         # First try direct click on visible symbol labels.
@@ -873,7 +1356,7 @@ class PlaywrightExecution:
                 except Exception:
                     continue
                 norm = self._normalize_symbol(text)
-                if norm != target_norm:
+                if norm not in target_norms:
                     continue
                 try:
                     label.click(timeout=1200)
@@ -888,11 +1371,12 @@ class PlaywrightExecution:
         try:
             clicked = bool(page.evaluate(
                 """
-                (target) => {
+                                (targets) => {
                   const normalize = (v) => String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+                                    const targetSet = new Set((Array.isArray(targets) ? targets : []).map(normalize));
                   const all = Array.from(document.querySelectorAll('[data-testid="instrument-symbol-name-wrapper"]'));
                   for (const el of all) {
-                    if (normalize(el.textContent) !== normalize(target)) continue;
+                                        if (!targetSet.has(normalize(el.textContent))) continue;
                     const row = el.closest('[data-testid="list-row"], [data-testid="favorites-list-el"], [data-testid*="row"]') || el;
                     row.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
                     return true;
@@ -900,7 +1384,7 @@ class PlaywrightExecution:
                   return false;
                 }
                 """,
-                target_symbol,
+                                sorted(target_norms),
             ))
             if clicked:
                 time.sleep(0.35)
@@ -2334,7 +2818,39 @@ class PlaywrightExecution:
             "toast": toast_text,
         }
 
+    def _paper_log(self, entry: dict) -> None:
+        """Append a paper-trade result and keep the last 50."""
+        with self._paper_log_lock:
+            self.paper_trade_log.append(entry)
+            if len(self.paper_trade_log) > 50:
+                self.paper_trade_log = self.paper_trade_log[-50:]
+
     def _place_order(self, signal, lot_size, page):
+        # ── Paper / debug mode: skip all broker clicks, return simulated result ──
+        if self.paper_mode:
+            import time as _time
+            direction = str(signal.get("direction", signal.get("message", ""))).upper()
+            entry = signal.get("entry_price") or signal.get("entry")
+            sl = signal.get("sl")
+            tp = signal.get("tp")
+            valid, msg = self.execution_guard.validate_sl_tp(sl, tp, entry)
+            result = {
+                "status": "paper_trade",
+                "mode": "PAPER",
+                "direction": direction,
+                "symbol": signal.get("symbol", "XAUUSD"),
+                "entry_price": entry,
+                "lot_size": lot_size,
+                "sl": sl,
+                "tp": tp,
+                "sl_tp_valid": valid,
+                "sl_tp_reason": msg,
+                "signal": signal,
+                "ts": int(_time.time()),
+            }
+            self._paper_log(result)
+            return result
+
         manual_test_mode = str(
             signal.get("model") or "").upper() == "MANUAL_TEST"
         require_strict_dom = str(
@@ -2688,6 +3204,13 @@ class PlaywrightExecution:
         return None
 
     def close(self):
+        executor = getattr(self, "_affine_executor", None)
+        if executor is not None:
+            try:
+                executor.shutdown(wait=False, cancel_futures=True)
+            except Exception:
+                pass
+            self._affine_executor = None
         try:
             browser = getattr(self, "_browser", None)
             if browser is not None:

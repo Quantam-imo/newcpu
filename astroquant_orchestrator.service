@@ -4,9 +4,9 @@ After=network.target astroquant_tradingbot.service chrome_remote_debug.service
 
 [Service]
 Type=simple
-User=ubuntu
-WorkingDirectory=/workspaces/newcpu
-ExecStart=/workspaces/newcpu/.venv/bin/python3 /workspaces/newcpu/start_astroquant.py
+User=__SERVICE_USER__
+WorkingDirectory=__WORKSPACE__
+ExecStart=__WORKSPACE__/.venv/bin/python3 __WORKSPACE__/start_astroquant.py
 Restart=always
 Environment=PYTHONUNBUFFERED=1
 

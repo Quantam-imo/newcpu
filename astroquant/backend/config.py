@@ -78,6 +78,15 @@ SYMBOLS = {
     "US30": {"databento": "YM.c.1", "priority_models": ["ICT"], "dataset": "GLBX.MDP3"}
 }
 
+# Runtime symbol universe — configurable via AQ_RUNTIME_SYMBOLS env var.
+# Comma-separated list; falls back to the default 5-symbol trading universe.
+_DEFAULT_RUNTIME_SYMBOLS = "XAUUSD,NQ,EURUSD,US30,GC.FUT"
+RUNTIME_SYMBOLS: list[str] = [
+    s.strip().upper()
+    for s in os.getenv("AQ_RUNTIME_SYMBOLS", _DEFAULT_RUNTIME_SYMBOLS).split(",")
+    if s.strip()
+] or ["XAUUSD", "GC.FUT"]
+
 # Permanent active trading universe for frontend chart + ops flows.
 TRADING_FUTURES_SYMBOLS = ["GC.FUT", "NQ.FUT", "6E.FUT", "YM.FUT"]
 TRADING_SYMBOL_ALIASES = {
@@ -113,7 +122,10 @@ EXECUTION_BROWSER_TIMEOUT_MS = _env_int(
     "EXECUTION_BROWSER_TIMEOUT_MS",
     default=_env_int("CDP_TIMEOUT_SEC", default=12) * 1000,
 )
-EXECUTION_LOGIN_USERNAME = os.getenv("EXECUTION_LOGIN_USERNAME", os.getenv("MAVEN_USERNAME", "")).strip()
+EXECUTION_LOGIN_USERNAME = os.getenv(
+    "EXECUTION_LOGIN_USERNAME",
+    os.getenv("MAVEN_USERNAME", os.getenv("MAVEN_EMAIL", "")),
+).strip()
 EXECUTION_LOGIN_PASSWORD = os.getenv("EXECUTION_LOGIN_PASSWORD", os.getenv("MAVEN_PASSWORD", "")).strip()
 ADMIN_API_TOKEN = os.getenv("ADMIN_API_TOKEN", "").strip()
 if not ADMIN_API_TOKEN:

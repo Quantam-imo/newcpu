@@ -4,10 +4,14 @@ After=network.target
 
 [Service]
 Type=simple
-User=ubuntu
-WorkingDirectory=/workspaces/newcpu
-ExecStart=/usr/bin/google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/chrome-profile --no-sandbox --disable-gpu --disable-software-rasterizer --disable-dev-shm-usage --disable-extensions --disable-background-networking --disable-sync --disable-translate --disable-default-apps --disable-popup-blocking --disable-background-timer-throttling --disable-renderer-backgrounding --disable-device-discovery-notifications --disable-features=TranslateUI --window-size=1280,900 https://manager.maven.markets/app/trade
+User=__SERVICE_USER__
+WorkingDirectory=__WORKSPACE__
+EnvironmentFile=-__WORKSPACE__/.env
+Environment=DISPLAY=:99
+ExecStartPre=/bin/bash -c "pgrep -f 'Xvfb :99' || Xvfb :99 -screen 0 1280x900x24 -ac +extension GLX +render -noreset &"
+ExecStart=/bin/bash __WORKSPACE__/start_chrome_remote_debug.sh
 Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target

@@ -1,0 +1,23 @@
+[Unit]
+Description=AstroQuant Cloudflare Challenge Auto-Unblock
+Documentation=Waits for Cloudflare JS challenge on Maven tab to auto-clear, then auto-logs in.
+After=chrome_remote_debug.service network.target
+Wants=chrome_remote_debug.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=__SERVICE_USER__
+WorkingDirectory=__WORKSPACE__
+EnvironmentFile=-__WORKSPACE__/.env
+Environment=PYTHONPATH=__WORKSPACE__
+Environment=PYTHONUNBUFFERED=1
+# Wait up to 3 minutes for the challenge to auto-clear + login
+ExecStart=__WORKSPACE__/.venv/bin/python3 __WORKSPACE__/cloudflare_unblock.py --cdp-wait 90 --max-wait 150
+TimeoutStartSec=300
+# Restart if it fails (e.g. Chrome wasn't ready)
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

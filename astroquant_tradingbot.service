@@ -1,15 +1,19 @@
 [Unit]
-Description=AstroQuant Trading Bot Backend
+Description=AstroQuant Full Stack Trading Service
 After=network.target
 
 [Service]
 Type=simple
-User=ubuntu
-WorkingDirectory=/workspaces/newcpu
-Environment=PYTHONPATH=/workspaces/newcpu
-ExecStart=/workspaces/newcpu/.venv/bin/uvicorn astroquant.backend.main:app --host 0.0.0.0 --port 8000
-Restart=always
+User=__SERVICE_USER__
+WorkingDirectory=__WORKSPACE__
+Environment=PYTHONPATH=__WORKSPACE__
 Environment=PYTHONUNBUFFERED=1
+# Optional NoVPN binary path on CPU. If not present, startup skips NoVPN cleanly.
+Environment=NOVPN_EXECUTABLE=__WORKSPACE__/tools/novpn/novpn
+ExecStart=/bin/bash __WORKSPACE__/start_24h_fullstack.sh
+ExecStop=/bin/bash __WORKSPACE__/stop_24h_fullstack.sh
+Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target

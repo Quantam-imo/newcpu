@@ -51,18 +51,25 @@ class MultiSymbolRunner:
 
     SYMBOL_MAP = {
         "XAUUSD": "GC.c.1",
+        "GC.FUT": "GC.c.1",
         "NQ": "NQ.c.1",
+        "NQ.FUT": "NQ.c.1",
         "EURUSD": "6E.c.1",
+        "6E.FUT": "6E.c.1",
         "BTC": "BTC.c.1",
         "US30": "YM.c.1",
+        "YM.FUT": "YM.c.1",
     }
 
     SPOT_SYMBOL_MAP = {
-        "XAUUSD": ["XAUUSD", "XAU/USD"],
-        "NQ": ["NDX", "US100"],
-        "EURUSD": ["EURUSD"],
+        # Maven's order panel shows "XAUUSD" for GC gold — include all
+        # aliases the panel may display so symbol_mismatch is not triggered.
+        "XAUUSD": ["XAUUSD", "XAU/USD", "GC", "XAUUSD1", "GOLD"],
+        "GC.FUT": ["XAUUSD", "XAU/USD", "GC", "GOLD"],
+        "NQ": ["NQ", "NDX", "US100", "NAS100"],
+        "EURUSD": ["EURUSD", "EUR/USD"],
         "BTC": ["BTCUSD", "BTC-USD"],
-        "US30": ["US30", "DJI"],
+        "US30": ["US30", "DJI", "DJIA", "YM"],
     }
 
     ROOT_MONTH_CYCLES = {
@@ -383,15 +390,15 @@ class MultiSymbolRunner:
         # Enhanced fallback for GC-F and other symbols
         if include_contracts:
             if root in {"GC-F", "GC", "GC.FUT"}:
-                raw_contracts = ["GC.FUT", "GC.c.1", "GC.c.0", "GCJ6", "GCJ26"]
+                raw_contracts = ["GC.c.1", "GC.c.0", "GC.FUT", "GCJ6", "GCJ26"]
             elif root in {"NQ", "NQ-F", "NQ.FUT"}:
-                raw_contracts = ["NQ.FUT", "NQ.c.1", "NQ.c.0"]
+                raw_contracts = ["NQ.c.1", "NQ.c.0", "NQ.FUT"]
             elif root in {"6E", "EURUSD", "6E.FUT"}:
-                raw_contracts = ["6E.FUT", "6E.c.1", "6E.c.0"]
+                raw_contracts = ["6E.c.1", "6E.c.0", "6E.FUT"]
             elif root in {"BTC", "BTC-F", "BTC.FUT"}:
-                raw_contracts = ["BTC.FUT", "BTC.c.1", "BTC.c.0"]
+                raw_contracts = ["BTC.c.1", "BTC.c.0", "BTC.FUT"]
             elif root in {"YM", "US30", "YM.FUT"}:
-                raw_contracts = ["YM.FUT", "YM.c.1", "YM.c.0"]
+                raw_contracts = ["YM.c.1", "YM.c.0", "YM.FUT"]
             else:
                 raw_contracts = self._front_month_contracts(root)
 

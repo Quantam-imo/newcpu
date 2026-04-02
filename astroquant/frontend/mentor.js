@@ -5,6 +5,15 @@ const MENTOR_WIDTH_KEY = "aq_mentor_drawer_width";
 const MENTOR_SECTIONS_KEY = "aq_mentor_sections";
 const MENTOR_COMPACT_KEY = "aq_mentor_compact_mode";
 
+function resetMentorUiState() {
+    localStorage.removeItem(MENTOR_SECTIONS_KEY);
+    localStorage.removeItem(MENTOR_COMPACT_KEY);
+    localStorage.removeItem(MENTOR_WIDTH_KEY);
+    localStorage.setItem(MENTOR_STATE_KEY, "1");
+    mentorLoadedOnce = false;
+    mentorLastRenderSignature = "";
+}
+
 function mentorApiOrigins() {
     const existing = String(window.AQ_API_BASE || "").trim();
     if (existing) {
@@ -103,7 +112,12 @@ const mentorFetch = async (path, options, timeoutMs = 25000) => {
         }
     }
     
-    console.warn("mentorFetch failed on all targets:", targets, "lastError:", lastError);
+    const isAbort = lastError && (lastError.name === "AbortError" || /aborted/i.test(String(lastError.message || "")));
+    if (isAbort) {
+        console.debug("mentorFetch aborted:", targets, "lastError:", lastError);
+    } else {
+        console.warn("mentorFetch failed on all targets:", targets, "lastError:", lastError);
+    }
     return new Response(
         JSON.stringify({ status: "error", message: "fetch failed" }),
         { status: 599, headers: { "Content-Type": "application/json" } },
@@ -169,8 +183,39 @@ function section(id, title, body, isOpen = true) {
     `;
 }
 
+function renderMentorSkeleton(message = "Loading mentor context...") {
+    const content = document.getElementById("mentorContent");
+    if (!content) return;
+
+    const placeholder = narrative("AI Mentor", message);
+    const sections = [
+        "1) Market Context",
+        "2) Liquidity",
+        "3) Institutional Flow",
+        "4) Iceberg",
+        "5) ICT",
+        "6) Gann",
+        "7) Astro",
+        "8) News",
+        "9) Session",
+        "10) Probability",
+        "11) Story",
+    ];
+
+    content.innerHTML = [
+        actionCall("WAIT", message, "neutral"),
+        ...sections.map((title, idx) => section(`skeleton-${idx + 1}`, title, placeholder, true)),
+    ].join("");
+
+    setMentorMeta("Initializing mentor...");
+}
+
 function sectionOpen(savedSections, id) {
-    return Boolean(savedSections && savedSections[id] === true);
+    if (!savedSections || typeof savedSections !== "object") return true;
+    const boolStates = Object.values(savedSections).filter(v => typeof v === "boolean");
+    if (boolStates.length > 0 && boolStates.every(v => v === false)) return true;
+    if (!Object.prototype.hasOwnProperty.call(savedSections, id)) return true;
+    return Boolean(savedSections[id]);
 }
 
 function getCurrentSectionState() {
@@ -224,6 +269,117 @@ function normalizeMentorData(raw, symbol) {
         return {
             ...payload,
             gann: enrichedGann,
+        };
+    }
+
+    // Handle /mentor/context response: {"context": {market:{...}, model:{...}, price:X, narrative:"...", ...}}
+    // This is the format returned by the backend's build_context() wrapped in a "context" key.
+    if (payload.context && !payload.market && typeof payload.context === "object" && payload.context.market) {
+        const inner = payload.context;
+        const iMarket = inner.market || {};
+        const iModel = inner.model || {};
+        const iIceberg = inner.iceberg || {};
+        const iPrice = inner.price ?? null;
+
+        const iConfRaw = Number(iModel.confidence ?? 0);
+        // Backend stores 0-1 float; convert to 0-100
+        const iConfScore = Number.isFinite(iConfRaw)
+            ? Math.round(Math.max(0, Math.min(100, iConfRaw <= 1 ? iConfRaw * 100 : iConfRaw)))
+            : 0;
+
+        const iHtfBias = String(iMarket.htf_bias || "").toUpperCase();
+        let iVerdict = "Low Probability / Wait";
+        if (iHtfBias.includes("BULL")) iVerdict = iConfScore >= 55 ? "Buy Setup" : "Watch Buy";
+        else if (iHtfBias.includes("BEAR")) iVerdict = iConfScore >= 55 ? "Sell Setup" : "Watch Sell";
+
+        // Map enriched backend-derived fields if present
+        const iLiq  = (inner.liquidity_sweep && typeof inner.liquidity_sweep === "object") ? inner.liquidity_sweep : {};
+        const iIct  = (inner.ict && typeof inner.ict === "object") ? inner.ict : {};
+        const iFlow = (inner.orderflow && typeof inner.orderflow === "object") ? inner.orderflow : {};
+        const iSrc  = (inner.data_source && typeof inner.data_source === "object") ? inner.data_source : {};
+        const iGann = (inner.gann && typeof inner.gann === "object") ? inner.gann : null;
+        const iAstro = (inner.astro && typeof inner.astro === "object") ? inner.astro : null;
+
+        // Probability: use orderflow signal_strength when available; adjust verdict for neutral bias
+        const iFlowScore = Number.isFinite(Number(iFlow.signal_strength)) ? Number(iFlow.signal_strength) : null;
+        const iFinalScore = iFlowScore ?? iConfScore;
+        const iScoreSource = iFlowScore != null ? "candle_orderflow" : "model_confidence";
+        let iVerdict2;
+        if (iHtfBias.includes("BULL")) {
+            iVerdict2 = iFinalScore >= 70 ? "Buy Setup" : iFinalScore >= 55 ? "Watch Buy" : "Low Probability / Wait";
+        } else if (iHtfBias.includes("BEAR")) {
+            iVerdict2 = iFinalScore >= 70 ? "Sell Setup" : iFinalScore >= 55 ? "Watch Sell" : "Low Probability / Wait";
+        } else {
+            iVerdict2 = iFinalScore >= 70 ? "Await Confluence (High Score)" : iFinalScore >= 55 ? "Await Confluence" : "No Edge — Wait";
+        }
+
+        return {
+            symbol: iMarket.symbol || symbol,
+            context: {
+                symbol: iMarket.symbol || symbol,
+                price: iPrice,
+                prev_low: inner.prev_low ?? null,
+                prev_high: inner.prev_high ?? null,
+                htf_bias: iMarket.htf_bias,
+                ltf_structure: iMarket.ltf_structure,
+                kill_zone: iMarket.session,
+                volatility: iMarket.volatility,
+            },
+            liquidity: {
+                external_high: inner.prev_high ?? null,
+                external_low: inner.prev_low ?? null,
+                sweep: iLiq.sweep || "none",
+                target: iLiq.target || (iHtfBias === "BULLISH" ? "LONG" : iHtfBias === "BEARISH" ? "SHORT" : "--"),
+            },
+            institution: {
+                iceberg_buy: iFlow.absorption_signal === "BUY_ABSORPTION" ? "YES" : "NO",
+                iceberg_sell: iFlow.absorption_signal === "SELL_ABSORPTION" ? "YES" : "NO",
+                delta: iFlow.delta_state || iHtfBias || "NEUTRAL",
+                poc: iPrice,
+            },
+            iceberg: {
+                detected: !!(iIceberg && iIceberg.detected),
+                price: (iIceberg && iIceberg.price) ?? null,
+                strength: (iIceberg && iIceberg.strength) ?? null,
+                bias: (iIceberg && iIceberg.bias) ?? null,
+                absorption: (iIceberg && iIceberg.absorption) ?? null,
+            },
+            ict: {
+                turtle_soup: iIct.turtle_soup || "--",
+                fvg_zone: iIct.fvg_zone || iModel.entry_logic || "--",
+                order_block: iIct.order_block || "--",
+                liquidity_sweep: iLiq.sweep || "none",
+            },
+            gann: iGann || {
+                _engine: "NOT_ACTIVE",
+                enabled: false,
+                detected: false,
+                reason: "ENGINE_NOT_AVAILABLE",
+            },
+            astro: iAstro || {
+                harmonic_window: false,
+                planet_event: "ENGINE_NOT_ACTIVE",
+                bias: "--",
+                _engine: "NOT_ACTIVE",
+                reason: "ENGINE_NOT_AVAILABLE",
+            },
+            news: {
+                next_event: iMarket.news_state || "None",
+                impact: iMarket.news_state === "HALT" ? "High" : "Low",
+                time: "--",
+            },
+            session: {
+                session: iMarket.session || "--",
+                phase: iMarket.ltf_structure || "--",
+            },
+            probability: {
+                score: iFinalScore,
+                score_source: iScoreSource,
+                verdict: iVerdict2,
+            },
+            story: iFlow.narrative ? `${iFlow.narrative} ${inner.narrative || ""}`.trim() : (inner.narrative || iModel.reason || "--"),
+            data_source: iSrc,
+            updated_at: inner.updated_at || new Date().toISOString(),
         };
     }
 
@@ -321,9 +477,9 @@ function normalizeMentorData(raw, symbol) {
             angle_lines: gannRaw.angle_lines,
         },
         astro: {
-            harmonic_window: astroRows.length > 0,
-            planet_event: astroRows[0]?.label || "None",
-            bias: "Neutral",
+            harmonic_window: astroRows.length > 0 && astroRows[0]?.harmonic_window,
+            planet_event: astroRows.length > 0 ? astroRows[0]?.planet_event : "None",
+            bias: astroRows.length > 0 ? astroRows[0]?.bias : "Neutral",
         },
         news: {
             next_event: market.news_state || "None",
@@ -335,28 +491,21 @@ function normalizeMentorData(raw, symbol) {
             phase: market.ltf_structure || "--",
         },
         probability: {
-            score: decisionScore,
-            score_source: signalStrength !== null ? "orderflow_signal_strength" : "model_confidence",
+            score: confidenceScore,
+            score_source: "model_confidence",
             verdict,
         },
-        story: summary.narrative || model.reason || "--",
+        story: model.reason || "--",
         updated_at: payload.updated_at || new Date().toISOString(),
     };
 }
 
-function renderMentorSkeleton(message = "Loading mentor modules...") {
-    const content = document.getElementById("mentorContent");
-    if (!content) return;
-    content.innerHTML = `<div class="mentor-action-call mentor-tone-neutral"><strong>AI Mentor</strong><span>${fmt(message)}</span></div>`;
-}
-
 function mentorRenderSignature(data) {
-    const context = data?.context || {};
-    const probability = data?.probability || {};
-    const gann = data?.gann || {};
-    const iceberg = data?.iceberg || {};
+    const context = data.context || {};
+    const probability = data.probability || {};
+    const gann = data.gann || {};
+    const iceberg = data.iceberg || {};
     const summary = {
-        symbol: data?.symbol,
         price: context?.price,
         htf: context?.htf_bias,
         ltf: context?.ltf_structure,
@@ -444,14 +593,17 @@ function renderMentorContext(data, sectionOverrides = null) {
         row("Liquidity Sweep", ict.liquidity_sweep),
     ].join("");
 
+    // Gann: show real data if engine active, otherwise ENGINE_NOT_ACTIVE pill
+    const gannEngineOff = gann._engine === "NOT_ACTIVE" || (gann.enabled === undefined && gann.detected === undefined && !gann.score && !gann.cycle);
     const gannDetected = Boolean(gann.detected);
-    const gannEnabled = gann.enabled !== false;
-    const gannStatus = !gannEnabled
-        ? "OFF"
+    const gannEnabled = !gannEngineOff && gann.enabled !== false;
+    const gannStatus = gannEngineOff
+        ? "NOT_ACTIVE"
+        : !gannEnabled ? "OFF"
         : (gannDetected
             ? `${fmt(gann.direction)} ${gann.confidence != null ? `${fmt(gann.confidence)}%` : ""}`.trim()
             : "NO ACTIVE SIGNAL");
-    const gannBody = [
+    const gannBody = !gannEngineOff ? [
         `<div style="margin-bottom:6px;">${gannStatusPill(gann)}</div>`,
         narrative(
             "Gann Time + Price",
@@ -484,13 +636,21 @@ function renderMentorContext(data, sectionOverrides = null) {
         row("Resistance", fmtPrice(gann.resistance)),
         row("Target 100", fmtPrice(gann.target_100)),
         row("Target 200", fmtPrice(gann.target_200)),
+    ].join("") : [
+        `<span class="mentor-status-badge warn">GANN ENGINE NOT ACTIVE</span>`,
+        narrative("Gann Time + Price", "Gann analysis engine not running. Enable the Gann module to see cycle, degree, vibration, and price-time alignment signals."),
     ].join("");
 
-    const astroBody = [
+    // Astro: show real data if engine active, otherwise ENGINE_NOT_ACTIVE pill
+    const astroEngineOff = astro._engine === "NOT_ACTIVE" || astro.planet_event === "ENGINE_NOT_ACTIVE";
+    const astroBody = !astroEngineOff ? [
         narrative("Astro Timing", `${astro.harmonic_window ? "Window Active" : "Window Inactive"} | ${fmt(astro.planet_event)}`),
         row("Harmonic Window", astro.harmonic_window ? "ACTIVE" : "INACTIVE"),
         row("Planet Event", astro.planet_event),
         row("Astro Bias", astro.bias),
+    ].join("") : [
+        `<span class="mentor-status-badge warn">ASTRO ENGINE NOT ACTIVE</span>`,
+        narrative("Astro Timing", "AstroQuant planetary harmonic engine not running. Enable the astro module to see harmonic windows and planet event signals."),
     ].join("");
 
     const newsBody = [
@@ -580,11 +740,16 @@ function renderMentorContext(data, sectionOverrides = null) {
     const hasIceberg = iceberg?.detected != null || iceberg?.strength != null;
     const completenessCount = [hasPrice, hasOrderflow, hasIceberg].filter(Boolean).length;
     const completenessTone = completenessCount >= 3 ? "good" : (completenessCount >= 2 ? "warn" : "bad");
+    const ds = data.data_source || {};
+    const staleBadge = ds.stale ? statusBadge(`DATA ${ds.stale_hours ?? "?"}h OLD`, "bad") : "";
+    const fallbackBadge = ds.fallback_used && !ds.stale ? statusBadge("FALLBACK DATA", "warn") : "";
+    const srcSymbol = ds.symbol && ds.symbol !== (context.symbol || selectedMentorSymbol()) ? ` (${fmt(ds.symbol)})` : "";
     setMentorMeta(`
         <div class="mentor-meta-line">
-            <span class="mentor-meta-text">Updated: ${updatedAt.toLocaleString()} | ${fmt(context.symbol || data.symbol || selectedMentorSymbol())} | Last: <span class="mentor-live-price">${last}</span></span>
+            <span class="mentor-meta-text">Updated: ${updatedAt.toLocaleString()} | ${fmt(context.symbol || data.symbol || selectedMentorSymbol())}${srcSymbol} | Last: <span class="mentor-live-price">${last}</span></span>
             ${statusBadge(`Fresh ${ageSec}s`, freshnessTone)}
             ${statusBadge(`Completeness ${completenessCount}/3`, completenessTone)}
+            ${staleBadge}${fallbackBadge}
         </div>
     `);
     requestAnimationFrame(() => {
@@ -673,6 +838,7 @@ function initMentorDrawer() {
     const drawer = document.getElementById("mentorDrawer");
     const refreshBtn = document.getElementById("mentorRefreshBtn");
     const compactBtn = document.getElementById("mentorCompactBtn");
+    const resetBtn = document.getElementById("mentorResetBtn");
     const symbolSelect = document.getElementById("chartSymbolInput") || document.getElementById("chartSymbol");
     if (!drawer) return;
 
@@ -695,6 +861,17 @@ function initMentorDrawer() {
             drawer.classList.toggle("mentor-compact", nextCompact);
             compactBtn.innerText = nextCompact ? "Expanded" : "Compact";
             localStorage.setItem(MENTOR_COMPACT_KEY, nextCompact ? "1" : "0");
+        });
+    }
+    if (resetBtn) {
+        resetBtn.addEventListener("click", () => {
+            resetMentorUiState();
+            drawer.classList.add("open");
+            drawer.classList.remove("mentor-compact");
+            drawer.style.width = "420px";
+            if (compactBtn) compactBtn.innerText = "Compact";
+            renderMentorSkeleton("Resetting mentor UI state...");
+            loadMentor().catch(() => {});
         });
     }
     if (symbolSelect) {
@@ -734,4 +911,5 @@ function initMentorDrawer() {
 }
 
 window.toggleMentor = toggleMentor;
+window.resetMentorUiState = resetMentorUiState;
 initMentorDrawer();

@@ -64,7 +64,7 @@ def options_chart_data(response: Response):
 import logging
 from astroquant.engine.candle.candle_reader import get_candle_series, get_latest_candle
 from astroquant.backend.config import TRADING_FUTURES_SYMBOLS, TRADING_SYMBOL_ALIASES, symbol_dataset
-from astroquant.backend.runtime import get_runner, normalize_runtime_symbol
+from astroquant.backend.runtime import RUNTIME_SYMBOLS, get_runner, normalize_runtime_symbol
 from astroquant.backend.config import ACCOUNT_CONFIG
 from astroquant.backend.governance.prop_governance import PropConfig, PropGovernance
 from astroquant.engine.market_feed import MarketFeed
@@ -190,6 +190,23 @@ def get_chart_data(symbol: str = "GC.FUT", timeframe: str = "1", limit: int = 80
 	from astroquant.backend.services.databento_utility import fetch_candles_unified
 	import json
 
+	def _to_epoch_seconds(value):
+		if value is None:
+			return None
+		try:
+			if isinstance(value, (int, float)):
+				num = float(value)
+				if num > 1_000_000_000_000:
+					num = num / 1000.0
+				return int(num)
+			text = str(value).strip()
+			if not text:
+				return None
+			dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+			return int(dt.timestamp())
+		except Exception:
+			return None
+
 	def _candle_age_seconds(row: dict) -> float | None:
 		ts = row.get("time") or row.get("timestamp")
 		if ts is None:
@@ -230,11 +247,10 @@ def get_chart_data(symbol: str = "GC.FUT", timeframe: str = "1", limit: int = 80
 
 	meta = {"source": "redis", "count": len(candles)} if candles else {}
 
-	# Fast-path: serve disk cache immediately if it was written within the last 15 minutes.
-	# This avoids the 10-15 second Databento cold-start when the data was recently fetched.
-	# Disk cache is written every time a successful Databento fetch completes, so a <15 min
-	# cache means data is effectively live (the page auto-refreshes every 3-9 seconds anyway).
-	_DISK_CACHE_FAST_SECONDS = 3600  # 1 hour (cache is refreshed on every successful Databento fetch)
+	# Fast-path: serve disk cache only while it is still within the same threshold the UI
+	# considers non-degraded. Older cache can be shown as fallback, but should trigger a
+	# live refresh attempt instead of being treated as fresh chart data.
+	_DISK_CACHE_FAST_SECONDS = 300  # 5 minutes
 	if not candles:
 		import json as _json
 		_cache_path = f"data/last_known_chart_{symbol}_{timeframe}.json"
@@ -313,11 +329,15 @@ def get_chart_data(symbol: str = "GC.FUT", timeframe: str = "1", limit: int = 80
 				"fallback": dict(last_known.get("meta") or {}),
 			}
 
-	# If candles exist but are stale, try direct market-feed refresh from active resolver symbol.
+	# If candles exist but are stale or degraded, try direct market-feed refresh from the
+	# active resolver symbol before returning the cached payload.
 	if candles:
 		try:
 			age_seconds = _candle_age_seconds(candles[-1])
-			if age_seconds is not None and age_seconds > (6 * 3600):
+			refresh_due = bool(meta.get("degraded_data"))
+			if age_seconds is not None and age_seconds > 300:
+				refresh_due = True
+			if refresh_due:
 				runner = get_runner()
 				canonical = normalize_runtime_symbol(symbol)
 				active_symbol = runner.resolve_active_feed_symbol(canonical)
@@ -339,14 +359,212 @@ def get_chart_data(symbol: str = "GC.FUT", timeframe: str = "1", limit: int = 80
 		except Exception as exc:
 			error_msgs.append(f"Stale refresh fallback error: {exc}")
 
+	overlays: dict[str, Any] = {}
+	signals: list[dict[str, Any]] = []
+	enriched_meta = dict(meta or {})
+
+	try:
+		runner = get_runner()
+		runtime_symbol = normalize_runtime_symbol(symbol)
+		market_data, market_mode = _market_data_for_api(runner, runtime_symbol, prefer_realtime=False)
+		htf_bias = str(market_data.get("htf_bias") or "NEUTRAL").upper()
+		ltf_structure = str(market_data.get("ltf_structure") or "RANGE").upper()
+		session_name = str(market_data.get("session") or "--")
+		volatility_state = str(market_data.get("volatility") or "NORMAL").upper()
+		news_state = str(market_data.get("news_state") or "NORMAL").upper()
+
+		norm = []
+		for row in candles or []:
+			if not isinstance(row, dict):
+				continue
+			ts = _to_epoch_seconds(row.get("time") or row.get("timestamp"))
+			if ts is None:
+				continue
+			try:
+				o = float(row.get("open") or 0)
+				h = float(row.get("high") or 0)
+				l = float(row.get("low") or 0)
+				c = float(row.get("close") or 0)
+				v = float(row.get("volume") or 0)
+			except Exception:
+				continue
+			if min(o, h, l, c) <= 0:
+				continue
+			norm.append({"time": ts, "open": o, "high": h, "low": l, "close": c, "volume": max(0.0, v)})
+
+		if norm:
+			# VWAP + ATR bands + CVD overlays.
+			vwap_rows = []
+			atr_upper = []
+			atr_lower = []
+			cvd_rows = []
+			cum_pv = 0.0
+			cum_v = 0.0
+			cum_delta = 0.0
+			trs = []
+			prev_close = None
+			for r in norm:
+				tp = (r["high"] + r["low"] + r["close"]) / 3.0
+				vol = max(0.0, r["volume"])
+				cum_pv += tp * vol
+				cum_v += vol
+				if cum_v > 0:
+					vwap_rows.append({"time": r["time"], "value": cum_pv / cum_v})
+
+				tr = r["high"] - r["low"]
+				if prev_close is not None:
+					tr = max(tr, abs(r["high"] - prev_close), abs(r["low"] - prev_close))
+				trs.append(max(0.0, tr))
+				window = trs[-14:]
+				atr = (sum(window) / len(window)) if window else 0.0
+				atr_upper.append({"time": r["time"], "value": r["close"] + atr})
+				atr_lower.append({"time": r["time"], "value": max(0.0, r["close"] - atr)})
+				prev_close = r["close"]
+
+				delta = vol if r["close"] >= r["open"] else -vol
+				cum_delta += delta
+				cvd_rows.append({"time": r["time"], "value": cum_delta})
+
+			overlays["vwap"] = vwap_rows
+			overlays["atr_band"] = {"upper": atr_upper, "lower": atr_lower}
+			overlays["cumulative_delta"] = cvd_rows
+
+			recent = norm[-40:]
+			recent_high = max(r["high"] for r in recent)
+			recent_low = min(r["low"] for r in recent)
+			overlays["liquidity"] = [
+				{"price": recent_high, "strength": "EXT_HIGH"},
+				{"price": recent_low, "strength": "EXT_LOW"},
+			]
+
+			obs = []
+			for r in reversed(recent):
+				rng = max(1e-9, r["high"] - r["low"])
+				body = abs(r["close"] - r["open"])
+				if body / rng < 0.55:
+					continue
+				direction = "BULLISH" if r["close"] > r["open"] else "BEARISH"
+				obs.append({
+					"high": max(r["open"], r["close"]),
+					"low": min(r["open"], r["close"]),
+					"direction": direction,
+				})
+				if len(obs) >= 3:
+					break
+			overlays["order_blocks"] = obs
+
+			fvg_rows = []
+			for i in range(max(2, len(norm) - 40), len(norm)):
+				a = norm[i - 2]
+				c = norm[i]
+				if c["low"] > a["high"]:
+					fvg_rows.append({"high": c["low"], "low": a["high"], "direction": "BULLISH"})
+				elif c["high"] < a["low"]:
+					fvg_rows.append({"high": a["low"], "low": c["high"], "direction": "BEARISH"})
+			overlays["fvg"] = fvg_rows[-3:]
+
+		last_ts = None
+		if candles:
+			last_ts = _to_epoch_seconds(candles[-1].get("time") if isinstance(candles[-1], dict) else None)
+
+		# Chart markers: directional marker from HTF bias on latest candle.
+		if last_ts is not None:
+			if htf_bias.startswith("BULL"):
+				signals.append({"time": last_ts, "direction": "BUY", "model": "HTF_BIAS"})
+			elif htf_bias.startswith("BEAR"):
+				signals.append({"time": last_ts, "direction": "SELL", "model": "HTF_BIAS"})
+			elif len(norm) >= 2:
+				direction = "BUY" if norm[-1]["close"] >= norm[-2]["close"] else "SELL"
+				signals.append({"time": last_ts, "direction": direction, "model": "PRICE_MOMENTUM"})
+
+		# Overlay lines for detected absorption levels when available.
+		absorption_levels = list(market_data.get("absorption_levels") or [])
+		if absorption_levels:
+			level_values = []
+			iceberg_rows = []
+			for lvl in absorption_levels[-5:]:
+				if isinstance(lvl, dict):
+					price = lvl.get("price")
+					strength = lvl.get("absorption_strength")
+				else:
+					price = lvl
+					strength = None
+				try:
+					n = float(price)
+					if n > 0:
+						level_values.append(n)
+						iceberg_rows.append({"price": n, "absorption_strength": float(strength) if strength is not None else 1.0})
+				except Exception:
+					continue
+			if level_values:
+				overlays["absorption_levels"] = level_values
+				overlays["iceberg"] = iceberg_rows
+		elif norm:
+			recent = norm[-30:]
+			sorted_by_volume = sorted(recent, key=lambda r: r["volume"], reverse=True)
+			fallback_iceberg = []
+			for row in sorted_by_volume[:2]:
+				fallback_iceberg.append({"price": row["close"], "absorption_strength": max(1.0, row["volume"])})
+			if fallback_iceberg:
+				overlays["iceberg"] = fallback_iceberg
+
+		engine_flags = getattr(runner, "engine_enable_flags", {}) or {}
+		gann_enabled = bool(engine_flags.get("GANN", False))
+		gann_direction = "BUY" if htf_bias.startswith("BULL") else ("SELL" if htf_bias.startswith("BEAR") else "NONE")
+		gann_detected = gann_enabled and gann_direction in {"BUY", "SELL"}
+		gann_conf = 60 if gann_detected else (45 if gann_enabled else 0)
+
+		enriched_meta.update({
+			"source": enriched_meta.get("source") or "runtime",
+			"data_source": enriched_meta.get("source") or market_mode,
+			"auto_mode": "AUTO" if bool(getattr(runner, "auto_trading_enabled", True)) else "MANUAL",
+			"risk_percent": float(ACCOUNT_CONFIG.get("risk_per_trade_phase1", 0.005)) * 100.0,
+			"volatility_state": volatility_state,
+			"phase": "PHASE1",
+			"news": news_state,
+			"confidence": gann_conf,
+			"session": session_name,
+			"htf_bias": htf_bias,
+			"ltf_structure": ltf_structure,
+			"gann": {
+				"enabled": gann_enabled,
+				"detected": gann_detected,
+				"direction": gann_direction,
+				"confidence": gann_conf,
+				"cross": "--",
+				"key_degree": "--",
+				"price_time_alignment": False,
+				"signals": {
+					"cross": "--",
+					"key_degree": "--",
+					"price_time_alignment": False,
+				},
+			},
+		})
+
+		if norm:
+			last_close = norm[-1]["close"]
+			range_ref = max(1e-6, max(r["high"] for r in norm[-40:]) - min(r["low"] for r in norm[-40:]))
+			overlays["gann_lines"] = [
+				{"price": max(0.0, last_close + range_ref * 0.5), "label": "Gann +0.5R"},
+				{"price": max(0.0, last_close - range_ref * 0.5), "label": "Gann -0.5R"},
+			]
+			astro_window = session_name.upper() in {"LONDON", "NY", "LONDON/NY"}
+			astro_color_line = last_close + (range_ref * (0.2 if astro_window else -0.2))
+			overlays["astro_lines"] = [{"price": max(0.0, astro_color_line), "label": "Astro Window" if astro_window else "Astro Idle"}]
+		if market_mode:
+			enriched_meta["market_data_mode"] = market_mode
+	except Exception as exc:
+		error_msgs.append(f"Chart signal enrichment error: {exc}")
+
 	if error_msgs:
-		meta["errors"] = error_msgs
+		enriched_meta["errors"] = error_msgs
 
 	return {
 		"candles": candles,
-		"meta": meta,
-		"overlays": {},
-		"signals": [],
+		"meta": enriched_meta,
+		"overlays": overlays,
+		"signals": signals,
 	}
 
 # Minimal /equity endpoint for dashboard integration
@@ -540,9 +758,13 @@ def market_offset_quality(symbol: str = "XAUUSD") -> Any:
 			offset_difference = float(futures_price) - float(spot_price)
 	except Exception:
 		offset_difference = None
-	broker_symbol_price = broker_quote.get("mid")
-	if broker_symbol_price is None:
-		broker_symbol_price = broker_quote.get("last")
+	# Only use broker_quote price fields when the symbol matches — prevents
+	# cross-asset contamination (e.g. GC panel price leaking into NQ/EURUSD).
+	broker_symbol_price = None
+	if not broker_quote.get("symbol_mismatch"):
+		broker_symbol_price = broker_quote.get("mid")
+		if broker_symbol_price is None:
+			broker_symbol_price = broker_quote.get("last")
 	if broker_symbol_price is None:
 		broker_symbol_price = spot_price
 	absorption_levels = list(market_data.get("absorption_levels") or [])
@@ -802,7 +1024,7 @@ def market_symbol_probe(
 def get_multi_symbol_dashboard() -> Any:
 	from astroquant.engine.databento_sync_engine import DatabentoSyncEngine
 
-	runtime_symbols = ["XAUUSD", "NQ", "EURUSD", "US30"]
+	runtime_symbols = list(RUNTIME_SYMBOLS)
 	runner = get_runner()
 	registry_map: dict[str, dict] = {}
 	try:
@@ -814,6 +1036,7 @@ def get_multi_symbol_dashboard() -> Any:
 	rows = []
 	feed_healthy = False
 	for symbol in runtime_symbols:
+		runtime_symbol = str(symbol or "").upper()
 		canonical = normalize_runtime_symbol(symbol)
 		try:
 			# Keep dashboard scans responsive under feed degradation.
@@ -833,10 +1056,11 @@ def get_multi_symbol_dashboard() -> Any:
 		broker_price = None
 		try:
 			quote = runner.get_broker_spot_quote(canonical) or {}
-			broker_price = quote.get("price")
-			if broker_price is None:
-				snapshot = quote.get("snapshot") or {}
+			snapshot = quote.get("snapshot") or {}
+			if not snapshot.get("symbol_mismatch"):
 				broker_price = snapshot.get("mid") or snapshot.get("last")
+			if broker_price is None:
+				broker_price = quote.get("price")
 		except Exception:
 			quote = {}
 			broker_price = None
@@ -878,7 +1102,8 @@ def get_multi_symbol_dashboard() -> Any:
 
 		rows.append(
 			{
-				"symbol": canonical,
+				"symbol": runtime_symbol,
+				"canonical_symbol": canonical,
 				"market": {
 					"htf_bias": "NEUTRAL",
 					"ltf_structure": "NEUTRAL",
@@ -1082,9 +1307,15 @@ def get_symbols(q: str = "", include_all: bool = False):
 	if not include_all:
 		canonical = [
 			{"key": "AQ.GC.FUT", "symbol": "GC.FUT", "exchange": "CME", "description": "COMEX Gold Futures Front Contract", "type": "futures", "priority": -10},
+			{"key": "AQ.XAUUSD", "symbol": "XAUUSD", "exchange": "SPOT", "description": "Gold Spot (mapped to GC futures feed)", "type": "spot_alias", "priority": -10},
+			{"key": "AQ.GC", "symbol": "GC", "exchange": "CME", "description": "Gold alias (maps to GC.FUT)", "type": "alias", "priority": -10},
 			{"key": "AQ.NQ.FUT", "symbol": "NQ.FUT", "exchange": "CME", "description": "Nasdaq 100 Futures Front Contract", "type": "futures", "priority": -9},
+			{"key": "AQ.NQ", "symbol": "NQ", "exchange": "CME", "description": "Nasdaq alias (maps to NQ.FUT)", "type": "alias", "priority": -9},
 			{"key": "AQ.6E.FUT", "symbol": "6E.FUT", "exchange": "CME", "description": "Euro FX Futures Front Contract", "type": "futures", "priority": -8},
+			{"key": "AQ.EURUSD", "symbol": "EURUSD", "exchange": "SPOT", "description": "EURUSD alias (maps to 6E.FUT)", "type": "spot_alias", "priority": -8},
 			{"key": "AQ.YM.FUT", "symbol": "YM.FUT", "exchange": "CBOT", "description": "Dow Futures Front Contract", "type": "futures", "priority": -7},
+			{"key": "AQ.US30", "symbol": "US30", "exchange": "INDEX", "description": "US30 alias (maps to YM.FUT)", "type": "index_alias", "priority": -7},
+			{"key": "AQ.YM", "symbol": "YM", "exchange": "CBOT", "description": "Dow alias (maps to YM.FUT)", "type": "alias", "priority": -7},
 		]
 		if q_lower:
 			canonical = [
@@ -1122,9 +1353,15 @@ def get_symbols(q: str = "", include_all: bool = False):
 	# Canonical trading symbols used by chart/mentor paths.
 	canonical = [
 		{"key": "AQ.GC.FUT", "symbol": "GC.FUT", "exchange": "CME", "description": "COMEX Gold Futures Front Contract", "type": "futures", "priority": -10},
+		{"key": "AQ.XAUUSD", "symbol": "XAUUSD", "exchange": "SPOT", "description": "Gold Spot (mapped to GC futures feed)", "type": "spot_alias", "priority": -10},
+		{"key": "AQ.GC", "symbol": "GC", "exchange": "CME", "description": "Gold alias (maps to GC.FUT)", "type": "alias", "priority": -10},
 		{"key": "AQ.NQ.FUT", "symbol": "NQ.FUT", "exchange": "CME", "description": "Nasdaq 100 Futures Front Contract", "type": "futures", "priority": -9},
+		{"key": "AQ.NQ", "symbol": "NQ", "exchange": "CME", "description": "Nasdaq alias (maps to NQ.FUT)", "type": "alias", "priority": -9},
 		{"key": "AQ.6E.FUT", "symbol": "6E.FUT", "exchange": "CME", "description": "Euro FX Futures Front Contract", "type": "futures", "priority": -8},
+		{"key": "AQ.EURUSD", "symbol": "EURUSD", "exchange": "SPOT", "description": "EURUSD alias (maps to 6E.FUT)", "type": "spot_alias", "priority": -8},
 		{"key": "AQ.YM.FUT", "symbol": "YM.FUT", "exchange": "CBOT", "description": "Dow Futures Front Contract", "type": "futures", "priority": -7},
+		{"key": "AQ.US30", "symbol": "US30", "exchange": "INDEX", "description": "US30 alias (maps to YM.FUT)", "type": "index_alias", "priority": -7},
+		{"key": "AQ.YM", "symbol": "YM", "exchange": "CBOT", "description": "Dow alias (maps to YM.FUT)", "type": "alias", "priority": -7},
 	]
 	for row in canonical:
 		if (
@@ -1147,9 +1384,6 @@ def get_symbols(q: str = "", include_all: bool = False):
 			unique[symbol_key] = row
 	results = list(unique.values())
 
-	# Permanent policy: hide BTC/MBT instruments from trading symbol autocomplete.
-	blocked = {"BTC", "BTC.FUT", "MBT", "MBT.FUT"}
-	results = [row for row in results if str(row.get("symbol") or "").upper() not in blocked]
 	# Sort by priority, then symbol
 	results.sort(key=lambda x: (x["priority"], x["symbol"]))
 	return {"symbols": results}

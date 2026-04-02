@@ -6,7 +6,7 @@
     <title>AstroQuant Institutional Command Center</title>
     <link rel="icon" href="data:," />
     <script>
-    window.AQ_SCRIPT_VERSION = "aq-v20260344";
+    window.AQ_SCRIPT_VERSION = "aq-v20260351";
     // Prefer same-origin API calls to avoid cross-origin CORS issues in
     // browser proxy/forwarding scenarios (e.g., frontend served on :8001).
     window.AQ_API_BASE = window.location.origin;
@@ -33,8 +33,8 @@
     })();
     </script>
     <script type="module">
-    import { setupSymbolAutocomplete } from './symbol_autocomplete.js?v=aq-v20260344';
-    import { updateAllPanels } from './symbol_selector.js?v=aq-v20260344';
+    import { setupSymbolAutocomplete } from './symbol_autocomplete.js?v=aq-v20260351';
+    import { updateAllPanels } from './symbol_selector.js?v=aq-v20260351';
     window.addEventListener('DOMContentLoaded', () => {
         setupSymbolAutocomplete({
             inputId: 'chartSymbolInput',
@@ -895,8 +895,8 @@
                 <button onclick="window.open('/admin', '_blank')">Admin Control</button>
             </div>
                 <script type="module">
-                    import { createPropChallengePanel } from "./prop_challenge_panel.js?v=aq-v20260344";
-                    import { openSystemHealthPanel } from "./system_health_panel.js?v=aq-v20260344";
+                    import { createPropChallengePanel } from "./prop_challenge_panel.js?v=aq-v20260351";
+                    import { openSystemHealthPanel } from "./system_health_panel.js?v=aq-v20260351";
                     window.createPropChallengePanel = createPropChallengePanel;
                     document.getElementById("systemHealthToggleBtn").onclick = openSystemHealthPanel;
                 </script>
@@ -1283,9 +1283,17 @@
                                 <div><span>Playwright Connected</span><strong id="opsPlaywrightConnected">--</strong></div>
                                 <div><span>Browser Heartbeat</span><strong id="opsBrowserHeartbeat">--</strong></div>
                                 <div><span>Bridge Ready</span><strong id="opsBridgeReady">--</strong></div>
+                                <div><span>Broker Tab State</span><strong id="opsBrokerTabState">--</strong></div>
+                                <div><span>Login Required</span><strong id="opsLoginRequired">--</strong></div>
+                                <div><span>Broker Tab URL</span><strong id="opsBrokerTabUrl" style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.8em;">--</strong></div>
                                 <div><span>Same Browser Mode</span><strong id="opsSameBrowserMode">--</strong></div>
                                 <div><span>CDP Reachable</span><strong id="opsCdpReachable">--</strong></div>
                                 <div><span>Broker Tabs</span><strong id="opsBrokerTabs">--</strong></div>
+                                <div><span>Auto-Connect</span><strong id="opsBrokerAutoConnect">--</strong></div>
+                                <div><span>Execution Mode</span><strong id="opsExecutionMode">--</strong></div>
+                                <div><span>Spot Fidelity</span><strong id="opsSpotFidelity">--</strong></div>
+                                <div><span>Paper Trades</span><strong id="opsPaperTradeCount">--</strong></div>
+                                <div><span>Last Paper Trade</span><strong id="opsLastPaperTrade" style="font-size:0.8em;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">--</strong></div>
                                 <div><span>Dashboard Tabs</span><strong id="opsDashboardTabs">--</strong></div>
                                 <div><span>Last Execution TS</span><strong id="opsLastExecutionTs">--</strong></div>
                                 <div><span>Feed</span><strong id="opsFeedStatus">--</strong></div>
@@ -1308,6 +1316,9 @@
                                     <button id="opsOpenBrokerBtn" style="background:#0a8;color:#fff;padding:6px 12px;border-radius:4px;cursor:pointer;border:none;font-size:0.9em;" title="Opens Maven broker in a new tab" onclick="window.openBrokerPage && window.openBrokerPage()">🌐 Open Broker</button>
                                     <button id="opsReconnectBtn2" onclick="window.reconnectExecutionBrowserSafe && window.reconnectExecutionBrowserSafe()" style="padding:6px 12px;border-radius:4px;cursor:pointer;border:1px solid #555;background:var(--surface);font-size:0.9em;">↻ Reconnect</button>
                                     <button id="opsBridgeRecoverBtn2" onclick="window.recoverBrokerBridgeSafe && window.recoverBrokerBridgeSafe()" style="padding:6px 12px;border-radius:4px;cursor:pointer;border:1px solid #555;background:var(--surface);font-size:0.9em;">🔗 Recover Bridge</button>
+                                    <button id="opsToggleExecModeBtn" onclick="window.toggleExecutionModeSafe && window.toggleExecutionModeSafe()" style="padding:6px 12px;border-radius:4px;cursor:pointer;border:1px solid #f59e0b;background:var(--surface);color:#f59e0b;font-size:0.9em;" title="Switch between PAPER (debug) and LIVE execution">📋 Toggle Mode</button>
+                                    <button id="opsToggleSpotFidelityBtn" onclick="window.toggleSpotFidelitySafe && window.toggleSpotFidelitySafe()" style="padding:6px 12px;border-radius:4px;cursor:pointer;border:1px solid #10b981;background:var(--surface);color:#10b981;font-size:0.9em;" title="Switch strict spot-fidelity guard on or off at runtime">🛡 Spot: --</button>
+                                    <button id="opsTriggerTradeBtn" onclick="window.triggerExecutionSafe && window.triggerExecutionSafe()" style="padding:6px 12px;border-radius:4px;cursor:pointer;border:1px solid #38bdf8;background:var(--surface);color:#38bdf8;font-size:0.9em;" title="Manually trigger signal evaluation and execution attempt">⚡ Trigger Trade</button>
                                 </div>
                             <div class="micro-table-wrap" style="margin-top:8px;">
                                 <table id="opsProbeMultiTable">
@@ -1458,6 +1469,7 @@
                 <div class="row" style="margin:0;">
                     <button id="mentorRefreshBtn">Refresh</button>
                     <button id="mentorCompactBtn">Compact</button>
+                    <button id="mentorResetBtn" title="Reset mentor panel state">Reset</button>
                     <button onclick="toggleMentor(false)">Close</button>
                 </div>
             </div>
@@ -1476,7 +1488,7 @@
             // Always load canonical frontend assets from /frontend.
             const prefix = "/frontend";
             const scripts = ["api.js", "chart.js", "mentor.js"];
-            const scriptVersion = String(window.AQ_SCRIPT_VERSION || "aq-v20260344");
+            const scriptVersion = String(window.AQ_SCRIPT_VERSION || "aq-v20260351");
 
             const load = (index) => {
                 if (index >= scripts.length) return;

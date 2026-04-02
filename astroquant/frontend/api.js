@@ -186,6 +186,14 @@ function isTimeoutLikeError(err) {
 	return name.includes("abort") || msg.includes("timeout") || msg.includes("aborted");
 }
 
+function shouldRetryError(err) {
+	const status = Number(err?.status);
+	if (Number.isFinite(status) && status >= 400 && status < 500 && status !== 408 && status !== 429) {
+		return false;
+	}
+	return true;
+}
+
 // ---------- RETRY WITH JITTER ----------
 async function retry(fn, retries = API_CONFIG.MAX_RETRIES) {
   let attempt = 0;
@@ -194,6 +202,7 @@ async function retry(fn, retries = API_CONFIG.MAX_RETRIES) {
     try {
       return await fn();
     } catch (err) {
+		if (!shouldRetryError(err)) throw err;
       if (attempt === retries) throw err;
 
       const delay =
@@ -220,7 +229,11 @@ async function coreFetch(url, options, timeout) {
 
     clearTimeout(timer);
 
-    if (!res.ok) throw new Error("HTTP " + res.status);
+		if (!res.ok) {
+			const httpErr = new Error("HTTP " + res.status);
+			httpErr.status = res.status;
+			throw httpErr;
+		}
 
     return res;
   } catch (err) {
@@ -336,7 +349,11 @@ window.apiFetch = apiFetch;
 window.apiHealth = getApiHealth;
 window.canExecuteTrade = canExecuteTrade;
 window.apiResetCircuit = resetCircuitState;
-const AQ_ADMIN_TOKEN = window.AQ_ADMIN_TOKEN || localStorage.getItem("AQ_ADMIN_TOKEN") || "dev-admin-token";
+const _storedAdminToken = localStorage.getItem("AQ_ADMIN_TOKEN");
+const AQ_ADMIN_TOKEN =
+	window.AQ_ADMIN_TOKEN
+	|| ((_storedAdminToken && _storedAdminToken !== "dev-admin-token") ? _storedAdminToken : "")
+	|| "aq-admin-token-20260329";
 const AQ_ADMIN_ROLE = window.AQ_ADMIN_ROLE || localStorage.getItem("AQ_ADMIN_ROLE") || "ADMIN";
 const AQ_ADMIN_USER = window.AQ_ADMIN_USER || localStorage.getItem("AQ_ADMIN_USER") || "admin";
 const AQ_MICRO_PANEL_STATE_PREFIX = "AQ_MICRO_PANEL_OPEN_";
@@ -1590,12 +1607,93 @@ async function prewarmSymbolRegistry() {
 function canonicalRuntimeSymbolForOps(symbol) {
 	const key = String(symbol || "").toUpperCase();
 	const map = {
+		"GC": "XAUUSD",
 		"GC.FUT": "XAUUSD",
 		"NQ.FUT": "NQ",
+		"6E": "EURUSD",
 		"6E.FUT": "EURUSD",
+		"YM": "US30",
 		"YM.FUT": "US30",
 	};
 	return map[key] || key || "XAUUSD";
+}
+
+let _brokerAutoConnectInFlight = false;
+let _brokerAutoConnectLastAttemptAt = 0;
+let _brokerAutoConnectLastEscalationAt = 0;
+let _brokerAutoConnectLastResult = null; // { ts: Date, success: boolean, state: string }
+
+async function ensureBrokerFeedAutoConnect(opts = {}) {
+	const symbol = canonicalRuntimeSymbolForOps(opts?.symbol || selectedChartSymbol() || "XAUUSD");
+	let runtimeRegistered = false;
+	try {
+		const registerRes = await apiFetch(
+			`/status/symbol_registry/${encodeURIComponent(symbol)}/register`,
+			{ method: "POST" },
+			8000,
+		);
+		runtimeRegistered = registerRes.ok;
+	} catch (_) {
+		runtimeRegistered = false;
+	}
+	if (symbol !== "XAUUSD") return runtimeRegistered;
+
+	const forceReconnect = Boolean(opts?.forceReconnect);
+	const minIntervalMs = Number.isFinite(Number(opts?.minIntervalMs)) ? Number(opts.minIntervalMs) : 15000;
+	const now = Date.now();
+	if (!forceReconnect && (now - _brokerAutoConnectLastAttemptAt) < Math.max(0, minIntervalMs)) return false;
+	if (_brokerAutoConnectInFlight) return false;
+
+	_brokerAutoConnectInFlight = true;
+	_brokerAutoConnectLastAttemptAt = now;
+	try {
+		let bridgeReady = false;
+		let debuggerReachable = false;
+		let brokerTabs = 0;
+		try {
+			const bridgeRes = await apiFetch("/status/broker_bridge", {}, 8000);
+			if (bridgeRes.ok) {
+				const bridge = await bridgeRes.json();
+				bridgeReady = Boolean(bridge?.bridge_ready);
+				debuggerReachable = Boolean(bridge?.debugger_reachable);
+				brokerTabs = Number(bridge?.tabs_broker || 0);
+			}
+		} catch (_) {
+			// Keep going; recover endpoint may still succeed.
+		}
+
+		const needRecover = forceReconnect || !bridgeReady || !debuggerReachable || brokerTabs <= 0;
+		if (needRecover) {
+			await apiFetch(`/status/broker_bridge/recover?force_reconnect=${forceReconnect ? "true" : "false"}`, {
+				method: "POST",
+			}, 8000);
+		}
+
+		let brokerPrice = null;
+		try {
+			const offsetRes = await apiFetch(`/market/offset_quality?symbol=${encodeURIComponent(symbol)}`, {}, 8000);
+			if (offsetRes.ok) {
+				const offset = await offsetRes.json();
+				brokerPrice = offset?.prices?.broker_xauusd_price;
+			}
+		} catch (_) {
+			brokerPrice = null;
+		}
+
+		if (brokerPrice == null && !forceReconnect && (Date.now() - _brokerAutoConnectLastEscalationAt) > 60000) {
+			_brokerAutoConnectLastEscalationAt = Date.now();
+			await apiFetch("/status/broker_bridge/recover?force_reconnect=true", { method: "POST" }, 8000);
+		}
+
+		const success = brokerPrice != null;
+		_brokerAutoConnectLastResult = { ts: new Date(), success, state: bridgeReady ? (success ? "price_ok" : "no_price") : (brokerTabs > 0 ? "tab_not_ready" : "no_tab") };
+		return success;
+	} catch (_) {
+		_brokerAutoConnectLastResult = { ts: new Date(), success: false, state: "error" };
+		return false;
+	} finally {
+		_brokerAutoConnectInFlight = false;
+	}
 }
 
 async function pinRegistryActiveContract() {
@@ -1762,6 +1860,8 @@ async function syncPropEngineControls() {
 }
 
 let _opsStatusInFlight = false;
+let _adminControlUnavailable = false;
+let _lastGoodOffsetQuality = null;
 async function updateOpsStatus() {
 	// Guard: skip if a previous call is still in progress to prevent connection-pool saturation.
 	if (_opsStatusInFlight) return;
@@ -1777,15 +1877,20 @@ async function updateOpsStatus() {
 		apiFetch("/prop_status"),
 		apiFetch("/status/broker_bridge"),
 	]);
-	// Batch 2: slower/upstream endpoints – run after batch 1 so chart can use freed connections
-	const [feedRes, statusRes, offsetQualityRes, registryRes] = await Promise.all([
+	// Batch 2: slower/upstream endpoints – run after batch 1 so chart can use freed connections.
+	// Keep offset quality non-fatal for the full ops refresh: if it times out, use last good snapshot.
+	const [feedRes, statusRes, registryRes] = await Promise.all([
 		apiFetch("/status/feed"),
 		apiFetch("/status"),
-		apiFetch(`/market/offset_quality?symbol=${encodeURIComponent(symbol)}`),
 		apiFetch("/status/symbol_registry"),
 	]);
+	const offsetQualityRes = await apiFetch(
+		`/market/offset_quality?symbol=${encodeURIComponent(symbol)}`,
+		{},
+		8000,
+	).catch(() => null);
 	// If any response is not ok, try to show error in the console panel
-	if (!feedRes.ok || !execRes.ok || !recRes.ok || !eqRes.ok || !propRes.ok || !statusRes.ok || !offsetQualityRes.ok || !bridgeRes.ok) {
+	if (!feedRes.ok || !execRes.ok || !recRes.ok || !eqRes.ok || !propRes.ok || !statusRes.ok || !bridgeRes.ok) {
 		const panel = document.getElementById("operationsConsolePanel");
 		if (panel) {
 			panel.innerHTML = `<div style='color:#ef4444;font-size:14px;padding:12px;'>Backend error: One or more status endpoints failed to respond.<br/>Please check backend logs and network connectivity.</div>`;
@@ -1799,7 +1904,13 @@ async function updateOpsStatus() {
 	const eq = await eqRes.json();
 	const prop = await propRes.json();
 	const status = await statusRes.json();
-	const offsetQuality = await offsetQualityRes.json();
+	let offsetQuality = null;
+	if (offsetQualityRes && offsetQualityRes.ok) {
+		offsetQuality = await offsetQualityRes.json();
+		_lastGoodOffsetQuality = offsetQuality;
+	} else if (_lastGoodOffsetQuality) {
+		offsetQuality = _lastGoodOffsetQuality;
+	}
 	const bridge = await bridgeRes.json();
 	const registry = registryRes.ok ? await registryRes.json() : null;
 	const propBehaviorData = propBehaviorRes.ok
@@ -1807,12 +1918,25 @@ async function updateOpsStatus() {
 		: { behavior: {}, override: {}, unavailable: true };
 
 	// Defensive: If any required object is missing, show error and return
-	if (!feed || !exec || !rec || !eq || !prop || !status || !offsetQuality || !bridge) {
+	if (!feed || !exec || !rec || !eq || !prop || !status || !bridge) {
 		const panel = document.getElementById("operationsConsolePanel");
 		if (panel) {
 			panel.innerHTML = `<div style='color:#ef4444;font-size:14px;padding:12px;'>Backend returned incomplete data for operations console.<br/>Please check backend health.</div>`;
 		}
 		return;
+	}
+	if (!offsetQuality) {
+		offsetQuality = {
+			symbol,
+			market_data_mode: "UNAVAILABLE",
+			sources: {},
+			basis: {},
+			offset_guard: {},
+			trade_quality: {},
+			signal_detection: {},
+			prices: {},
+			broker_quote: {},
+		};
 	}
 	const behavior = propBehaviorData?.behavior || {};
 	const override = propBehaviorData?.override || {};
@@ -1840,6 +1964,47 @@ async function updateOpsStatus() {
 	setText("opsBreachRoom", fmtMoney(prop?.remaining_room_to_breach));
 	setOpsValue("opsPlaywrightConnected", connected ? "YES" : "NO", connected ? "good" : "bad");
 	setOpsValue("opsBridgeReady", bridge?.bridge_ready ? "YES" : "NO", bridge?.bridge_ready ? "good" : "warn");
+	{
+		const tabState = bridge?.broker_tab_state || "unknown";
+		const tabStateColor = tabState === "logged_in" ? "good" : tabState === "login_page" ? "bad" : tabState === "challenge_page" ? "bad" : tabState === "loading" ? "warn" : "neutral";
+		setOpsValue("opsBrokerTabState", tabState.toUpperCase().replace(/_/g, " "), tabStateColor);
+		setOpsValue("opsLoginRequired", bridge?.login_required ? "YES – Log in to Maven" : "NO", bridge?.login_required ? "bad" : "good");
+		const tabUrl = bridge?.broker_tab_url || "--";
+		const urlEl = document.getElementById("opsBrokerTabUrl");
+		if (urlEl) { urlEl.textContent = tabUrl; urlEl.title = tabUrl; }
+		const acr = _brokerAutoConnectLastResult;
+		const acText = acr ? `${acr.ts.toLocaleTimeString()} · ${acr.state}${acr.success ? " ✓" : ""}` : (bridge?.login_required ? "Waiting – login needed" : "Idle");
+		setOpsValue("opsBrokerAutoConnect", acText, acr?.success ? "good" : (bridge?.login_required ? "bad" : "neutral"));
+	}
+	// Execution mode (PAPER / LIVE) + paper trade log
+	apiFetch("/execution/mode", {}, 5000).then(async (modeRes) => {
+		if (!modeRes.ok) return;
+		const modeData = await modeRes.json();
+		const isPaper = Boolean(modeData?.paper_mode);
+		setOpsValue("opsExecutionMode", isPaper ? "PAPER (debug)" : "LIVE", isPaper ? "warn" : "good");
+		setText("opsPaperTradeCount", modeData?.paper_trade_count != null ? String(modeData.paper_trade_count) : "--");
+		const log = Array.isArray(modeData?.paper_trade_log) ? modeData.paper_trade_log : [];
+		const last = log.length > 0 ? log[log.length - 1] : null;
+		if (last) {
+			const ts = last.ts ? new Date(Number(last.ts) * 1000).toLocaleTimeString() : "";
+			const el = document.getElementById("opsLastPaperTrade");
+			const summary = `${ts} ${last.direction || ""} ${last.symbol || ""} @${Number(last.entry_price || 0).toFixed(2)} lot=${last.lot_size || "?"}`;
+			if (el) { el.textContent = summary; el.title = JSON.stringify(last, null, 2); }
+		} else {
+			setText("opsLastPaperTrade", "--");
+		}
+		// Update toggle button label
+		const btn = document.getElementById("opsToggleExecModeBtn");
+		if (btn) btn.textContent = isPaper ? "📋 Mode: PAPER" : "⚡ Mode: LIVE";
+	}).catch(() => {});
+	apiFetch("/execution/spot_fidelity", {}, 5000).then(async (spotRes) => {
+		if (!spotRes.ok) return;
+		const spotData = await spotRes.json();
+		const strict = Boolean(spotData?.spot_fidelity_strict ?? spotData?.strict);
+		setOpsValue("opsSpotFidelity", strict ? "STRICT" : "FLEX", strict ? "warn" : "good");
+		const btn = document.getElementById("opsToggleSpotFidelityBtn");
+		if (btn) btn.textContent = strict ? "🛡 Spot: STRICT" : "🛡 Spot: FLEX";
+	}).catch(() => {});
 	setOpsValue("opsSameBrowserMode", bridge?.same_browser_mode ? "YES" : "NO", bridge?.same_browser_mode ? "good" : "warn");
 	setOpsValue("opsCdpReachable", bridge?.debugger_reachable ? "YES" : "NO", bridge?.debugger_reachable ? "good" : "bad");
 	setText("opsBrokerTabs", bridge?.tabs_broker != null ? String(bridge.tabs_broker) : "--");
@@ -1879,6 +2044,9 @@ async function updateOpsStatus() {
 	const oqScore = Number(offsetQuality?.trade_quality?.score);
 	const oqSignals = Number(offsetQuality?.signal_detection?.count || 0);
 	const oqMode = String(offsetQuality?.market_data_mode || "--").toUpperCase();
+	if (canonicalRuntimeSymbolForOps(symbol) === "XAUUSD" && offsetQuality?.prices?.broker_xauusd_price == null) {
+		ensureBrokerFeedAutoConnect({ symbol: "XAUUSD", minIntervalMs: 15000 }).catch(() => {});
+	}
 
 	setText("opsOqSymbol", offsetQuality?.symbol || "--");
 	setText("opsOqFuturesSource", offsetQuality?.sources?.futures_source || "--");
@@ -1982,7 +2150,7 @@ async function updateOpsStatus() {
 	}
 
 	// Non-blocking multi-symbol scan (don't wait for slow offset_quality)
-	const scanSymbols = ["XAUUSD", "NQ", "EURUSD", "US30"];
+	const scanSymbols = ["XAUUSD", "NQ", "EURUSD", "US30", "GC.FUT"];
 	const timeoutMs = 4000; // 4s timeout per fetch
 	Promise.allSettled(scanSymbols.map(async (sym) => {
 		try {
@@ -2016,58 +2184,76 @@ async function updateOpsStatus() {
 	const runtime = String(exec?.execution_status || "UNKNOWN").toUpperCase() === "HALTED" ? "HALTED" : "ACTIVE";
 	setOpsValue("engineRuntimeStatus", runtime, runtime === "HALTED" ? "bad" : "good");
 
-	try {
-		const rvRes = await apiFetch("/admin/control/risk_violations?limit=200", {
-			headers: adminHeaders(),
-		});
-		if (rvRes.ok) {
-			const rv = await rvRes.json();
-			const items = Array.isArray(rv?.items) ? rv.items : [];
-			setOpsValue("opsRiskViolations", String(items.length), items.length > 0 ? "bad" : "good");
+	if (!_adminControlUnavailable) {
+		try {
+			const rvRes = await apiFetch("/admin/control/risk_violations?limit=200", {
+				headers: adminHeaders(),
+			});
+			if (rvRes.status === 404) {
+				_adminControlUnavailable = true;
+			} else if (rvRes.ok) {
+				const rv = await rvRes.json();
+				const items = Array.isArray(rv?.items) ? rv.items : [];
+				setOpsValue("opsRiskViolations", String(items.length), items.length > 0 ? "bad" : "good");
+			}
+		} catch (_) {
+			setOpsValue("opsRiskViolations", "--", "neutral");
 		}
-	} catch (_) {
-		setOpsValue("opsRiskViolations", "--", "neutral");
+
+		try {
+			const stateRes = await apiFetch("/admin/control/state", {
+				headers: adminHeaders(),
+			});
+			if (stateRes.status === 404) {
+				_adminControlUnavailable = true;
+			} else if (stateRes.ok) {
+				const state = await stateRes.json();
+				const execCfg = state?.execution_controls || {};
+				const riskCfg = state?.risk_limits || {};
+				const engineCfg = state?.engine_controls || {};
+				const runtime = state?.runtime || {};
+				setText("opsCfgSpreadMax", execCfg?.spread_max_limit != null ? Number(execCfg.spread_max_limit).toFixed(2) : "--");
+				setText("opsCfgCooldown", execCfg?.cooldown_seconds != null ? `${execCfg.cooldown_seconds}s` : "--");
+				setText("opsCfgMaxTrades", execCfg?.max_trades_per_day != null ? String(execCfg.max_trades_per_day) : "--");
+				setText("opsCfgMaxRisk", riskCfg?.max_risk_per_trade != null ? `${Number(riskCfg.max_risk_per_trade).toFixed(2)}%` : "--");
+				setOpsValue("opsRuntimeAutoTrading", runtime?.auto_trading_enabled ? "ON" : "OFF", runtime?.auto_trading_enabled ? "good" : "warn");
+				setOpsChips(
+					"opsRuntimeDisabledSymbols",
+					Array.isArray(runtime?.disabled_symbols) && runtime.disabled_symbols.length
+						? runtime.disabled_symbols.join(" | ")
+						: "NONE",
+				);
+				const flags = [
+					engineCfg?.ict_enabled ? "ICT" : null,
+					engineCfg?.iceberg_enabled ? "ICEBERG" : null,
+					engineCfg?.gann_enabled ? "GANN" : null,
+					engineCfg?.astro_enabled ? "ASTRO" : null,
+				].filter(Boolean);
+				setOpsChips("opsCfgEngineFlags", flags.length ? flags.join("|") : "NONE");
+				setText("opsCfgLastSync", new Date().toLocaleTimeString());
+			}
+		} catch (_) {
+			setText("opsCfgSpreadMax", "--");
+			setText("opsCfgCooldown", "--");
+			setText("opsCfgMaxTrades", "--");
+			setText("opsCfgMaxRisk", "--");
+			setOpsValue("opsRuntimeAutoTrading", "--", "neutral");
+			setOpsValue("opsRuntimeDisabledSymbols", "--", "neutral");
+			setOpsValue("opsCfgEngineFlags", "--", "neutral");
+			setText("opsCfgLastSync", "--");
+		}
 	}
 
-	try {
-		const stateRes = await apiFetch("/admin/control/state", {
-			headers: adminHeaders(),
-		});
-		if (stateRes.ok) {
-			const state = await stateRes.json();
-			const execCfg = state?.execution_controls || {};
-			const riskCfg = state?.risk_limits || {};
-			const engineCfg = state?.engine_controls || {};
-			const runtime = state?.runtime || {};
-			setText("opsCfgSpreadMax", execCfg?.spread_max_limit != null ? Number(execCfg.spread_max_limit).toFixed(2) : "--");
-			setText("opsCfgCooldown", execCfg?.cooldown_seconds != null ? `${execCfg.cooldown_seconds}s` : "--");
-			setText("opsCfgMaxTrades", execCfg?.max_trades_per_day != null ? String(execCfg.max_trades_per_day) : "--");
-			setText("opsCfgMaxRisk", riskCfg?.max_risk_per_trade != null ? `${Number(riskCfg.max_risk_per_trade).toFixed(2)}%` : "--");
-			setOpsValue("opsRuntimeAutoTrading", runtime?.auto_trading_enabled ? "ON" : "OFF", runtime?.auto_trading_enabled ? "good" : "warn");
-			setOpsChips(
-				"opsRuntimeDisabledSymbols",
-				Array.isArray(runtime?.disabled_symbols) && runtime.disabled_symbols.length
-					? runtime.disabled_symbols.join(" | ")
-					: "NONE",
-			);
-			const flags = [
-				engineCfg?.ict_enabled ? "ICT" : null,
-				engineCfg?.iceberg_enabled ? "ICEBERG" : null,
-				engineCfg?.gann_enabled ? "GANN" : null,
-				engineCfg?.astro_enabled ? "ASTRO" : null,
-			].filter(Boolean);
-			setOpsChips("opsCfgEngineFlags", flags.length ? flags.join("|") : "NONE");
-			setText("opsCfgLastSync", new Date().toLocaleTimeString());
-		}
-	} catch (_) {
-		setText("opsCfgSpreadMax", "--");
-		setText("opsCfgCooldown", "--");
-		setText("opsCfgMaxTrades", "--");
-		setText("opsCfgMaxRisk", "--");
-		setOpsValue("opsRuntimeAutoTrading", "--", "neutral");
-		setOpsValue("opsRuntimeDisabledSymbols", "--", "neutral");
-		setOpsValue("opsCfgEngineFlags", "--", "neutral");
-		setText("opsCfgLastSync", "--");
+	if (_adminControlUnavailable) {
+		setOpsValue("opsRiskViolations", "N/A", "neutral");
+		setText("opsCfgSpreadMax", "N/A");
+		setText("opsCfgCooldown", "N/A");
+		setText("opsCfgMaxTrades", "N/A");
+		setText("opsCfgMaxRisk", "N/A");
+		setOpsValue("opsRuntimeAutoTrading", "N/A", "neutral");
+		setOpsValue("opsRuntimeDisabledSymbols", "N/A", "neutral");
+		setOpsValue("opsCfgEngineFlags", "N/A", "neutral");
+		setText("opsCfgLastSync", "Admin controls unavailable");
 	}
 
 	const simPhase = document.getElementById("opsSimPhase");
@@ -2275,7 +2461,7 @@ async function runFeedProbe(forceDeep = false) {
 }
 
 async function runDeepProbeAll() {
-	const symbols = ["XAUUSD", "NQ", "EURUSD", "US30"];
+	const symbols = ["XAUUSD", "NQ", "EURUSD", "US30", "GC.FUT"];
 	const res = await apiFetch(
 		`/status/feed/deep_probe?symbols=${encodeURIComponent(symbols.join(","))}&max_candidates=6&lookback_minutes=240&record_limit=400&force_resolve=true&resolve_probe_seconds=2.5`,
 	);
@@ -2460,6 +2646,82 @@ window.recoverBrokerBridgeSafe = function recoverBrokerBridgeSafe() {
 		});
 };
 
+window.toggleExecutionModeSafe = async function toggleExecutionModeSafe() {
+	const btn = document.getElementById("opsToggleExecModeBtn");
+	if (btn) { btn.disabled = true; btn.textContent = "Switching\u2026"; }
+	try {
+		const modeRes = await apiFetch("/execution/mode", {}, 5000);
+		if (!modeRes.ok) throw new Error("mode GET failed");
+		const current = await modeRes.json();
+		const newMode = current?.paper_mode ? "LIVE" : "PAPER";
+		const setRes = await apiFetch(`/execution/mode?mode=${newMode}`, { method: "POST" }, 5000);
+		if (!setRes.ok) throw new Error("mode POST failed");
+		const updated = await setRes.json();
+		const isPaper = Boolean(updated?.paper_mode);
+		setOpsValue("opsExecutionMode", isPaper ? "PAPER (debug)" : "LIVE", isPaper ? "warn" : "good");
+		if (btn) btn.textContent = isPaper ? "\uD83D\uDCCB Mode: PAPER" : "\u26A1 Mode: LIVE";
+		setText("opsProbeSnapshot", `Execution mode \u2192 ${updated?.mode || newMode}`);
+	} catch (err) {
+		setText("opsProbeSnapshot", `Mode switch failed: ${String(err || "unknown")}`);
+	} finally {
+		if (btn) btn.disabled = false;
+	}
+};
+
+window.toggleSpotFidelitySafe = async function toggleSpotFidelitySafe() {
+	const btn = document.getElementById("opsToggleSpotFidelityBtn");
+	if (btn) { btn.disabled = true; btn.textContent = "Switching\u2026"; }
+	try {
+		const currentRes = await apiFetch("/execution/spot_fidelity", {}, 5000);
+		if (!currentRes.ok) throw new Error("spot fidelity GET failed");
+		const current = await currentRes.json();
+		const currentStrict = Boolean(current?.spot_fidelity_strict ?? current?.strict);
+		const nextStrict = !currentStrict;
+		const setRes = await apiFetch(`/execution/spot_fidelity?strict=${nextStrict ? "true" : "false"}`, { method: "POST" }, 5000);
+		if (!setRes.ok) throw new Error("spot fidelity POST failed");
+		const updated = await setRes.json();
+		const strict = Boolean(updated?.spot_fidelity_strict ?? updated?.strict);
+		setOpsValue("opsSpotFidelity", strict ? "STRICT" : "FLEX", strict ? "warn" : "good");
+		if (btn) btn.textContent = strict ? "🛡 Spot: STRICT" : "🛡 Spot: FLEX";
+		setText("opsProbeSnapshot", `Spot fidelity \u2192 ${strict ? "STRICT" : "FLEX"}`);
+	} catch (err) {
+		setText("opsProbeSnapshot", `Spot fidelity switch failed: ${String(err || "unknown")}`);
+	} finally {
+		if (btn) btn.disabled = false;
+	}
+};
+
+window.triggerExecutionSafe = async function triggerExecutionSafe() {
+	const btn = document.getElementById("opsTriggerTradeBtn");
+	if (btn) { btn.disabled = true; btn.textContent = "Triggering\u2026"; }
+	const symbol = selectedChartSymbol() || "XAUUSD";
+	try {
+		const res = await apiFetch(`/execution/trigger?symbol=${encodeURIComponent(symbol)}`, { method: "POST" }, 12000);
+		if (!res.ok) throw new Error(`trigger failed (${res.status})`);
+		const data = await res.json();
+		const result = data?.result || data;
+		const statusTxt = `${result?.status || "?"} \u00b7 ${result?.mode || ""} \u00b7 ${result?.direction || result?.reason || ""}`;
+		setText("opsProbeSnapshot", `Trigger: ${statusTxt}`);
+		apiFetch("/execution/mode", {}, 5000).then(async (mr) => {
+			if (!mr.ok) return;
+			const md = await mr.json();
+			setText("opsPaperTradeCount", md?.paper_trade_count != null ? String(md.paper_trade_count) : "--");
+			const log = Array.isArray(md?.paper_trade_log) ? md.paper_trade_log : [];
+			const last = log.length > 0 ? log[log.length - 1] : null;
+			if (last) {
+				const ts = last.ts ? new Date(Number(last.ts) * 1000).toLocaleTimeString() : "";
+				const el = document.getElementById("opsLastPaperTrade");
+				const summary = `${ts} ${last.direction || ""} ${last.symbol || ""} @${Number(last.entry_price || 0).toFixed(2)} lot=${last.lot_size || "?"}`;
+				if (el) { el.textContent = summary; el.title = JSON.stringify(last, null, 2); }
+			}
+		}).catch(() => {});
+	} catch (err) {
+		setText("opsProbeSnapshot", `Trigger failed: ${String(err || "unknown")}`);
+	} finally {
+		if (btn) { btn.disabled = false; btn.textContent = "\u26A1 Trigger Trade"; }
+	}
+};
+
 window.openBrokerPage = function openBrokerPage() {
 	// Try to fetch broker URL from backend config endpoint
 	apiFetch("/status/broker_config")
@@ -2591,6 +2853,7 @@ if (chartSymbolControl) {
 			updateModelStats().catch(console.error);
 			loadJournal().catch(console.error);
 			updateOpsStatus().catch(console.error);
+			ensureBrokerFeedAutoConnect({ symbol: selectedChartSymbol(), minIntervalMs: 3000 }).catch(() => {});
 		}, 300);
 	});
 }
@@ -2805,6 +3068,7 @@ setSingletonInterval("backendHealthPing", async () => {
 // Force-refresh all panels, tables, and feeds on page load
 window.addEventListener("load", () => {
 	dedupeFloatingPanelsOnLoad();
+	ensureBrokerFeedAutoConnect({ symbol: "XAUUSD", minIntervalMs: 0 }).catch(() => {});
 	// Chart
 	if (typeof loadInstitutionalChart === "function") loadInstitutionalChart();
 	// Micro panels

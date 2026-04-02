@@ -40,13 +40,25 @@ def init_journal():
     conn.close()
 
 
-def generate_narrative(model, volatility, session, news_status, rr):
+def generate_narrative(model, volatility, session, news_status, rr, htf_bias="NEUTRAL", ltf_structure="RANGE"):
+    bias_map = {
+        "BULLISH": "bullish institutional conviction — targeting liquidity above",
+        "BEARISH": "bearish institutional conviction — targeting liquidity below",
+        "NEUTRAL": "neutral bias — no directional edge confirmed",
+        "UNKNOWN": "indeterminate bias — insufficient data",
+    }
+    structure_map = {
+        "EXPANSION": "price in expansion / breakout phase",
+        "TREND": "trending market structure",
+        "RANGE": "ranging / consolidating structure",
+    }
+    bias_text = bias_map.get(str(htf_bias).upper(), f"{htf_bias} bias")
+    structure_text = structure_map.get(str(ltf_structure).upper(), f"{ltf_structure} structure")
     return (
-        f"Trade executed using {model} model during {session} session. "
-        f"Volatility state: {volatility}. "
-        f"News status: {news_status}. "
-        f"Risk-reward ratio set at {rr}. "
-        f"Entry aligned with institutional liquidity structure."
+        f"HTF: {bias_text}. LTF: {structure_text}. "
+        f"Active {model} setup during {session} session. "
+        f"Volatility: {volatility} | News: {news_status} | R:R {rr}. "
+        f"Monitor for institutional sweep confirmation before entry."
     )
 
 

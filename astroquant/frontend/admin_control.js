@@ -21,8 +21,10 @@ function adminApiOrigins() {
 }
 
 function getCreds() {
+  const storedToken = localStorage.getItem("AQ_ADMIN_TOKEN");
+  const safeStoredToken = storedToken && storedToken !== "dev-admin-token" ? storedToken : "";
   return {
-    token: document.getElementById("adminToken")?.value || localStorage.getItem("AQ_ADMIN_TOKEN") || "dev-admin-token",
+    token: document.getElementById("adminToken")?.value || safeStoredToken || "aq-admin-token-20260329",
     role: document.getElementById("adminRole")?.value || localStorage.getItem("AQ_ADMIN_ROLE") || "ADMIN",
     user: document.getElementById("adminUser")?.value || localStorage.getItem("AQ_ADMIN_USER") || "admin",
   };
@@ -310,12 +312,15 @@ function bind() {
   const tokenEl = document.getElementById("adminToken");
   const roleEl = document.getElementById("adminRole");
   const userEl = document.getElementById("adminUser");
-  if (tokenEl) tokenEl.value = localStorage.getItem("AQ_ADMIN_TOKEN") || "dev-admin-token";
+  if (tokenEl) {
+    const savedToken = localStorage.getItem("AQ_ADMIN_TOKEN");
+    tokenEl.value = (savedToken && savedToken !== "dev-admin-token") ? savedToken : "aq-admin-token-20260329";
+  }
   if (roleEl) roleEl.value = localStorage.getItem("AQ_ADMIN_ROLE") || "ADMIN";
   if (userEl) userEl.value = localStorage.getItem("AQ_ADMIN_USER") || "admin";
 
   document.getElementById("saveCredsBtn")?.addEventListener("click", () => {
-    localStorage.setItem("AQ_ADMIN_TOKEN", tokenEl?.value || "dev-admin-token");
+    localStorage.setItem("AQ_ADMIN_TOKEN", tokenEl?.value || "aq-admin-token-20260329");
     localStorage.setItem("AQ_ADMIN_ROLE", roleEl?.value || "ADMIN");
     localStorage.setItem("AQ_ADMIN_USER", userEl?.value || "admin");
   });

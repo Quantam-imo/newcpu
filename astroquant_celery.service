@@ -4,9 +4,9 @@ After=network.target astroquant_tradingbot.service
 
 [Service]
 Type=simple
-User=ubuntu
-WorkingDirectory=/workspaces/newcpu
-ExecStart=/workspaces/newcpu/.venv/bin/celery -A astroquant.backend.tasks.celery_worker worker --loglevel=info
+User=__SERVICE_USER__
+WorkingDirectory=__WORKSPACE__
+ExecStart=__WORKSPACE__/.venv/bin/celery -A astroquant.backend.tasks.celery_worker worker --loglevel=info
 Restart=always
 Environment=PYTHONUNBUFFERED=1
 

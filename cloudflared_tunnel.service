@@ -4,8 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
-User=ubuntu
-WorkingDirectory=/workspaces/newcpu
+User=__SERVICE_USER__
+WorkingDirectory=__WORKSPACE__
 ExecStart=/usr/local/bin/cloudflared tunnel --url http://localhost:8000
 Restart=always
 

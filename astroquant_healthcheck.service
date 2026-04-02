@@ -4,9 +4,9 @@ After=astroquant_orchestrator.service astroquant_celery.service astroquant_calib
 
 [Service]
 Type=oneshot
-User=ubuntu
-WorkingDirectory=/workspaces/newcpu
-ExecStart=/bin/bash /workspaces/newcpu/health_check.sh
+User=__SERVICE_USER__
+WorkingDirectory=__WORKSPACE__
+ExecStart=/bin/bash __WORKSPACE__/health_check.sh
 TimeoutSec=60
 
 [Install]
