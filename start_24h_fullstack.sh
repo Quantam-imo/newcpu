@@ -106,6 +106,9 @@ fi
 # Step 2: Celery
 log BLUE "Starting Celery worker..."
 cd "$WORKSPACE"
+# Enforce singleton worker across repeated boots/recovery runs.
+pkill -f "celery.*astroquant.backend.tasks.celery_worker" 2>/dev/null || true
+sleep 1
 nohup celery -A astroquant.backend.tasks.celery_worker:celery_app worker \
   --loglevel=info \
   --logfile="$LOG_DIR/celery.log" \
@@ -123,6 +126,9 @@ fi
 
 # Step 3: Orchestrator
 log BLUE "Starting multi-symbol orchestrator..."
+# Enforce singleton orchestrator across repeated boots/recovery runs.
+pkill -f "python start_astroquant.py" 2>/dev/null || true
+sleep 1
 nohup python start_astroquant.py > "$LOG_DIR/orchestrator.log" 2>&1 &
 ORCH_PID=$!
 echo $ORCH_PID > "$LOG_DIR/orchestrator.pid"
@@ -137,6 +143,9 @@ fi
 # Step 4: FastAPI Backend
 log BLUE "Starting FastAPI backend (uvicorn)..."
 cd "$WORKSPACE"
+# Enforce singleton backend across repeated boots/recovery runs.
+pkill -f "uvicorn.*astroquant.backend.main:app" 2>/dev/null || true
+sleep 1
 nohup python -m uvicorn astroquant.backend.main:app \
   --host 0.0.0.0 \
   --port 8000 \

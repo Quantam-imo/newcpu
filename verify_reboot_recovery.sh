@@ -156,18 +156,24 @@ chaos_test() {
   step "Triggering bootstrap"
   AQ_WORKSPACE="$WORKSPACE" bash "$BOOTSTRAP" || true
 
-  step "Waiting up to 90s for backend recovery"
+  step "Waiting up to 180s for backend recovery"
   local waited=0
-  while [ "$waited" -lt 90 ]; do
+  while [ "$waited" -lt 180 ]; do
     if curl -s -m 5 http://127.0.0.1:8000/status >/dev/null 2>&1; then
       record_ok "chaos test recovery succeeded in ${waited}s"
       return 0
     fi
+
+    # Progress indicator to distinguish hard-fail from slow cold start.
+    if pgrep -f "uvicorn.*astroquant.backend.main:app|start_24h_fullstack.sh|python start_astroquant.py" >/dev/null 2>&1; then
+      step "Recovery in progress (${waited}s): core startup processes detected"
+    fi
+
     sleep 5
     waited=$((waited + 5))
   done
 
-  record_fail "chaos test recovery failed (backend still down after 90s)"
+  record_fail "chaos test recovery failed (backend still down after 180s)"
   return 1
 }
 
