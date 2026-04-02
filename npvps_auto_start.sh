@@ -7,8 +7,15 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE="${AQ_WORKSPACE:-$SCRIPT_DIR}"
+LOCK_DIR="/tmp/astroquant_npvps_autostart.lock"
 
 cd "$WORKSPACE"
+
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  echo "Another autostart run is already in progress. Exiting."
+  exit 0
+fi
+trap 'rmdir "$LOCK_DIR" >/dev/null 2>&1 || true' EXIT
 
 echo "========================================="
 echo "AstroQuant NPVPS CPU Auto-Start"
@@ -18,15 +25,15 @@ echo ""
 
 # Clean up old processes
 echo "Cleaning up old processes..."
-pkill -f "bash start_24h_fullstack.sh" 2>/dev/null || true
-pkill -9 -f "redis-server|celery|uvicorn|cloudflared|chrome-remote|novpn" 2>/dev/null || true
-pkill -f "$WORKSPACE/telegram_bot_daemon.py" 2>/dev/null || true
-sleep 2
+if pgrep -f "bash .*start_24h_fullstack.sh|start_24h_fullstack.sh" >/dev/null 2>&1; then
+  echo "Existing fullstack process detected; skip duplicate start."
+  exit 0
+fi
 
 # Now run the full stack
 echo ""
 echo "Starting full stack in background..."
-nohup bash start_24h_fullstack.sh "$@" > data/logs/auto_start.log 2>&1 &
+nohup bash "$WORKSPACE/start_24h_fullstack.sh" "$@" > data/logs/auto_start.log 2>&1 &
 
 FULLSTACK_PID=$!
 echo $FULLSTACK_PID > /tmp/astroquant_fullstack.pid

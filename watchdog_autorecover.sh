@@ -27,7 +27,7 @@ need_recover=0
 
 # Service patterns and expected singleton counts.
 patterns=(
-  "start_astroquant.py"
+  "python .*start_astroquant.py|/start_astroquant.py"
   "uvicorn.*astroquant.backend.main:app"
   "celery.*astroquant.backend.tasks.celery_worker"
   "telegram_bot_daemon.py"
@@ -58,7 +58,7 @@ fi
 
 log "watchdog recovery starting"
 pkill -f "start_24h_fullstack.sh" 2>/dev/null || true
-pkill -f "start_astroquant.py" 2>/dev/null || true
+pkill -f "python .*start_astroquant.py|/start_astroquant.py" 2>/dev/null || true
 pkill -f "uvicorn.*astroquant.backend.main:app" 2>/dev/null || true
 pkill -f "celery.*astroquant.backend.tasks.celery_worker" 2>/dev/null || true
 pkill -f "telegram_bot_daemon.py" 2>/dev/null || true

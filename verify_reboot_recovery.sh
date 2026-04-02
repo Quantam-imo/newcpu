@@ -138,7 +138,7 @@ check_runtime_health() {
     record_warn "telegram daemon process not running"
   fi
 
-  check_singleton "start_astroquant.py" "orchestrator"
+  check_singleton "python .*start_astroquant.py|/start_astroquant.py" "orchestrator"
   check_singleton "uvicorn.*astroquant.backend.main:app" "backend"
   check_singleton "celery.*astroquant.backend.tasks.celery_worker" "celery"
   check_singleton "telegram_bot_daemon.py" "telegram daemon"
@@ -227,13 +227,25 @@ chaos_test() {
 
   # Stop stack processes only (do not touch git/workspace content).
   pkill -f "start_24h_fullstack.sh" 2>/dev/null || true
+  pkill -f "python .*start_astroquant.py|/start_astroquant.py" 2>/dev/null || true
   pkill -f "uvicorn.*astroquant.backend.main:app" 2>/dev/null || true
   pkill -f "celery.*astroquant.backend.tasks.celery_worker" 2>/dev/null || true
   pkill -f "telegram_bot_daemon.py" 2>/dev/null || true
   pkill -f "cloudflared tunnel --url http://localhost:8000" 2>/dev/null || true
   pkill -f "cloudflared tunnel --url http://localhost:6080" 2>/dev/null || true
   pkill -f "start_novpn_connector.sh" 2>/dev/null || true
-  sleep 2
+  rm -f /tmp/astroquant_fullstack.lock /tmp/astroquant_non_systemd_autostart.lock /tmp/astroquant_npvps_autostart.lock 2>/dev/null || true
+
+  # Ensure shutdown has settled; otherwise bootstrap may see stale processes
+  # and incorrectly skip relaunch.
+  local settle=0
+  while [ "$settle" -lt 20 ]; do
+    if ! pgrep -f "start_24h_fullstack.sh|uvicorn.*astroquant.backend.main:app" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 1
+    settle=$((settle + 1))
+  done
 
   step "Triggering bootstrap"
   AQ_WORKSPACE="$WORKSPACE" bash "$BOOTSTRAP" || true
@@ -247,7 +259,7 @@ chaos_test() {
     fi
 
     # Progress indicator to distinguish hard-fail from slow cold start.
-    if pgrep -f "uvicorn.*astroquant.backend.main:app|start_24h_fullstack.sh|python start_astroquant.py" >/dev/null 2>&1; then
+    if pgrep -f "uvicorn.*astroquant.backend.main:app|start_24h_fullstack.sh|python .*start_astroquant.py|/start_astroquant.py" >/dev/null 2>&1; then
       step "Recovery in progress (${waited}s): core startup processes detected"
     fi
 

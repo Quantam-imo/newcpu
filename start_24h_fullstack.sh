@@ -17,6 +17,7 @@ source "$WORKSPACE/.venv/bin/activate" 2>/dev/null || true
 # Configuration
 DATA_DIR="$WORKSPACE/data"
 LOG_DIR="$DATA_DIR/logs"
+LOCK_FILE="/tmp/astroquant_fullstack.lock"
 HEALTHCHECK_INTERVAL=30
 STARTUP_TIMEOUT=60
 NO_CHROME=false
@@ -46,6 +47,18 @@ done
 
 # Create directories
 mkdir -p "$LOG_DIR" "$DATA_DIR"
+
+# Singleton guard: never allow parallel fullstack launch loops.
+if [ -f "$LOCK_FILE" ]; then
+  _old_pid="$(cat "$LOCK_FILE" 2>/dev/null || true)"
+  if [ -n "$_old_pid" ] && kill -0 "$_old_pid" 2>/dev/null; then
+    echo "Fullstack already running (PID: $_old_pid). Exiting duplicate launcher." | tee -a "$LOG_DIR/fullstack.log"
+    exit 0
+  fi
+  rm -f "$LOCK_FILE"
+fi
+echo $$ > "$LOCK_FILE"
+trap 'if [ -f "$LOCK_FILE" ] && [ "$(cat "$LOCK_FILE" 2>/dev/null)" = "$$" ]; then rm -f "$LOCK_FILE"; fi' EXIT
 
 # Color codes
 RED='\033[0;31m'
