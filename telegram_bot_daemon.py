@@ -93,6 +93,20 @@ def _signal_symbol() -> str:
     return os.getenv("TELEGRAM_SIGNAL_SYMBOL", "XAUUSD").strip() or "XAUUSD"
 
 
+def _signal_symbols() -> list[str]:
+    raw = os.getenv("TELEGRAM_SIGNAL_SYMBOLS", "").strip()
+    if not raw:
+        return [_signal_symbol()]
+    symbols = [str(x).strip().upper() for x in raw.split(",") if str(x).strip()]
+    if not symbols:
+        return [_signal_symbol()]
+    out: list[str] = []
+    for symbol in symbols:
+        if symbol not in out:
+            out.append(symbol)
+    return out
+
+
 def _report_mode() -> str:
     mode = os.getenv("TELEGRAM_REPORT_MODE", "full").strip().lower()
     return mode if mode in {"short", "full"} else "full"
@@ -111,6 +125,32 @@ def _daily_summary_utc() -> tuple[int, int]:
         return hour, minute
     except Exception:
         return 9, 0
+
+
+def _day_start_utc() -> tuple[int, int]:
+    raw = os.getenv("TELEGRAM_DAY_START_UTC", "00:05").strip()
+    try:
+        hour_s, minute_s = raw.split(":", 1)
+        hour = max(0, min(23, int(hour_s)))
+        minute = max(0, min(59, int(minute_s)))
+        return hour, minute
+    except Exception:
+        return 0, 5
+
+
+def _day_end_utc() -> tuple[int, int]:
+    raw = os.getenv("TELEGRAM_DAY_END_UTC", "23:55").strip()
+    try:
+        hour_s, minute_s = raw.split(":", 1)
+        hour = max(0, min(23, int(hour_s)))
+        minute = max(0, min(59, int(minute_s)))
+        return hour, minute
+    except Exception:
+        return 23, 55
+
+
+def _day_boundary_reports_enabled() -> bool:
+    return os.getenv("TELEGRAM_DAY_BOUNDARY_REPORTS_ENABLED", "true").strip().lower() == "true"
 
 
 def _daemon_health_interval() -> int:
@@ -233,8 +273,15 @@ def _load_state() -> Dict[str, Any]:
         "last_daemon_health_ts": 0,
         "last_online_alert_ts": 0,
         "last_bias": None,
+        "last_bias_map": {},
+        "last_signal_map": {},
+        "last_astro_sig_map": {},
         "last_news_halt": None,
         "last_news_sig": "",
+        "last_trade_key_map": {},
+        "last_trade_alert_check_ts": 0,
+        "last_day_start_report_date": "",
+        "last_day_end_report_date": "",
         "last_daily_summary_date": "",
     }
     if not STATE_FILE.exists():
@@ -280,6 +327,7 @@ def _extract_signal_context(mentor_payload: Dict[str, Any]) -> Dict[str, Any]:
         "ltf_structure": ctx.get("ltf_structure", "N/A"),
         "volatility": ctx.get("volatility", "N/A"),
         "news_state": ctx.get("news_state", "N/A"),
+        "astro": ctx.get("astro", {}) if isinstance(ctx.get("astro", {}), dict) else {},
     }
 
 
@@ -364,12 +412,46 @@ def _trade_digest_text() -> str:
     )
 
 
+def _multi_symbol_signal_snapshot() -> list[Dict[str, Any]]:
+    rows: list[Dict[str, Any]] = []
+    for symbol in _signal_symbols():
+        mentor = _get_json("/ai/mentor", params={"symbol": symbol})
+        sig = _extract_signal_context(mentor)
+        rows.append(
+            {
+                "symbol": symbol,
+                "signal": str(sig.get("signal", "N/A")),
+                "htf_bias": str(sig.get("htf_bias", "N/A")),
+                "ltf_structure": str(sig.get("ltf_structure", "N/A")),
+                "volatility": str(sig.get("volatility", "N/A")),
+                "news_state": str(sig.get("news_state", "N/A")),
+                "astro": dict(sig.get("astro", {}) if isinstance(sig.get("astro", {}), dict) else {}),
+            }
+        )
+    return rows
+
+
+def _multi_symbol_signals_text() -> str:
+    rows = _multi_symbol_signal_snapshot()
+    if not rows:
+        return "Multi-Symbol Signal Analysis\nNo symbols configured"
+    lines = ["Multi-Symbol Signal Analysis"]
+    for row in rows:
+        lines.append(
+            f"{row['symbol']}: {row['signal']} | HTF {row['htf_bias']} | "
+            f"LTF {row['ltf_structure']} | Vol {row['volatility']}"
+        )
+    return "\n".join(lines)
+
+
 def _build_status_report(mode: str = "full") -> str:
     status = _get_json("/status")
     health = status.get("system_health", {}) if isinstance(status, dict) else {}
-    symbol = _signal_symbol()
+    symbols = _signal_symbols()
+    symbol = symbols[0]
     mentor = _get_json("/ai/mentor", params={"symbol": symbol})
     sig = _extract_signal_context(mentor)
+    multi_symbol_block = _multi_symbol_signals_text()
 
     news_halt = status.get("news_halt", "N/A")
     next_news = status.get("next_news", [])
@@ -382,6 +464,7 @@ def _build_status_report(mode: str = "full") -> str:
             f"AstroQuant Short Report ({datetime.now(timezone.utc).strftime('%H:%M UTC')})\n"
             f"CPU/MEM: {health.get('cpu_percent', 'N/A')}% / {health.get('memory_percent', 'N/A')}%\n"
             f"Signal({symbol}): {sig['signal']} | HTF: {sig['htf_bias']}\n"
+            f"Symbols tracked: {', '.join(symbols)}\n"
             f"News halt: {news_halt}\n"
             f"{_links_block()}"
         )
@@ -395,6 +478,7 @@ def _build_status_report(mode: str = "full") -> str:
         f"Signal symbol: {symbol}\n"
         f"Signal: {sig['signal']} | HTF: {sig['htf_bias']} | LTF: {sig['ltf_structure']}\n"
         f"Volatility: {sig['volatility']} | News state: {sig['news_state']}\n"
+        f"{multi_symbol_block}\n"
         f"News halt: {news_halt}\n"
         f"Next news: {next_news_text}\n"
         f"{digest}\n"
@@ -408,6 +492,8 @@ def _command_help() -> str:
         "/status - system health summary\n"
         "/daemon - daemon singleton health\n"
         "/signals - current signal snapshot\n"
+        "/signals_all - multi-symbol signal analysis\n"
+        "/astro - astro update snapshot\n"
         "/news - news halt and upcoming events\n"
         "/report - report (mode from TELEGRAM_REPORT_MODE)\n"
         "/report_short - compact report\n"
@@ -488,6 +574,8 @@ def _handle_command(text: str) -> Optional[str]:
             f"Broker: {health.get('broker', 'N/A')}"
         )
     if text.startswith("/signals"):
+        if text.startswith("/signals_all"):
+            return _multi_symbol_signals_text()
         symbol = _signal_symbol()
         mentor = _get_json("/ai/mentor", params={"symbol": symbol})
         sig = _extract_signal_context(mentor)
@@ -498,6 +586,19 @@ def _handle_command(text: str) -> Optional[str]:
             f"LTF structure: {sig['ltf_structure']}\n"
             f"Volatility: {sig['volatility']}\n"
             f"News state: {sig['news_state']}"
+        )
+    if text.startswith("/astro"):
+        symbol = _signal_symbol()
+        mentor = _get_json("/ai/mentor", params={"symbol": symbol})
+        sig = _extract_signal_context(mentor)
+        astro = sig.get("astro", {}) if isinstance(sig.get("astro", {}), dict) else {}
+        return (
+            f"Astro ({symbol})\n"
+            f"Window: {astro.get('harmonic_window', 'N/A')}\n"
+            f"Marker: {astro.get('astro_marker', 'N/A')}\n"
+            f"Bias: {astro.get('astro_bias', 'N/A')}\n"
+            f"Signal: {astro.get('signal', 'N/A')}\n"
+            f"Reason: {astro.get('reason', 'N/A')}"
         )
     if text.startswith("/news"):
         status = _get_json("/status")
@@ -595,17 +696,55 @@ def _event_alerts(state: Dict[str, Any]) -> Dict[str, Any]:
     else:
         news_sig = json.dumps(next_news, ensure_ascii=True, sort_keys=True)
 
-    mentor = _get_json("/ai/mentor", params={"symbol": _signal_symbol()})
-    sig = _extract_signal_context(mentor)
-    bias = sig.get("htf_bias")
-
-    if state.get("last_bias") not in (None, bias):
-        _send_message(
-            f"Signal change detected\n"
-            f"Symbol: {_signal_symbol()}\n"
-            f"HTF bias: {state.get('last_bias')} -> {bias}\n"
-            f"Signal: {sig.get('signal', 'N/A')}"
+    for symbol in _signal_symbols():
+        mentor = _get_json("/ai/mentor", params={"symbol": symbol})
+        sig = _extract_signal_context(mentor)
+        bias = sig.get("htf_bias")
+        signal = sig.get("signal", "N/A")
+        astro = sig.get("astro", {}) if isinstance(sig.get("astro", {}), dict) else {}
+        astro_sig = json.dumps(
+            {
+                "harmonic_window": astro.get("harmonic_window"),
+                "astro_marker": astro.get("astro_marker"),
+                "astro_bias": astro.get("astro_bias"),
+                "signal": astro.get("signal"),
+                "reason": astro.get("reason"),
+            },
+            ensure_ascii=True,
+            sort_keys=True,
         )
+
+        last_bias_map = dict(state.get("last_bias_map", {}) or {})
+        last_signal_map = dict(state.get("last_signal_map", {}) or {})
+        last_astro_sig_map = dict(state.get("last_astro_sig_map", {}) or {})
+
+        prev_bias = last_bias_map.get(symbol)
+        prev_signal = last_signal_map.get(symbol)
+        prev_astro_sig = last_astro_sig_map.get(symbol)
+
+        if prev_bias not in (None, bias) or prev_signal not in (None, signal):
+            _send_message(
+                f"Signal change detected\n"
+                f"Symbol: {symbol}\n"
+                f"HTF bias: {prev_bias} -> {bias}\n"
+                f"Signal: {prev_signal} -> {signal}"
+            )
+
+        if prev_astro_sig not in (None, "", astro_sig):
+            _send_message(
+                f"Astrology update ({symbol})\n"
+                f"Window: {astro.get('harmonic_window', 'N/A')}\n"
+                f"Marker: {astro.get('astro_marker', 'N/A')}\n"
+                f"Bias: {astro.get('astro_bias', 'N/A')}\n"
+                f"Signal: {astro.get('signal', 'N/A')}"
+            )
+
+        last_bias_map[symbol] = bias
+        last_signal_map[symbol] = signal
+        last_astro_sig_map[symbol] = astro_sig
+        state["last_bias_map"] = last_bias_map
+        state["last_signal_map"] = last_signal_map
+        state["last_astro_sig_map"] = last_astro_sig_map
     if state.get("last_news_halt") not in (None, news_halt):
         _send_message(f"News halt changed: {state.get('last_news_halt')} -> {news_halt}")
     if state.get("last_news_sig") not in (None, "", news_sig):
@@ -615,9 +754,62 @@ def _event_alerts(state: Dict[str, Any]) -> Dict[str, Any]:
             f"Upcoming: {next_news[:3] if isinstance(next_news, list) else next_news}"
         )
 
-    state["last_bias"] = bias
+    # Legacy compatibility key retained but map-based tracking is authoritative.
+    state["last_bias"] = None
     state["last_news_halt"] = news_halt
     state["last_news_sig"] = news_sig
+    return state
+
+
+def _trade_approval_alerts(state: Dict[str, Any]) -> Dict[str, Any]:
+    now = int(time.time())
+    last_check = int(state.get("last_trade_alert_check_ts", 0) or 0)
+    if now - last_check < 60:
+        return state
+
+    for symbol in _signal_symbols():
+        journal_rows = _get_json("/journal", params={"symbol": symbol, "limit": 1})
+        if not isinstance(journal_rows, list) or not journal_rows:
+            continue
+        latest = journal_rows[0]
+        if not isinstance(latest, list) or len(latest) < 7:
+            continue
+
+        ts = str(latest[0])
+        row_symbol = str(latest[1])
+        model = str(latest[2])
+        result = str(latest[3])
+        pnl = latest[4]
+        narrative = str(latest[6] or "")
+
+        key = f"{ts}|{row_symbol}|{model}|{result}|{pnl}"
+        last_trade_key_map = dict(state.get("last_trade_key_map", {}) or {})
+        prev_key = last_trade_key_map.get(symbol)
+        if prev_key not in (None, "", key):
+            upper_result = result.upper()
+            if "APPROV" in upper_result or "PENDING" in upper_result or "REJECT" in upper_result:
+                _send_message(
+                    f"Trade approval update\n"
+                    f"Symbol: {row_symbol}\n"
+                    f"Model: {model}\n"
+                    f"Status: {result}\n"
+                    f"Time: {ts}\n"
+                    f"Note: {narrative[:240]}"
+                )
+            else:
+                _send_message(
+                    f"Trade journal update\n"
+                    f"Symbol: {row_symbol}\n"
+                    f"Model: {model}\n"
+                    f"Result: {result}\n"
+                    f"PnL: {pnl}\n"
+                    f"Time: {ts}"
+                )
+
+        last_trade_key_map[symbol] = key
+        state["last_trade_key_map"] = last_trade_key_map
+
+    state["last_trade_alert_check_ts"] = now
     return state
 
 
@@ -698,6 +890,29 @@ def _daily_summary(state: Dict[str, Any]) -> Dict[str, Any]:
     return state
 
 
+def _day_boundary_reports(state: Dict[str, Any]) -> Dict[str, Any]:
+    if not _day_boundary_reports_enabled():
+        return state
+
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    start_h, start_m = _day_start_utc()
+    end_h, end_m = _day_end_utc()
+
+    last_start_day = str(state.get("last_day_start_report_date", ""))
+    last_end_day = str(state.get("last_day_end_report_date", ""))
+
+    if now.hour == start_h and now.minute >= start_m and last_start_day != today:
+        _send_message("Day Start Report\n" + _build_status_report(mode="full"))
+        state["last_day_start_report_date"] = today
+
+    if now.hour == end_h and now.minute >= end_m and last_end_day != today:
+        _send_message("Day End Report\n" + _build_status_report(mode="full"))
+        state["last_day_end_report_date"] = today
+
+    return state
+
+
 def main() -> int:
     _load_env(ENV_FILE)
 
@@ -733,9 +948,11 @@ def main() -> int:
         try:
             state = _poll_updates(state)
             state = _event_alerts(state)
+            state = _trade_approval_alerts(state)
             state = _periodic_report(state)
             state = _periodic_daemon_health(state)
             state = _daily_summary(state)
+            state = _day_boundary_reports(state)
             _save_state(state)
         except Exception as exc:
             _log(f"daemon loop error: {exc}")
