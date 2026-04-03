@@ -1,0 +1,65 @@
+name: Market Causality Contracts
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "astroquant/backend/router_market_causality.py"
+      - "astroquant/frontend/market_causality_panel.js"
+      - "test_market_causality_router.py"
+      - "test_market_causality_panel_contract.py"
+      - "test_market_causality_25y_contract.py"
+      - "test_market_causality_e2e_smoke.py"
+      - ".github/workflows/market-causality-contracts.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "astroquant/backend/router_market_causality.py"
+      - "astroquant/frontend/market_causality_panel.js"
+      - "test_market_causality_router.py"
+      - "test_market_causality_panel_contract.py"
+      - "test_market_causality_25y_contract.py"
+      - "test_market_causality_e2e_smoke.py"
+      - ".github/workflows/market-causality-contracts.yml"
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run market causality contracts
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          python -m pytest -q \
+            test_market_causality_router.py \
+            test_market_causality_panel_contract.py \
+            test_market_causality_25y_contract.py \
+            test_market_causality_e2e_smoke.py \
+            --junitxml=artifacts/market-causality-junit.xml \
+            | tee artifacts/market-causality-pytest.txt
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-causality-contract-results
+          path: artifacts/
+          if-no-files-found: error
