@@ -648,13 +648,81 @@
                     <div class="card-subtitle" id="cardDataScope" title="" style="font-size:11px;color:#93c5fd;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">--</div>
                 </div>
                 <div class="card" id="astroEventCard" style="display:none;">
-                    <div class="card-title" style="display:flex;align-items:center;gap:6px;">🌙 Astrology Event</div>
+                    <div class="card-title" style="display:flex;align-items:center;gap:6px;cursor:pointer;" onclick="toggleAstroDetails()">
+                        🌙 Astrology Event <span style="margin-left:auto;font-size:10px;" id="astroDetailsToggle">▼</span>
+                    </div>
                     <div class="card-value" id="cardAstroEventName" style="font-size:13px;white-space:normal;word-wrap:break-word;">--</div>
                     <div style="display:flex;gap:8px;margin-top:4px;align-items:center;">
                         <span id="cardAstroImpactBadge" style="padding:2px 6px;border-radius:3px;font-size:11px;font-weight:bold;background:#999;color:#fff;">--</span>
                         <span id="cardAstroTimeDelta" style="font-size:10px;color:var(--muted);">--</span>
                     </div>
                     <div class="card-subtitle" id="cardAstroOutcome" style="margin-top:6px;font-size:11px;color:#b0d4e3;">--</div>
+                    <div id="astroDetailsSection" style="display:none;margin-top:12px;border-top:1px solid rgba(255,255,255,0.1);padding-top:12px;">
+                        <!-- AI Confidence Badge -->
+                        <div style="margin-bottom:8px;">
+                            <span style="font-size:10px;color:#888;">AI Confidence</span>
+                            <div style="display:flex;align-items:center;gap:4px;margin-top:2px;">
+                                <div style="flex:1;height:4px;background:rgba(255,255,255,0.1);border-radius:2px;overflow:hidden;">
+                                    <div id="astroConfidenceMeter" style="height:100%;background:linear-gradient(90deg, #ff9800, #4caf50);width:50%;"></div>
+                                </div>
+                                <span id="astroConfidenceText" style="font-size:10px;color:#90caf9;font-weight:bold;min-width:35px;">50%</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Gann Analysis -->
+                        <div style="margin-top:10px;padding:8px;background:rgba(76,175,80,0.05);border-left:2px solid #4caf50;border-radius:4px;">
+                            <div style="font-size:10px;font-weight:bold;color:#81c784;margin-bottom:4px;">⊙ Gann Analysis</div>
+                            <div style="font-size:9px;color:#b0d4e3;">
+                                <div>Degree: <span id="astroGannDegree">--</span>° | Angle: <span id="astroGannAngle">--</span>°</div>
+                                <div>P=T: <span id="astroGannPT">--</span> | Proximity: <span id="astroGannProx">--</span></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Numerology Analysis -->
+                        <div style="margin-top:10px;padding:8px;background:rgba(66,165,245,0.05);border-left:2px solid #42a5f5;border-radius:4px;">
+                            <div style="font-size:10px;font-weight:bold;color:#64b5f6;margin-bottom:4px;">🔢 Numerology</div>
+                            <div style="font-size:9px;color:#b0d4e3;">
+                                <div>Event#<span id="astroNumEvent">--</span> × Price#<span id="astroNumPrice">--</span> × Date#<span id="astroNumDate">--</span></div>
+                                <div>Harmony: <span id="astroNumHarmony">--</span> | Cycle: <span id="astroNumCycle">--</span></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Structure Analysis -->
+                        <div style="margin-top:10px;padding:8px;background:rgba(255,152,0,0.05);border-left:2px solid #ff9800;border-radius:4px;">
+                            <div style="font-size:10px;font-weight:bold;color:#ffb74d;margin-bottom:4px;">📊 Market Structure</div>
+                            <div style="font-size:9px;color:#b0d4e3;">
+                                <div>Type: <span id="astroStructType">--</span></div>
+                                <div>HH: <span id="astroHH">--</span> | HL: <span id="astroHL">--</span> | LL: <span id="astroLL">--</span> | LH: <span id="astroLH">--</span></div>
+                                <div>BOS: <span id="astroBOS">--</span></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Physics Analysis -->
+                        <div style="margin-top:10px;padding:8px;background:rgba(156,39,176,0.05);border-left:2px solid #ab47bc;border-radius:4px;">
+                            <div style="font-size:10px;font-weight:bold;color:#ce93d8;margin-bottom:4px;">⚡ Market Physics</div>
+                            <div style="font-size:9px;color:#b0d4e3;">
+                                <div>Velocity: <span id="astroVelocity">--</span> | Momentum: <span id="astroMomentum">--</span></div>
+                                <div>Volatility: <span id="astroVolatility">--</span> | Acceleration: <span id="astroAccel">--</span></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Event Narration (collapsible) -->
+                        <div style="margin-top:10px;padding:8px;background:rgba(255,193,7,0.05);border-left:2px solid #fbc02d;border-radius:4px;">
+                            <div style="font-size:10px;font-weight:bold;color:#fdd835;margin-bottom:4px;cursor:pointer;" onclick="toggleNarration()">
+                                📖 Event Narration <span id="narrationToggle">▶</span>
+                            </div>
+                            <div id="narrationContent" style="display:none;margin-top:6px;font-size:9px;color:#b0d4e3;line-height:1.4;">
+                                <div style="margin-bottom:6px;"><strong>What Happens:</strong> <span id="narrationDescription">--</span></div>
+                                <div style="margin-bottom:6px;"><strong>Gann Watch:</strong> <span id="narrationGann">--</span></div>
+                                <div style="margin-bottom:6px;"><strong>Numerology:</strong> <span id="narrationNumerology">--</span></div>
+                                <div style="margin-bottom:6px;"><strong>Structure:</strong> <span id="narrationStructure">--</span></div>
+                                <div style="margin-bottom:6px;"><strong>Physics:</strong> <span id="narrationPhysics">--</span></div>
+                                <div style="margin-bottom:6px;"><strong>News Trigger:</strong> <span id="narrationNews">--</span></div>
+                                <div style="margin-bottom:6px;"><strong>Key Levels:</strong> <span id="narrationLevels">--</span></div>
+                                <div><strong>Duration:</strong> <span id="narrationDuration">--</span></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -889,6 +957,30 @@
             if (data.source_mode) return String(data.source_mode);
             return "--";
         }
+        
+            function toggleAstroDetails() {
+                const details = document.getElementById("astroDetailsSection");
+                const toggle = document.getElementById("astroDetailsToggle");
+                if (details.style.display === "none") {
+                    details.style.display = "block";
+                    toggle.textContent = "▲";
+                } else {
+                    details.style.display = "none";
+                    toggle.textContent = "▼";
+                }
+            }
+        
+            function toggleNarration() {
+                const content = document.getElementById("narrationContent");
+                const toggle = document.getElementById("narrationToggle");
+                if (content.style.display === "none") {
+                    content.style.display = "block";
+                    toggle.textContent = "▼";
+                } else {
+                    content.style.display = "none";
+                    toggle.textContent = "▶";
+                }
+            }
 
         let mclChart = null;
         let mclCandlesSeries = null;
@@ -1391,7 +1483,7 @@
                 dataScopeEl.title = scopeLabel;
             }
 
-            // Astrology Event Detection
+            // Astrology Event Detection + Detailed Impact Analysis
             const astroCard = document.getElementById("astroEventCard");
             if (data.astro && data.astro.nearby_event) {
                 const evt = data.astro.nearby_event;
@@ -1416,6 +1508,61 @@
                 document.getElementById("cardAstroTimeDelta").textContent = timePhrase;
                 
                 document.getElementById("cardAstroOutcome").textContent = evt.market_outcome || "--";
+                
+                // Enhanced Analysis Details (if available)
+                if (evt.impact_analysis) {
+                    const analysis = evt.impact_analysis;
+                    const summary = analysis.event_impact_summary || {};
+                    
+                    // AI Confidence Meter
+                    const confidence = summary.ai_confidence_score || 0;
+                    document.getElementById("astroConfidenceMeter").style.width = (confidence * 100) + "%";
+                    document.getElementById("astroConfidenceText").textContent = (confidence * 100).toFixed(0) + "%";
+                    
+                    // Gann Analysis
+                    const gann = analysis.gann_analysis || {};
+                    document.getElementById("astroGannDegree").textContent = gann.current_degree || "--";
+                    document.getElementById("astroGannAngle").textContent = gann.nearest_key_angle || "--";
+                    document.getElementById("astroGannPT").textContent = gann.p_equals_t ? "YES" : "NO";
+                    document.getElementById("astroGannProx").textContent = gann.gann_angle_proximity || "--";
+                    
+                    // Numerology Analysis
+                    const num = analysis.numerology_analysis || {};
+                    document.getElementById("astroNumEvent").textContent = num.event_numerology || "--";
+                    document.getElementById("astroNumPrice").textContent = num.price_numerology || "--";
+                    document.getElementById("astroNumDate").textContent = num.date_numerology || "--";
+                    document.getElementById("astroNumHarmony").textContent = num.harmonious_alignment ? "ALIGNED" : "MISALIGNED";
+                    document.getElementById("astroNumCycle").textContent = num.numerology_cycle || "--";
+                    
+                    // Structure Analysis
+                    const struct = analysis.structure_analysis || {};
+                    document.getElementById("astroStructType").textContent = struct.major_structure || "--";
+                    document.getElementById("astroHH").textContent = struct.higher_highs ? "YES" : "NO";
+                    document.getElementById("astroHL").textContent = struct.higher_lows ? "YES" : "NO";
+                    document.getElementById("astroLL").textContent = struct.lower_lows ? "YES" : "NO";
+                    document.getElementById("astroLH").textContent = struct.lower_highs ? "YES" : "NO";
+                    document.getElementById("astroBOS").textContent = struct.bos_confirmed ? "CONFIRMED" : "NO";
+                    
+                    // Physics Analysis
+                    const phys = analysis.physics_analysis || {};
+                    document.getElementById("astroVelocity").textContent = phys.current_velocity ? phys.current_velocity.toFixed(6) : "--";
+                    document.getElementById("astroMomentum").textContent = phys.momentum_direction || "--";
+                    document.getElementById("astroVolatility").textContent = phys.volatility_level || "--";
+                    document.getElementById("astroAccel").textContent = phys.price_acceleration ? phys.price_acceleration.toFixed(6) : "--";
+                    
+                    // Narration (if available)
+                    if (evt.narration) {
+                        const narr = evt.narration;
+                        document.getElementById("narrationDescription").textContent = narr.narration || "--";
+                        document.getElementById("narrationGann").textContent = narr.gann_prediction || "--";
+                        document.getElementById("narrationNumerology").textContent = narr.numerology_alignment || "--";
+                        document.getElementById("narrationStructure").textContent = narr.structure_outlook || "--";
+                        document.getElementById("narrationPhysics").textContent = narr.physics_expectation || "--";
+                        document.getElementById("narrationNews").textContent = narr.news_setup || "--";
+                        document.getElementById("narrationLevels").textContent = narr.price_targets || "--";
+                        document.getElementById("narrationDuration").textContent = narr.duration || "--";
+                    }
+                }
             } else {
                 astroCard.style.display = "none";
             }

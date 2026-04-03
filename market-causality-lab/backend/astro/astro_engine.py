@@ -1,5 +1,6 @@
 """
 Astrology engine: event detection, planetary transits, nakshatra cycles, market impact.
+Integrates Gann analysis, numerology, market structure, and physics observations.
 """
 
 from __future__ import annotations
@@ -10,6 +11,8 @@ from pathlib import Path
 import pandas as pd
 
 from backend.astro.astro_event_mappings import get_astro_impact, format_astro_display
+from backend.astro.astro_event_narration import generate_astro_narration, format_astro_event_briefing
+from backend.astro.astro_event_impact_analyzer import analyze_astro_event_impact
 
 
 def load_astro_events(cache: dict | None = None) -> pd.DataFrame:
@@ -97,6 +100,7 @@ def find_nearby_astro_event(df: pd.DataFrame, ts: pd.Timestamp, hours_window: in
 def astro_engine(df, cache: dict | None = None):
     """
     Astrology analysis: nakshatra cycle, event detection, market impact mapping.
+    Integrates Gann, Numerology, Market Structure, and Market Physics analysis.
 
     Returns:
         {
@@ -110,6 +114,24 @@ def astro_engine(df, cache: dict | None = None):
                 "volatility_signal": str,
                 "expected_direction": str,
                 "time_delta_hours": float,
+                "detail": str,
+                "narration": {
+                    "narration": str,
+                    "gann_prediction": str,
+                    "numerology_alignment": str,
+                    "structure_outlook": str,
+                    "physics_expectation": str,
+                    "news_setup": str,
+                    "price_targets": str,
+                    "duration": str,
+                },
+                "impact_analysis": {
+                    "gann_analysis": {...},
+                    "numerology_analysis": {...},
+                    "structure_analysis": {...},
+                    "physics_analysis": {...},
+                    "event_impact_summary": {...},
+                },
             } | None,
         }
     """
@@ -132,6 +154,19 @@ def astro_engine(df, cache: dict | None = None):
         event_found = find_nearby_astro_event(astro_events_df, current_bar_ts, hours_window=12)
         if event_found:
             impact_detail = get_astro_impact(event_found["event_name"], event_found["category"])
+            
+            # Generate narration (Gann, Numerology, Structure, Physics expectations)
+            narration = generate_astro_narration(event_found["event_name"], event_found["category"])
+            
+            # Analyze event impact on current market (Gann, Numerology, Structure, Physics)
+            impact_analysis = analyze_astro_event_impact(
+                df=df,
+                event_name=event_found["event_name"],
+                event_time=event_found["time"],
+                impact_level=impact_detail["impact_level"],
+                market_outcome=impact_detail["market_outcome"],
+            )
+            
             event_info = {
                 "event_name": event_found["event_name"],
                 "event_short": format_astro_display(event_found["event_name"], impact_detail["impact_level"]),
@@ -141,6 +176,8 @@ def astro_engine(df, cache: dict | None = None):
                 "expected_direction": impact_detail.get("expected_direction", "UNKNOWN"),
                 "time_delta_hours": round(event_found["time_delta_hours"], 2),
                 "detail": event_found["detail"],
+                "narration": narration,
+                "impact_analysis": impact_analysis,
             }
 
     return {
