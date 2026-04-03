@@ -647,6 +647,15 @@
                     <div class="card-subtitle" id="cardDepth">--</div>
                     <div class="card-subtitle" id="cardDataScope" title="" style="font-size:11px;color:#93c5fd;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">--</div>
                 </div>
+                <div class="card" id="astroEventCard" style="display:none;">
+                    <div class="card-title" style="display:flex;align-items:center;gap:6px;">🌙 Astrology Event</div>
+                    <div class="card-value" id="cardAstroEventName" style="font-size:13px;white-space:normal;word-wrap:break-word;">--</div>
+                    <div style="display:flex;gap:8px;margin-top:4px;align-items:center;">
+                        <span id="cardAstroImpactBadge" style="padding:2px 6px;border-radius:3px;font-size:11px;font-weight:bold;background:#999;color:#fff;">--</span>
+                        <span id="cardAstroTimeDelta" style="font-size:10px;color:var(--muted);">--</span>
+                    </div>
+                    <div class="card-subtitle" id="cardAstroOutcome" style="margin-top:6px;font-size:11px;color:#b0d4e3;">--</div>
+                </div>
             </div>
 
             <!-- AI Model Info -->
@@ -992,13 +1001,21 @@
 
             let astro = _extractAstroEvent(observation);
             if (astro === "--") {
-                const drivers = Array.isArray(data.reasoning_top_drivers) ? data.reasoning_top_drivers : [];
-                const astroDriver = drivers.find((d) => {
-                    const label = String(d?.label || "").toLowerCase();
-                    return label.includes("astro") || label.includes("nakshatra") || label.includes("solar") || label.includes("lunar");
-                });
-                if (astroDriver) {
-                    astro = String(astroDriver.value || astroDriver.label || "--").replaceAll("_", " ");
+                // Try to get astro event from nearby_event data
+                if (data.astro && data.astro.nearby_event) {
+                    const evt = data.astro.nearby_event;
+                    const eventShort = evt.event_short || evt.event_name.split(" ")[0];
+                    astro = `${eventShort} [${evt.impact_level}]`;
+                } else {
+                    // Fallback to driver analysis
+                    const drivers = Array.isArray(data.reasoning_top_drivers) ? data.reasoning_top_drivers : [];
+                    const astroDriver = drivers.find((d) => {
+                        const label = String(d?.label || "").toLowerCase();
+                        return label.includes("astro") || label.includes("nakshatra") || label.includes("solar") || label.includes("lunar");
+                    });
+                    if (astroDriver) {
+                        astro = String(astroDriver.value || astroDriver.label || "--").replaceAll("_", " ");
+                    }
                 }
             }
 
@@ -1372,6 +1389,35 @@
                 const scopeLabel = _buildDataScopeLabel(data);
                 dataScopeEl.textContent = scopeLabel;
                 dataScopeEl.title = scopeLabel;
+            }
+
+            // Astrology Event Detection
+            const astroCard = document.getElementById("astroEventCard");
+            if (data.astro && data.astro.nearby_event) {
+                const evt = data.astro.nearby_event;
+                astroCard.style.display = "block";
+                document.getElementById("cardAstroEventName").textContent = evt.event_name || "--";
+                
+                // Impact badge color coding
+                const impactBadge = document.getElementById("cardAstroImpactBadge");
+                impactBadge.textContent = evt.impact_level || "--";
+                if (evt.impact_level === "HIGH") {
+                    impactBadge.style.background = "#d32f2f";  // Red
+                } else if (evt.impact_level === "MEDIUM") {
+                    impactBadge.style.background = "#f57c00";  // Orange
+                } else {
+                    impactBadge.style.background = "#999";     // Gray
+                }
+                
+                const timeDelta = evt.time_delta_hours || 0;
+                const timePhrase = timeDelta < 1 
+                    ? `NOW (${(timeDelta * 60).toFixed(0)}min)`
+                    : `${timeDelta.toFixed(1)}h ago/ahead`;
+                document.getElementById("cardAstroTimeDelta").textContent = timePhrase;
+                
+                document.getElementById("cardAstroOutcome").textContent = evt.market_outcome || "--";
+            } else {
+                astroCard.style.display = "none";
             }
 
             // Market Structure

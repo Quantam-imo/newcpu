@@ -1,0 +1,31 @@
+{
+  "last_update_id": 112229214,
+  "last_report_ts": 1775239118,
+  "last_daemon_health_ts": 1775238259,
+  "last_online_alert_ts": 1775211813,
+  "last_bias": null,
+  "last_bias_map": {
+    "XAUUSD": "N/A",
+    "GC.FUT": "N/A",
+    "NQ.FUT": "N/A"
+  },
+  "last_signal_map": {
+    "XAUUSD": "--",
+    "GC.FUT": "--",
+    "NQ.FUT": "--"
+  },
+  "last_astro_sig_map": {
+    "XAUUSD": "{\"astro_bias\": null, \"astro_marker\": null, \"harmonic_window\": null, \"reason\": null, \"signal\": null}",
+    "GC.FUT": "{\"astro_bias\": null, \"astro_marker\": null, \"harmonic_window\": null, \"reason\": null, \"signal\": null}",
+    "NQ.FUT": "{\"astro_bias\": null, \"astro_marker\": null, \"harmonic_window\": null, \"reason\": null, \"signal\": null}"
+  },
+  "last_news_halt": false,
+  "last_news_sig": "[]",
+  "last_trade_key_map": {
+    "XAUUSD": "2026-04-02T09:23:42+00:00|XAUUSD|TEST_MODEL|APPROVED|30.0"
+  },
+  "last_trade_alert_check_ts": 1775239089,
+  "last_day_start_report_date": "2026-04-03",
+  "last_day_end_report_date": "",
+  "last_daily_summary_date": "2026-04-03"
+}

@@ -1,11 +1,11 @@
 {
   "XAUUSD": {
     "active_symbol": "GC.c.1",
-    "resolved_at": 1774594153,
-    "last_probe_at": 1774594153,
+    "resolved_at": 1775235389,
+    "last_probe_at": 1775235389,
     "last_status": "LIVE",
     "sample_count": 400,
-    "attempts": 431,
+    "attempts": 432,
     "consecutive_failures": 0,
     "ttl_seconds": 14400,
     "candidates_tried": [
@@ -17,11 +17,11 @@
   },
   "NQ": {
     "active_symbol": "NQ.c.1",
-    "resolved_at": 1774594160,
-    "last_probe_at": 1774594160,
+    "resolved_at": 1775235395,
+    "last_probe_at": 1775235395,
     "last_status": "LIVE",
     "sample_count": 400,
-    "attempts": 193,
+    "attempts": 194,
     "consecutive_failures": 0,
     "ttl_seconds": 14400,
     "candidates_tried": [
@@ -33,11 +33,11 @@
   },
   "EURUSD": {
     "active_symbol": "6E.c.1",
-    "resolved_at": 1774594167,
-    "last_probe_at": 1774594167,
+    "resolved_at": 1775235403,
+    "last_probe_at": 1775235403,
     "last_status": "LIVE",
-    "sample_count": 336,
-    "attempts": 193,
+    "sample_count": 256,
+    "attempts": 194,
     "consecutive_failures": 0,
     "ttl_seconds": 14400,
     "candidates_tried": [
@@ -49,15 +49,31 @@
   },
   "US30": {
     "active_symbol": "YM.c.1",
-    "resolved_at": 1774594174,
-    "last_probe_at": 1774594174,
+    "resolved_at": 1775235411,
+    "last_probe_at": 1775235411,
     "last_status": "LIVE",
     "sample_count": 400,
-    "attempts": 141,
+    "attempts": 142,
     "consecutive_failures": 0,
     "ttl_seconds": 14400,
     "candidates_tried": [
       "YM.c.1"
+    ],
+    "disabled": false,
+    "disabled_at": null,
+    "disable_reason": null
+  },
+  "GC.FUT": {
+    "active_symbol": "GC.c.1",
+    "resolved_at": 1775235416,
+    "last_probe_at": 1775235416,
+    "last_status": "LIVE",
+    "sample_count": 400,
+    "attempts": 1,
+    "consecutive_failures": 0,
+    "ttl_seconds": 14400,
+    "candidates_tried": [
+      "GC.c.1"
     ],
     "disabled": false,
     "disabled_at": null,
