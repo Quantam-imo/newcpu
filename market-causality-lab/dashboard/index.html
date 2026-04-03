@@ -600,6 +600,11 @@
                 <option value="1w">1w</option>
                 <option value="1month">1month</option>
             </select>
+            <select id="sourceModeSelect" title="Data source scope">
+                <option value="combined" selected>Historical + Live</option>
+                <option value="historical_first">Historical Only</option>
+                <option value="live_first">Live First</option>
+            </select>
             <button id="loadBtn">📊 Load Analysis</button>
             <button id="refreshBtn">🔄 Refresh</button>
         </div>
@@ -640,6 +645,7 @@
                         <span id="cardLatency" style="font-size:12px;color:var(--muted);margin-left:4px;">--</span>
                     </div>
                     <div class="card-subtitle" id="cardDepth">--</div>
+                    <div class="card-subtitle" id="cardDataScope" title="" style="font-size:11px;color:#93c5fd;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">--</div>
                 </div>
             </div>
 
@@ -774,6 +780,7 @@
                         <thead>
                             <tr>
                                 <th>Timeframe</th>
+                                <th>Data Scope</th>
                                 <th>Date</th>
                                 <th>Time</th>
                                 <th>Trend Start</th>
@@ -793,7 +800,7 @@
                         </thead>
                         <tbody id="tfObsBody">
                             <tr>
-                                <td colspan="16">Load analysis to build timeframe observation matrix.</td>
+                                <td colspan="17">Load analysis to build timeframe observation matrix.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -862,6 +869,17 @@
         const DEFAULT_LOOKBACK_YEARS = 25;
         const DEFAULT_CHART_LIMIT = 12000;
         const MATRIX_TIMEFRAMES = ["1d", "4h", "1h", "30m", "15m", "5m", "1m", "1w", "1month"];
+
+        function selectedSourceMode() {
+            const el = document.getElementById("sourceModeSelect");
+            return el ? el.value : "combined";
+        }
+
+        function _buildDataScopeLabel(data) {
+            if (data.data_source) return String(data.data_source);
+            if (data.source_mode) return String(data.source_mode);
+            return "--";
+        }
 
         let mclChart = null;
         let mclCandlesSeries = null;
@@ -999,6 +1017,7 @@
                         <span class="matrix-pill">${_escapeHtml(String(timeframe).toUpperCase())}</span>
                         ${depthBadgeHtml}
                     </td>
+                    <td>${_escapeHtml(_buildDataScopeLabel(data))}</td>
                     <td>${_escapeHtml(latest.date)}</td>
                     <td>${_escapeHtml(latest.time)}</td>
                     <td>${_escapeHtml(String(tStart).replace("T", " "))}</td>
@@ -1024,7 +1043,7 @@
             params.set("symbol", symbol);
             params.set("timeframe", timeframe);
             params.set("lookback_years", String(DEFAULT_LOOKBACK_YEARS));
-            params.set("source_mode", "historical_first");
+            params.set("source_mode", selectedSourceMode());
 
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -1046,7 +1065,7 @@
             if (forceRefresh) params.set("refresh", "true");
             params.set("symbol", symbol);
             params.set("lookback_years", String(DEFAULT_LOOKBACK_YEARS));
-            params.set("source_mode", "historical_first");
+            params.set("source_mode", selectedSourceMode());
 
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -1067,7 +1086,7 @@
             const body = document.getElementById("tfObsBody");
             if (!body) return;
 
-            body.innerHTML = `<tr><td colspan="16">Building timeframe matrix...</td></tr>`;
+            body.innerHTML = `<tr><td colspan="17">Building timeframe matrix...</td></tr>`;
 
             try {
                 const matrixPayload = await _fetchTimeframeMatrix(symbol, forceRefresh, 50000);
@@ -1093,7 +1112,7 @@
                     rows.push(`
                         <tr>
                             <td><span class="matrix-pill">${_escapeHtml(String(tf).toUpperCase())}</span></td>
-                            <td colspan="15" class="reason">Unable to load timeframe: ${_escapeHtml(error?.message || "unknown error")}</td>
+                            <td colspan="16" class="reason">Unable to load timeframe: ${_escapeHtml(error?.message || "unknown error")}</td>
                         </tr>
                     `);
                 }
@@ -1289,7 +1308,7 @@
                 params.set("symbol", symbol);
                 params.set("timeframe", timeframe);
                 params.set("lookback_years", String(DEFAULT_LOOKBACK_YEARS));
-                params.set("source_mode", "historical_first");
+                params.set("source_mode", selectedSourceMode());
 
                 const url = `${API_BASE}/market_causality/summary?${params.toString()}`;
                 const response = await fetch(url);
@@ -1340,14 +1359,20 @@
             document.getElementById("cardConfidence").textContent = conf;
             document.getElementById("cardQuality").textContent = `Quality: ${data.quality || "--"}`;
 
-            // Status
+            // Status + Data Scope
             const status = String(data.status || "--").toUpperCase();
             document.getElementById("cardStatus").textContent = status;
-            document.getElementById("cardLatency").textContent = 
+            document.getElementById("cardLatency").textContent =
                 data.elapsed_ms != null ? `(${data.elapsed_ms}ms)` : "";
 
             const depth = data.historical_depth_years != null ? `${data.historical_depth_years}y depth` : "--";
             document.getElementById("cardDepth").textContent = depth;
+            const dataScopeEl = document.getElementById("cardDataScope");
+            if (dataScopeEl) {
+                const scopeLabel = _buildDataScopeLabel(data);
+                dataScopeEl.textContent = scopeLabel;
+                dataScopeEl.title = scopeLabel;
+            }
 
             // Market Structure
             document.getElementById("cardPhase").textContent = data.phase || "--";

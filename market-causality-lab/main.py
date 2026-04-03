@@ -710,6 +710,54 @@ def _historical_depth_years(df: pd.DataFrame) -> float | None:
     return round(float(span_days) / 365.25, 3)
 
 
+def _merge_historical_and_live(
+    hist_df: pd.DataFrame,
+    live_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Merge a 25Y historical CSV frame with fresh live candles.
+
+    Only live rows that are strictly *newer* than the last historical bar are
+    appended.  The result is sorted by time and deduplicated so the AI pipeline
+    sees one continuous, time-ordered series covering the full depth range up to
+    the present tick.
+    """
+
+    def _normalise_time(df: pd.DataFrame) -> pd.DataFrame:
+        if "time" not in df.columns:
+            return df
+        df = df.copy()
+        df["time"] = pd.to_datetime(df["time"], utc=True, errors="coerce")
+        return df
+
+    hist = _normalise_time(hist_df)
+    live = _normalise_time(live_df)
+
+    if hist.empty:
+        return live
+    if live.empty:
+        return hist
+
+    hist_last_ts = hist["time"].dropna().max()
+    newer_live = live[live["time"] > hist_last_ts].copy()
+    if newer_live.empty:
+        return hist
+
+    # Union of columns present in both frames; skip columns missing from live.
+    shared_cols = [c for c in hist.columns if c in newer_live.columns]
+    if not shared_cols:
+        return hist
+
+    combined = pd.concat(
+        [hist[shared_cols], newer_live[shared_cols]], ignore_index=True
+    )
+    combined = (
+        combined.sort_values("time")
+        .drop_duplicates(subset=["time"])
+        .reset_index(drop=True)
+    )
+    return combined
+
+
 def full_system(
     symbol: str = "XAUUSD",
     timeframe: str = "1d",
@@ -742,8 +790,11 @@ def full_system(
     allow_live = source_mode_norm in {"live_first", "live_only", "hybrid"}
     allow_historical = source_mode_norm in {"historical_first", "historical_only", "hybrid", "live_first"}
 
-    if not allow_live and not allow_historical:
-        raise ValueError("source_mode must be one of: historical_first, historical_only, live_first, live_only, hybrid")
+    if not allow_live and not allow_historical and source_mode_norm != "combined":
+        raise ValueError(
+            "source_mode must be one of: historical_first, historical_only, "
+            "live_first, live_only, hybrid, combined"
+        )
 
     df = None
     source = ""
@@ -786,6 +837,37 @@ def full_system(
             source = "MT5 LIVE (fallback)"
         except Exception as exc:
             live_error = str(exc)
+
+    # --- combined mode: full 25Y historical + live tail merged ---
+    if source_mode_norm == "combined":
+        _hist_df = None
+        _live_df = None
+        _hist_path_name = "unknown"
+
+        try:
+            _hist_df, _dpath, applied_timeframe, timeframe_fallback_meta = _load_historical_with_fallback(
+                symbol=symbol,
+                timeframe=timeframe,
+                lookback_years=lookback_years,
+            )
+            _hist_path_name = _dpath.name
+        except Exception as exc:
+            historical_error = str(exc)
+
+        try:
+            _live_df = fetch_xauusd(count=120)
+        except Exception as exc:
+            live_error = str(exc)
+
+        if _hist_df is not None and _live_df is not None:
+            df = _merge_historical_and_live(_hist_df, _live_df)
+            source = f"HISTORICAL+LIVE ({_hist_path_name} + live tail,  {len(df)} rows)"
+        elif _hist_df is not None:
+            df = _hist_df
+            source = f"HISTORICAL CSV ({_hist_path_name}) [live_fetch_failed: {live_error}]"
+        elif _live_df is not None:
+            df = _live_df
+            source = f"MT5/DATABENTO LIVE [historical_load_failed: {historical_error}]"
 
     if df is None:
         raise RuntimeError(

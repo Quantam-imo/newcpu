@@ -149,7 +149,7 @@ def _normalize_timeframe(timeframe: str | None) -> str:
 
 def _normalize_source_mode(source_mode: str | None) -> str:
     value = str(source_mode or "historical_first").strip().lower()
-    allowed = {"historical_first", "historical_only", "live_first", "live_only", "hybrid"}
+    allowed = {"historical_first", "historical_only", "live_first", "live_only", "hybrid", "combined"}
     return value if value in allowed else "historical_first"
 
 
