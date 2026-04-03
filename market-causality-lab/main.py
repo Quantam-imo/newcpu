@@ -1,4 +1,7 @@
 from pathlib import Path
+import os
+
+import pandas as pd
 
 from backend.core.phase1_config import get_phase1_config
 from backend.core.output_contracts import (
@@ -7,7 +10,14 @@ from backend.core.output_contracts import (
     normalize_failure_output,
     output_contract_versions,
 )
-from backend.utils.data_loader import load_data, load_news_data, integrate_news_features
+from backend.utils.data_loader import (
+    load_data,
+    load_news_data,
+    integrate_news_features,
+    integrate_event_features,
+)
+from backend.utils.observation_recorder import record_observation
+from backend.utils.timeframe_loader import TIMEFRAME_FILES
 from backend.memory.scanner import scan_market
 from backend.memory.vector_memory import build_vector_memory
 from backend.ai.feature_vector import create_feature_vector
@@ -15,6 +25,7 @@ from backend.ai.similarity_engine import find_similar
 from backend.memory.recall_engine import recall_patterns
 from backend.ai.probability_engine import compute_probability
 from backend.ai.decision_engine import ai_decision
+from backend.ai.modeling.serving import decide_with_model
 from backend.engines.psychology_engine import psychology_engine
 from backend.engines.trap_engine import trap_engine
 from backend.engines.behavior_engine import behavior_engine
@@ -87,14 +98,164 @@ def _build_decision_trace(signals: dict, weights: dict, dominant: str, confidenc
     }
 
 
+def _build_reasoning_display(result: dict) -> dict:
+    final = (result or {}).get("final", {}) or {}
+    future = (result or {}).get("future", {}) or {}
+    time_signal = (result or {}).get("time_signal", {}) or {}
+    decision_trace = (result or {}).get("decision_trace", {}) or {}
+    trap = (result or {}).get("trap", {}) or {}
+
+    signal = str((result or {}).get("filtered_signal") or "WAIT")
+    phase = str(final.get("phase") or "UNKNOWN")
+    trend = str(final.get("trend") or "UNKNOWN")
+    dominant_force = str(decision_trace.get("dominant_force") or signal)
+    reliability = decision_trace.get("reliability_score")
+    quality = str((result or {}).get("quality") or "UNKNOWN")
+    timing = str(time_signal.get("timing") or "NO SIGNAL")
+    future_direction = str(future.get("direction") or "UNCLEAR")
+    rejection_reason = (result or {}).get("rejection_reason") or "none"
+    news_guard_applied = bool((result or {}).get("news_guard_applied"))
+    trap_name = str(trap.get("trap") or "NONE")
+    bias_label = str(((result or {}).get("simple", {}) or {}).get("bias_label") or "NEUTRAL")
+
+    weighted_forces = (decision_trace.get("weighted_forces") or {}) if isinstance(decision_trace, dict) else {}
+    buy_force = float(weighted_forces.get("BUY", 0.0) or 0.0)
+    sell_force = float(weighted_forces.get("SELL", 0.0) or 0.0)
+    total_force = max(1e-9, buy_force + sell_force)
+    dominant_force_ratio = max(buy_force, sell_force) / total_force
+
+    conflict_score = float(decision_trace.get("conflict_score", 0.0) or 0.0)
+    trap_probability = float(trap.get("probability", 0.0) or 0.0)
+    timing_score = 1.0 if timing == "STRONG TURN WINDOW" else (0.6 if timing == "POSSIBLE TURN" else 0.2)
+    future_strength = max(0.0, min(1.0, float((future or {}).get("strength", 0.0) or 0.0) / 4.0))
+    risk_gate_score = 0.0 if news_guard_applied else 1.0
+    bias_score = float(((result or {}).get("simple", {}) or {}).get("bias_score", 0.0) or 0.0)
+    bias_magnitude = max(0.0, min(1.0, abs(bias_score)))
+
+    raw_contributions = {
+        "dominant_force": max(0.0, min(1.0, dominant_force_ratio * 0.55 + float(reliability or 0.0) * 0.45)),
+        "timing_window": timing_score,
+        "future_projection": future_strength,
+        "risk_gate": max(0.0, min(1.0, risk_gate_score * (1.0 - conflict_score) * (1.0 - 0.5 * trap_probability))),
+        "bias_label": bias_magnitude,
+    }
+    raw_total = sum(raw_contributions.values()) or 1.0
+    contribution_weights = {k: round(v / raw_total, 4) for k, v in raw_contributions.items()}
+
+    tone = "neutral"
+    if signal in {"BUY", "STRONG BUY"}:
+        tone = "bullish"
+    elif signal in {"SELL", "STRONG SELL"}:
+        tone = "bearish"
+    elif news_guard_applied or rejection_reason != "none":
+        tone = "caution"
+
+    top_drivers = [
+        {
+            "label": "dominant_force",
+            "value": dominant_force,
+            "score": contribution_weights["dominant_force"],
+            "score_pct": round(contribution_weights["dominant_force"] * 100.0, 2),
+        },
+        {
+            "label": "timing_window",
+            "value": timing,
+            "score": contribution_weights["timing_window"],
+            "score_pct": round(contribution_weights["timing_window"] * 100.0, 2),
+        },
+        {
+            "label": "future_projection",
+            "value": future_direction,
+            "score": contribution_weights["future_projection"],
+            "score_pct": round(contribution_weights["future_projection"] * 100.0, 2),
+        },
+        {
+            "label": "risk_gate",
+            "value": "blocked" if news_guard_applied else "clear",
+            "score": contribution_weights["risk_gate"],
+            "score_pct": round(contribution_weights["risk_gate"] * 100.0, 2),
+        },
+        {
+            "label": "bias_label",
+            "value": bias_label,
+            "score": contribution_weights["bias_label"],
+            "score_pct": round(contribution_weights["bias_label"] * 100.0, 2),
+        },
+    ]
+    top_drivers = sorted(top_drivers, key=lambda item: float(item.get("score", 0.0) or 0.0), reverse=True)
+
+    lead = (
+        f"Signal {signal} because phase {phase} and trend {trend} align with dominant force {dominant_force}. "
+        f"Reliability {reliability if reliability is not None else 'n/a'} and timing {timing}."
+    )
+    if news_guard_applied:
+        lead += f" Execution guard active due to {rejection_reason}."
+    else:
+        lead += f" Future outlook is {future_direction}."
+
+    chain = [
+        f"Market structure reads as phase {phase} with trend {trend}.",
+        f"Signal dominance is {dominant_force} with quality {quality} and trap state {trap_name}.",
+        f"Time reasoning is {timing} and future projection is {future_direction}.",
+        f"Risk gate status: {'blocked' if news_guard_applied else 'clear'}; rejection reason: {rejection_reason}.",
+    ]
+
+    evidence = {
+        "dominant_force": dominant_force,
+        "reliability_score": reliability,
+        "timing": timing,
+        "future_direction": future_direction,
+        "trap": trap_name,
+        "rejection_reason": rejection_reason,
+        "contribution_weights": contribution_weights,
+    }
+
+    return {
+        "tone": tone,
+        "summary": lead,
+        "chain": chain,
+        "evidence": evidence,
+        "top_drivers": top_drivers,
+    }
+
+
+def _build_analysis_lifecycle(
+    started_at: pd.Timestamp,
+    completed_at: pd.Timestamp,
+    stages: list[dict],
+) -> dict:
+    elapsed_ms = round((completed_at - started_at).total_seconds() * 1000.0, 2)
+
+    return {
+        "started_at_utc": started_at.isoformat(),
+        "completed_at_utc": completed_at.isoformat(),
+        "elapsed_ms": elapsed_ms,
+        "stages": stages,
+    }
+
+
+def _stage_duration(stage_started_at: pd.Timestamp, stage_completed_at: pd.Timestamp) -> float:
+    return round((stage_completed_at - stage_started_at).total_seconds() * 1000.0, 2)
+
+
 def process(df):
     # Core intelligence pipeline
     phase1_cfg = get_phase1_config()
+    process_timing: list[dict] = []
 
     # Precision layer 1: data quality audit before any analysis
+    stage_started_at = pd.Timestamp.now("UTC")
     data_quality = check_data_quality(df)
+    stage_completed_at = pd.Timestamp.now("UTC")
+    process_timing.append(
+        {
+            "name": "data_quality_audit",
+            "elapsed_ms": _stage_duration(stage_started_at, stage_completed_at),
+        }
+    )
 
     # Step 1: Scan memory
+    stage_started_at = pd.Timestamp.now("UTC")
     memory = scan_market(df)
 
     # Step 2: Build vectors
@@ -113,28 +274,60 @@ def process(df):
     # Step 6: Probability
     prob = compute_probability(results)
 
-    # Step 7: AI decision
-    decision = ai_decision(prob)
+    # Step 7: AI decision (model-served when available, rule fallback otherwise)
+    decision, ai_model = decide_with_model(memory, prob)
+    stage_completed_at = pd.Timestamp.now("UTC")
+    process_timing.append(
+        {
+            "name": "memory_probability_stack",
+            "elapsed_ms": _stage_duration(stage_started_at, stage_completed_at),
+        }
+    )
 
     # Phase 4: Psychology + trap + behavior reasoning layer
+    stage_started_at = pd.Timestamp.now("UTC")
     state = current_record["state"]
     psychology = psychology_engine(state, current_record["phase"])
     trap = trap_engine(state, current_record["liquidity"], current_record["phase"])
     behavior = behavior_engine(psychology, trap)
+    stage_completed_at = pd.Timestamp.now("UTC")
+    process_timing.append(
+        {
+            "name": "behavior_reasoning",
+            "elapsed_ms": _stage_duration(stage_started_at, stage_completed_at),
+        }
+    )
 
     # Phase 5: Time + universal alignment layer
+    stage_started_at = pd.Timestamp.now("UTC")
     gann_adv = gann_advanced(state, df)
     astro = astro_engine(df)
     numerology = numerology_engine(state["price"])
     harmonic = harmonic_engine(df)
     time_signal = time_engine(gann_adv, astro)
     future = future_engine(state, current_record["phase"], time_signal, harmonic, numerology)
+    stage_completed_at = pd.Timestamp.now("UTC")
+    process_timing.append(
+        {
+            "name": "time_future_alignment",
+            "elapsed_ms": _stage_duration(stage_started_at, stage_completed_at),
+        }
+    )
 
     # Precision layer 2: latency awareness + adaptive time-scale
+    stage_started_at = pd.Timestamp.now("UTC")
     latency = latency_analysis(state, df)
     timescale = adaptive_timescale_analysis(state, df)
+    stage_completed_at = pd.Timestamp.now("UTC")
+    process_timing.append(
+        {
+            "name": "latency_timescale_checks",
+            "elapsed_ms": _stage_duration(stage_started_at, stage_completed_at),
+        }
+    )
 
     # Phase 6: final synchronization and intelligence output
+    stage_started_at = pd.Timestamp.now("UTC")
     weights = weight_engine(state, current_record["phase"])
     signals = generate_signals(state, current_record["liquidity"], current_record["gann"], decision)
     dominant, score = dominance_engine(signals, weights)
@@ -188,6 +381,13 @@ def process(df):
         decision_trace["conflict_score"],
         trap,
     )
+    stage_completed_at = pd.Timestamp.now("UTC")
+    process_timing.append(
+        {
+            "name": "signal_synchronization",
+            "elapsed_ms": _stage_duration(stage_started_at, stage_completed_at),
+        }
+    )
 
     # PRO layer: lightweight learning feedback loop.
     actual = "BUY" if state["trend"] == "UP" else "SELL"
@@ -233,17 +433,34 @@ def process(df):
             "institutional_score": institutional_score,
         }
 
+    stage_started_at = pd.Timestamp.now("UTC")
     institutional = run_pipeline(fetch_all_data, process_all)
+    stage_completed_at = pd.Timestamp.now("UTC")
+    process_timing.append(
+        {
+            "name": "institutional_pipeline",
+            "elapsed_ms": _stage_duration(stage_started_at, stage_completed_at),
+        }
+    )
 
     # Phase 7: real-world validation and execution awareness.
+    stage_started_at = pd.Timestamp.now("UTC")
     backtest_stats = backtest(memory)
     execution_state = normalize_execution_output(execution_engine(state))
     failure_state = normalize_failure_output(failure_engine(state))
 
     # Precision layer 4: overfitting protection
     overfit = overfitting_guard(backtest_stats)
+    stage_completed_at = pd.Timestamp.now("UTC")
+    process_timing.append(
+        {
+            "name": "validation_and_overfit",
+            "elapsed_ms": _stage_duration(stage_started_at, stage_completed_at),
+        }
+    )
 
     # Universal Conversion Engine outputs
+    stage_started_at = pd.Timestamp.now("UTC")
     _ue_price = state["price"]
     universal = {
         "numerology": ue_numerology_profile(_ue_price),
@@ -256,6 +473,13 @@ def process(df):
         "price_degree": ue_price_to_degree(_ue_price),
         "harmonic": ue_harmonic_analysis(df),
     }
+    stage_completed_at = pd.Timestamp.now("UTC")
+    process_timing.append(
+        {
+            "name": "universal_conversion",
+            "elapsed_ms": _stage_duration(stage_started_at, stage_completed_at),
+        }
+    )
 
     # Accuracy Pass v2: attach SL/TP levels to every directional signal
     price = state["price"]
@@ -273,6 +497,7 @@ def process(df):
         "matches": matches,
         "probability": prob,
         "ai_decision": decision,
+        "ai_model": ai_model,
         "psychology": psychology,
         "trap": trap,
         "behavior": behavior,
@@ -310,20 +535,277 @@ def process(df):
         "simple": simple,
         "overfit": overfit,
         "universal": universal,
+        "process_timing": process_timing,
     }
 
 
-def full_system():
+def _resolve_timeframe_file(timeframe: str, symbol: str = "XAUUSD", data_dir: str = "data") -> Path:
+    tf = str(timeframe or "1d").strip().lower()
+    symbol_norm = str(symbol or "XAUUSD").strip().upper()
+
+    # Current datasets are XAU-only; keep symbol parameter for future extension.
+    if symbol_norm not in {"XAUUSD", "XAU", "GC.FUT", "GC"}:
+        raise ValueError(f"Unsupported symbol for historical datasets: {symbol_norm}")
+
+    tf_aliases = {
+        "1min": "1m",
+        "5min": "5m",
+        "15min": "15m",
+        "30min": "30m",
+        "60m": "1h",
+        "1hour": "1h",
+        "4hour": "4h",
+        "daily": "1d",
+        "day": "1d",
+        "weekly": "1w",
+        "month": "1month",
+        "1mo": "1month",
+    }
+    tf = tf_aliases.get(tf, tf)
+
+    filename = TIMEFRAME_FILES.get(tf)
+    if not filename:
+        supported = ", ".join(sorted(TIMEFRAME_FILES.keys()))
+        raise ValueError(f"Unsupported timeframe '{timeframe}'. Supported: {supported}")
+
+    path = Path(data_dir) / filename
+    if not path.exists():
+        raise FileNotFoundError(f"Historical dataset not found: {path}")
+    return path
+
+
+def _normalize_timeframe_value(timeframe: str | None) -> str:
+    tf = str(timeframe or "1d").strip().lower()
+    tf_aliases = {
+        "1min": "1m",
+        "5min": "5m",
+        "15min": "15m",
+        "30min": "30m",
+        "60m": "1h",
+        "1hour": "1h",
+        "4hour": "4h",
+        "daily": "1d",
+        "day": "1d",
+        "weekly": "1w",
+        "month": "1month",
+        "1mo": "1month",
+    }
+    return tf_aliases.get(tf, tf)
+
+
+def _timeframe_fallback_chain(requested_timeframe: str) -> list[str]:
+    tf = _normalize_timeframe_value(requested_timeframe)
+
+    if tf in {"1m", "5m", "15m", "30m"}:
+        chain = [tf, "5m", "30m", "1h", "4h", "1d"]
+    elif tf in {"1h", "4h"}:
+        chain = [tf, "4h", "1d", "1h"]
+    elif tf in {"1w", "1month"}:
+        chain = [tf, "1d", "4h", "1h"]
+    else:
+        chain = [tf, "1d", "4h", "1h", "30m", "5m"]
+
+    seen = set()
+    ordered = []
+    for item in chain:
+        if item in TIMEFRAME_FILES and item not in seen:
+            ordered.append(item)
+            seen.add(item)
+    return ordered
+
+
+def _load_historical_with_fallback(
+    symbol: str,
+    timeframe: str,
+    lookback_years: int,
+    data_dir: str = "data",
+) -> tuple[pd.DataFrame, Path, str, dict[str, str | float | bool | None]]:
+    requested_tf = _normalize_timeframe_value(timeframe)
+    target_years = max(1, min(100, int(lookback_years)))
+    min_required_depth = max(0.0, target_years - 0.25)
+
+    candidate_chain = _timeframe_fallback_chain(requested_tf)
+    # Deep lookback requests are better served by coarse timeframes first;
+    # this avoids loading very large intraday CSVs that cannot satisfy the
+    # requested years anyway and may exceed runtime budgets.
+    if target_years >= 10:
+        preferred = ["1d", "4h", "1h", "30m", "15m", "5m", "1m", "1w", "1month"]
+        coarse_first = [tf for tf in preferred if tf in candidate_chain]
+        remainder = [tf for tf in candidate_chain if tf not in coarse_first]
+        candidate_chain = coarse_first + remainder
+
+    best = None
+    load_errors: list[str] = []
+
+    for candidate_tf in candidate_chain:
+        try:
+            dataset_path = _resolve_timeframe_file(timeframe=candidate_tf, symbol=symbol, data_dir=data_dir)
+            raw_df = load_data(str(dataset_path))
+            depth = _historical_depth_years(raw_df)
+            if depth is None:
+                continue
+
+            trimmed = _apply_lookback_years(raw_df, target_years)
+
+            if best is None or depth > float(best["depth"]):
+                best = {
+                    "df": trimmed,
+                    "path": dataset_path,
+                    "tf": candidate_tf,
+                    "depth": float(depth),
+                }
+
+            if depth >= min_required_depth:
+                fallback_applied = candidate_tf != requested_tf
+                return trimmed, dataset_path, candidate_tf, {
+                    "requested_timeframe": requested_tf,
+                    "applied_timeframe": candidate_tf,
+                    "fallback_applied": fallback_applied,
+                    "fallback_reason": "requested_timeframe_depth_below_target" if fallback_applied else None,
+                    "applied_dataset_depth_years": float(depth),
+                    "target_lookback_years": float(target_years),
+                }
+        except Exception as exc:
+            load_errors.append(f"{candidate_tf}: {exc}")
+
+    if best is not None:
+        fallback_applied = str(best["tf"]) != requested_tf
+        return best["df"], best["path"], str(best["tf"]), {
+            "requested_timeframe": requested_tf,
+            "applied_timeframe": str(best["tf"]),
+            "fallback_applied": fallback_applied,
+            "fallback_reason": "requested_timeframe_depth_below_target_no_full_match",
+            "applied_dataset_depth_years": float(best["depth"]),
+            "target_lookback_years": float(target_years),
+        }
+
+    detail = "; ".join(load_errors) if load_errors else "no datasets available"
+    raise RuntimeError(f"Unable to load historical datasets for timeframe fallback chain: {detail}")
+
+
+def _apply_lookback_years(df: pd.DataFrame, years: int) -> pd.DataFrame:
+    years_i = int(years) if years is not None else 25
+    years_i = max(1, min(100, years_i))
+
+    if "time" not in df.columns or df.empty:
+        return df
+
+    max_ts = df["time"].max()
+    if pd.isna(max_ts):
+        return df
+
+    cutoff = max_ts - pd.DateOffset(years=years_i)
+    trimmed = df[df["time"] >= cutoff].copy()
+    return trimmed if not trimmed.empty else df
+
+
+def _historical_depth_years(df: pd.DataFrame) -> float | None:
+    if "time" not in df.columns or df.empty:
+        return None
+    min_ts = df["time"].min()
+    max_ts = df["time"].max()
+    if pd.isna(min_ts) or pd.isna(max_ts) or max_ts <= min_ts:
+        return None
+    span_days = (max_ts - min_ts).days
+    return round(float(span_days) / 365.25, 3)
+
+
+def full_system(
+    symbol: str = "XAUUSD",
+    timeframe: str = "1d",
+    lookback_years: int = 25,
+    source_mode: str = "historical_first",
+    news_file: str = "data/news_data_v2.csv",
+    global_events_file: str = "data/global_events.csv",
+):
+    """Run the full market-causality stack.
+
+    Designed for long-horizon historical studies (e.g. 25 years), while still
+    supporting MT5 live fallback when requested.
+    """
+    run_started_at = pd.Timestamp.now("UTC")
+    lifecycle_stages = [
+        {
+            "name": "request_received",
+            "status": "completed",
+            "started_at_utc": run_started_at.isoformat(),
+            "completed_at_utc": run_started_at.isoformat(),
+            "elapsed_ms": 0.0,
+            "detail": f"analysis request accepted for requested timeframe {_normalize_timeframe_value(timeframe)}",
+        }
+    ]
     news_status = "not_loaded"
-    news_file = "data/news_data_v2.csv"
+    global_events_status = "not_loaded"
+    events_df = None
 
-    try:
-        df = fetch_xauusd()
-        source = "MT5 LIVE"
-    except Exception as exc:
-        df = load_data("data/XAU_1Month_data.csv")
-        source = f"CSV FALLBACK ({exc})"
+    source_mode_norm = str(source_mode or "historical_first").strip().lower()
+    allow_live = source_mode_norm in {"live_first", "live_only", "hybrid"}
+    allow_historical = source_mode_norm in {"historical_first", "historical_only", "hybrid", "live_first"}
 
+    if not allow_live and not allow_historical:
+        raise ValueError("source_mode must be one of: historical_first, historical_only, live_first, live_only, hybrid")
+
+    df = None
+    source = ""
+    requested_timeframe = _normalize_timeframe_value(timeframe)
+    applied_timeframe = requested_timeframe
+    timeframe_fallback_meta = {
+        "requested_timeframe": requested_timeframe,
+        "applied_timeframe": requested_timeframe,
+        "fallback_applied": False,
+        "fallback_reason": None,
+        "applied_dataset_depth_years": None,
+        "target_lookback_years": float(max(1, min(100, int(lookback_years) if lookback_years is not None else 25))),
+    }
+    live_error = None
+    historical_error = None
+    data_load_started_at = pd.Timestamp.now("UTC")
+
+    if source_mode_norm in {"live_first", "live_only", "hybrid"} and allow_live:
+        try:
+            # Keep live fetch short-horizon; historical depth comes from CSV datasets.
+            df = fetch_xauusd()
+            source = "MT5 LIVE"
+        except Exception as exc:
+            live_error = str(exc)
+
+    if df is None and allow_historical:
+        try:
+            df, dataset_path, applied_timeframe, timeframe_fallback_meta = _load_historical_with_fallback(
+                symbol=symbol,
+                timeframe=timeframe,
+                lookback_years=lookback_years,
+            )
+            source = f"HISTORICAL CSV ({dataset_path.name})"
+        except Exception as exc:
+            historical_error = str(exc)
+
+    if df is None and allow_live and source_mode_norm in {"historical_first"}:
+        try:
+            df = fetch_xauusd()
+            source = "MT5 LIVE (fallback)"
+        except Exception as exc:
+            live_error = str(exc)
+
+    if df is None:
+        raise RuntimeError(
+            "Unable to load data source. "
+            f"historical_error={historical_error or 'none'}; live_error={live_error or 'none'}"
+        )
+
+    data_load_completed_at = pd.Timestamp.now("UTC")
+    lifecycle_stages.append(
+        {
+            "name": "data_loaded",
+            "status": "completed",
+            "started_at_utc": data_load_started_at.isoformat(),
+            "completed_at_utc": data_load_completed_at.isoformat(),
+            "elapsed_ms": round((data_load_completed_at - data_load_started_at).total_seconds() * 1000.0, 2),
+            "detail": f"source {source} loaded with applied timeframe {applied_timeframe}",
+        }
+    )
+
+    news_stage_started_at = pd.Timestamp.now("UTC")
     news_path = Path(news_file)
     if news_path.exists():
         try:
@@ -333,14 +815,152 @@ def full_system():
         except Exception as exc:
             news_status = f"load_failed ({exc})"
     else:
-        # Keep pipeline operational even when the optional news dataset is absent.
         df = integrate_news_features(df, None)
         news_status = "missing_optional_file"
 
+    news_stage_completed_at = pd.Timestamp.now("UTC")
+    lifecycle_stages.append(
+        {
+            "name": "news_integrated",
+            "status": "completed",
+            "started_at_utc": news_stage_started_at.isoformat(),
+            "completed_at_utc": news_stage_completed_at.isoformat(),
+            "elapsed_ms": round((news_stage_completed_at - news_stage_started_at).total_seconds() * 1000.0, 2),
+            "detail": f"news integration status: {news_status}",
+        }
+    )
+
+    events_stage_started_at = pd.Timestamp.now("UTC")
+    events_path = Path(global_events_file)
+    if events_path.exists():
+        try:
+            events_df = load_news_data(global_events_file)
+            # Global events typically have wider effect windows than scheduled news.
+            df = integrate_event_features(
+                df,
+                events_df,
+                pre_event_minutes=24 * 60,
+                post_event_minutes=24 * 60,
+                prefix="global_event",
+            )
+            global_events_status = f"loaded ({len(events_df)} events)"
+        except Exception as exc:
+            global_events_status = f"load_failed ({exc})"
+    else:
+        df = integrate_event_features(df, None, prefix="global_event")
+        global_events_status = "missing_optional_file"
+
+    events_stage_completed_at = pd.Timestamp.now("UTC")
+    lifecycle_stages.append(
+        {
+            "name": "events_integrated",
+            "status": "completed",
+            "started_at_utc": events_stage_started_at.isoformat(),
+            "completed_at_utc": events_stage_completed_at.isoformat(),
+            "elapsed_ms": round((events_stage_completed_at - events_stage_started_at).total_seconds() * 1000.0, 2),
+            "detail": f"global events status: {global_events_status}",
+        }
+    )
+
+    # Cap analysis rows for runtime stability on large intraday historical sets.
+    # The source dataset depth metadata is still preserved above; this only
+    # bounds the rows fed into the heavy intelligence stage.
+    max_analysis_rows = max(5_000, int(os.getenv("MCL_MAX_ANALYSIS_ROWS", "50000")))
+    if len(df) > max_analysis_rows:
+        sampling_stage_started_at = pd.Timestamp.now("UTC")
+        step = max(1, int(len(df) / max_analysis_rows))
+        sampled = df.iloc[::step].copy()
+        if not sampled.empty and not sampled.index.equals(df.tail(1).index):
+            sampled = pd.concat([sampled, df.tail(1)], axis=0).drop_duplicates().reset_index(drop=True)
+        original_rows = int(len(df))
+        df = sampled.tail(max_analysis_rows).reset_index(drop=True)
+        sampling_stage_completed_at = pd.Timestamp.now("UTC")
+        lifecycle_stages.append(
+            {
+                "name": "analysis_downsampled",
+                "status": "completed",
+                "started_at_utc": sampling_stage_started_at.isoformat(),
+                "completed_at_utc": sampling_stage_completed_at.isoformat(),
+                "elapsed_ms": round((sampling_stage_completed_at - sampling_stage_started_at).total_seconds() * 1000.0, 2),
+                "detail": f"rows reduced from {original_rows} to {len(df)} using step {step}",
+            }
+        )
+
+    intelligence_started_at = pd.Timestamp.now("UTC")
     result = process(df)
+    intelligence_completed_at = pd.Timestamp.now("UTC")
+    depth_years = _historical_depth_years(df)
+    requested_lookback = int(lookback_years) if lookback_years is not None else 25
     result["data_source"] = source
+    result["symbol"] = str(symbol or "XAUUSD").strip().upper()
+    result["requested_timeframe"] = requested_timeframe
+    result["applied_timeframe"] = applied_timeframe
+    result["timeframe"] = applied_timeframe
+    result["timeframe_fallback_applied"] = bool(timeframe_fallback_meta.get("fallback_applied"))
+    result["timeframe_fallback_reason"] = timeframe_fallback_meta.get("fallback_reason")
+    result["applied_dataset_depth_years"] = timeframe_fallback_meta.get("applied_dataset_depth_years")
+    result["lookback_years"] = requested_lookback
+    result["source_mode"] = source_mode_norm
+    result["rows_analyzed"] = int(len(df))
+    result["historical_depth_years"] = depth_years
+    result["lookback_target_met"] = bool(depth_years is not None and depth_years >= max(0.0, requested_lookback - 0.25))
+    result["lookback_depth_warning"] = None if result["lookback_target_met"] else "historical_dataset_depth_below_requested_lookback"
     result["news_source"] = news_file
     result["news_status"] = news_status
+    result["global_events_source"] = global_events_file
+    result["global_events_status"] = global_events_status
+    lifecycle_stages.append(
+        {
+            "name": "intelligence_computed",
+            "status": "completed",
+            "started_at_utc": intelligence_started_at.isoformat(),
+            "completed_at_utc": intelligence_completed_at.isoformat(),
+            "elapsed_ms": round((intelligence_completed_at - intelligence_started_at).total_seconds() * 1000.0, 2),
+            "detail": f"market memory scanned and {result['rows_analyzed']} rows analyzed",
+        }
+    )
+
+    observation_logged = False
+    observation_started_at = pd.Timestamp.now("UTC")
+    try:
+        observation_meta = record_observation(
+            df=df,
+            result=result,
+            events_df=events_df,
+            symbol=result["symbol"],
+            requested_timeframe=requested_timeframe,
+            applied_timeframe=applied_timeframe,
+            lookback_years=requested_lookback,
+            source_mode=source_mode_norm,
+        )
+        result.update(observation_meta)
+        observation_logged = True
+    except Exception as exc:
+        # Observation logging should never block live/historical intelligence output.
+        result["observation_error"] = str(exc)
+    observation_completed_at = pd.Timestamp.now("UTC")
+    lifecycle_stages.append(
+        {
+            "name": "observation_recorded",
+            "status": "completed" if observation_logged else "skipped",
+            "started_at_utc": observation_started_at.isoformat(),
+            "completed_at_utc": observation_completed_at.isoformat(),
+            "elapsed_ms": round((observation_completed_at - observation_started_at).total_seconds() * 1000.0, 2),
+            "detail": "observation telemetry persisted" if observation_logged else "observation telemetry unavailable",
+        }
+    )
+
+    run_completed_at = pd.Timestamp.now("UTC")
+    result["analysis_lifecycle"] = _build_analysis_lifecycle(
+        started_at=run_started_at,
+        completed_at=run_completed_at,
+        stages=lifecycle_stages,
+    )
+    result["reasoning_display"] = _build_reasoning_display(result)
+    result["analysis_started_at_utc"] = result["analysis_lifecycle"]["started_at_utc"]
+    result["analysis_completed_at_utc"] = result["analysis_lifecycle"]["completed_at_utc"]
+    result["analysis_elapsed_ms"] = result["analysis_lifecycle"]["elapsed_ms"]
+
     return result
 
 
@@ -350,6 +970,11 @@ def main() -> None:
     print("DATA SOURCE:", result["data_source"])
     print("NEWS SOURCE:", result["news_source"])
     print("NEWS STATUS:", result["news_status"])
+    if result.get("observation_log_path"):
+        print("OBSERVATION LOG:", result.get("observation_log_path"))
+        print("OBSERVATION ID:", result.get("observation_id"))
+    if result.get("observation_error"):
+        print("OBSERVATION ERROR:", result.get("observation_error"))
     print("Matches:", result["matches"])
     print("Probability:", result["probability"])
     print("AI Decision:", result["ai_decision"])

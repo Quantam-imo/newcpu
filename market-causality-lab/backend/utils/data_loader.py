@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 
 def load_data(path):
@@ -83,26 +84,76 @@ def integrate_news_features(df, news_df, pre_event_minutes=60, post_event_minute
         out["news_event_active"] = False
         return out
 
-    pre_delta = pd.Timedelta(minutes=pre_event_minutes)
-    post_delta = pd.Timedelta(minutes=post_event_minutes)
+    # Fast interval accumulation: O((rows+events) log rows) instead of
+    # O(rows*events) repeated masking for large historical datasets.
+    time_series = pd.to_datetime(out["time"], errors="coerce")
+    valid_time_mask = time_series.notna()
+    if not bool(valid_time_mask.any()):
+        out["news_impact_score"] = 0
+        out["news_event_active"] = False
+        return out
 
-    for _, event in news_df.iterrows():
-        event_time = event["time"]
-        impact = event.get("impact", "medium")
-        window_start = event_time - pre_delta
-        window_end = event_time + post_delta
+    valid_idx = np.flatnonzero(valid_time_mask.to_numpy())
+    base_ns = time_series.iloc[valid_idx].astype("int64", copy=False).to_numpy()
 
-        mask = (out["time"] >= window_start) & (out["time"] <= window_end)
-        if not mask.any():
-            continue
+    order = np.argsort(base_ns)
+    inv_order = np.empty_like(order)
+    inv_order[order] = np.arange(len(order))
+    sorted_ns = base_ns[order]
 
-        out.loc[mask, "news_event_count"] += 1
-        if impact == "high":
-            out.loc[mask, "news_high_impact_count"] += 1
-        elif impact == "low":
-            out.loc[mask, "news_low_impact_count"] += 1
+    events_local = news_df.copy()
+    events_local["time"] = pd.to_datetime(events_local["time"], errors="coerce")
+    events_local = events_local.dropna(subset=["time"])
+    if events_local.empty:
+        out["news_impact_score"] = 0
+        out["news_event_active"] = False
+        return out
+
+    impact = events_local.get("impact", "medium")
+    impact = pd.Series(impact).astype(str).str.strip().str.lower().to_numpy()
+    event_ns = events_local["time"].astype("int64", copy=False).to_numpy()
+
+    pre_ns = int(pd.Timedelta(minutes=pre_event_minutes).value)
+    post_ns = int(pd.Timedelta(minutes=post_event_minutes).value)
+
+    start_ns = event_ns - pre_ns
+    end_ns = event_ns + post_ns
+
+    left = np.searchsorted(sorted_ns, start_ns, side="left")
+    right = np.searchsorted(sorted_ns, end_ns, side="right")
+
+    def _accumulate_interval_counts(mask_arr: np.ndarray | None = None) -> np.ndarray:
+        diff = np.zeros(len(sorted_ns) + 1, dtype=np.int32)
+        if mask_arr is None:
+            np.add.at(diff, left, 1)
+            np.add.at(diff, right, -1)
         else:
-            out.loc[mask, "news_medium_impact_count"] += 1
+            np.add.at(diff, left[mask_arr], 1)
+            np.add.at(diff, right[mask_arr], -1)
+        counts_sorted = np.cumsum(diff[:-1])
+        return counts_sorted[inv_order]
+
+    total_counts = _accumulate_interval_counts()
+    high_counts = _accumulate_interval_counts(mask_arr=(impact == "high"))
+    low_counts = _accumulate_interval_counts(mask_arr=(impact == "low"))
+    medium_counts = _accumulate_interval_counts(mask_arr=(impact != "high") & (impact != "low"))
+
+    out_vals = out[[
+        "news_event_count",
+        "news_high_impact_count",
+        "news_medium_impact_count",
+        "news_low_impact_count",
+    ]].to_numpy(copy=True)
+    out_vals[valid_idx, 0] = total_counts
+    out_vals[valid_idx, 1] = high_counts
+    out_vals[valid_idx, 2] = medium_counts
+    out_vals[valid_idx, 3] = low_counts
+    out[[
+        "news_event_count",
+        "news_high_impact_count",
+        "news_medium_impact_count",
+        "news_low_impact_count",
+    ]] = out_vals
 
     out["news_impact_score"] = (
         out["news_low_impact_count"]
@@ -110,5 +161,106 @@ def integrate_news_features(df, news_df, pre_event_minutes=60, post_event_minute
         + 3 * out["news_high_impact_count"]
     )
     out["news_event_active"] = out["news_event_count"] > 0
+
+    return out
+
+
+def integrate_event_features(
+    df,
+    events_df,
+    pre_event_minutes=60,
+    post_event_minutes=30,
+    prefix="event",
+):
+    """Generic event integration helper for historical global-events datasets.
+
+    This mirrors integrate_news_features but writes into a configurable prefix,
+    e.g. `global_event_count`, `global_high_impact_count`, etc.
+    """
+    out = df.copy()
+    prefix = str(prefix or "event").strip().lower() or "event"
+
+    out[f"{prefix}_count"] = 0
+    out[f"{prefix}_high_impact_count"] = 0
+    out[f"{prefix}_medium_impact_count"] = 0
+    out[f"{prefix}_low_impact_count"] = 0
+
+    if "time" not in out.columns or out.empty or events_df is None or events_df.empty:
+        out[f"{prefix}_impact_score"] = 0
+        out[f"{prefix}_active"] = False
+        return out
+
+    time_series = pd.to_datetime(out["time"], errors="coerce")
+    valid_time_mask = time_series.notna()
+    if not bool(valid_time_mask.any()):
+        out[f"{prefix}_impact_score"] = 0
+        out[f"{prefix}_active"] = False
+        return out
+
+    valid_idx = np.flatnonzero(valid_time_mask.to_numpy())
+    base_ns = time_series.iloc[valid_idx].astype("int64", copy=False).to_numpy()
+
+    order = np.argsort(base_ns)
+    inv_order = np.empty_like(order)
+    inv_order[order] = np.arange(len(order))
+    sorted_ns = base_ns[order]
+
+    events_local = events_df.copy()
+    events_local["time"] = pd.to_datetime(events_local["time"], errors="coerce")
+    events_local = events_local.dropna(subset=["time"])
+    if events_local.empty:
+        out[f"{prefix}_impact_score"] = 0
+        out[f"{prefix}_active"] = False
+        return out
+
+    impact = events_local.get("impact", "medium")
+    impact = pd.Series(impact).astype(str).str.strip().str.lower().to_numpy()
+    impact = np.where(np.isin(impact, ["low", "medium", "high"]), impact, "medium")
+    event_ns = events_local["time"].astype("int64", copy=False).to_numpy()
+
+    pre_ns = int(pd.Timedelta(minutes=pre_event_minutes).value)
+    post_ns = int(pd.Timedelta(minutes=post_event_minutes).value)
+
+    start_ns = event_ns - pre_ns
+    end_ns = event_ns + post_ns
+
+    left = np.searchsorted(sorted_ns, start_ns, side="left")
+    right = np.searchsorted(sorted_ns, end_ns, side="right")
+
+    def _accumulate_interval_counts(mask_arr: np.ndarray | None = None) -> np.ndarray:
+        diff = np.zeros(len(sorted_ns) + 1, dtype=np.int32)
+        if mask_arr is None:
+            np.add.at(diff, left, 1)
+            np.add.at(diff, right, -1)
+        else:
+            np.add.at(diff, left[mask_arr], 1)
+            np.add.at(diff, right[mask_arr], -1)
+        counts_sorted = np.cumsum(diff[:-1])
+        return counts_sorted[inv_order]
+
+    total_counts = _accumulate_interval_counts()
+    high_counts = _accumulate_interval_counts(mask_arr=(impact == "high"))
+    low_counts = _accumulate_interval_counts(mask_arr=(impact == "low"))
+    medium_counts = _accumulate_interval_counts(mask_arr=(impact == "medium"))
+
+    cols = [
+        f"{prefix}_count",
+        f"{prefix}_high_impact_count",
+        f"{prefix}_medium_impact_count",
+        f"{prefix}_low_impact_count",
+    ]
+    out_vals = out[cols].to_numpy(copy=True)
+    out_vals[valid_idx, 0] = total_counts
+    out_vals[valid_idx, 1] = high_counts
+    out_vals[valid_idx, 2] = medium_counts
+    out_vals[valid_idx, 3] = low_counts
+    out[cols] = out_vals
+
+    out[f"{prefix}_impact_score"] = (
+        out[f"{prefix}_low_impact_count"]
+        + 2 * out[f"{prefix}_medium_impact_count"]
+        + 3 * out[f"{prefix}_high_impact_count"]
+    )
+    out[f"{prefix}_active"] = out[f"{prefix}_count"] > 0
 
     return out

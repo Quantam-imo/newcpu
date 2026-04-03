@@ -4,5 +4,6 @@ scikit-learn
 matplotlib
 tqdm
 joblib
+flask
 streamlit
 MetaTrader5
