@@ -13,7 +13,7 @@ load_dotenv(BASE_DIR.parent / ".env")
 
 
 
-from astroquant.backend import router_market, router_status, router_admin
+from astroquant.backend import router_market, router_status, router_admin, router_market_causality
 from astroquant.backend.config import ADMIN_API_TOKEN
 from astroquant.backend.config import ACCOUNT_CONFIG
 from astroquant.backend.governance.prop_governance import PropConfig, PropGovernance
@@ -128,6 +128,7 @@ app.add_middleware(
 
 # Ensure router_market is included for /chart/data and /market/orderflow_summary
 app.include_router(router_market.router)
+app.include_router(router_market_causality.router)
 app.include_router(router_status.router)
 app.include_router(router_admin.router)
 app.include_router(websocket_router)
@@ -183,3 +184,50 @@ def security_status():
 @app.get("/")
 def root():
     return RedirectResponse(url="/frontend/", status_code=307)
+
+
+@app.get("/market_causality_dashboard")
+def market_causality_dashboard():
+    """
+    Serve the Market Causality Lab Intelligence Dashboard.
+    
+    This provides a professional, standalone frontend for displaying
+    comprehensive MCL analysis with AI model integration, drift monitoring,
+    and trade-level recommendations.
+    
+    The dashboard communicates with /market_causality/summary endpoint
+    to fetch live analysis data.
+    """
+    from fastapi.responses import HTMLResponse
+    from pathlib import Path
+    
+    # Load the MCL dashboard HTML from market-causality-lab
+    mcl_dashboard_path = Path(__file__).resolve().parent.parent.parent / "market-causality-lab" / "dashboard" / "index.html"
+    
+    if mcl_dashboard_path.exists():
+        with open(mcl_dashboard_path, "r") as f:
+            html_content = f.read()
+        return HTMLResponse(content=html_content)
+    else:
+        return HTMLResponse(
+            content="""
+            <html>
+                <head>
+                    <title>MCL Dashboard - Not Found</title>
+                    <style>
+                        body { font-family: Arial; padding: 40px; color: #666; }
+                        h1 { color: #333; }
+                        pre { background: #f5f5f5; padding: 10px; border-radius: 5px; }
+                    </style>
+                </head>
+                <body>
+                    <h1>Market Causality Lab Dashboard</h1>
+                    <p>The MCL dashboard HTML file was not found.</p>
+                    <p>Expected location: market-causality-lab/dashboard/index.html</p>
+                    <p>The MCL analysis API is available at:</p>
+                    <pre>/market_causality/summary?symbol=XAUUSD&timeframe=1d</pre>
+                </body>
+            </html>
+            """,
+            status_code=404
+        )

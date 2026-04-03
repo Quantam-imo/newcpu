@@ -891,6 +891,7 @@
                 <button id="microTimeSalesToggleBtn" onclick="toggleMicroPanel('timesales')">Time &amp; Sales</button>
                 <button id="microLadderToggleBtn" onclick="toggleMicroPanel('ladder')">Ladder</button>
                 <button id="journalToggleBtn" onclick="toggleJournalPanel()">Journal</button>
+                <button id="mclDashboardBtn" onclick="openMCLDashboard()" title="Open Market Causality Lab Intelligence Dashboard">🔬 MCL Lab</button>
                 <button id="resetLayoutBtn" onclick="resetFloatingPanelLayout()">Reset Layout</button>
                 <button onclick="window.open('/admin', '_blank')">Admin Control</button>
             </div>
@@ -1482,12 +1483,29 @@
 
     <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
     <script>
+        /**
+         * Open Market Causality Lab Dashboard
+         * Launches the MCL intelligence dashboard in a new window or modal
+         * without disrupting the AstroQuant frontend.
+         */
+        window.openMCLDashboard = function() {
+            const mclDashboardUrl = window.location.origin + "/market_causality_dashboard";
+            const windowFeatures = "width=1200,height=800,"; // Allow popups to be resized
+            const mclWindow = window.open(mclDashboardUrl, "MCL_Dashboard", windowFeatures);
+            if (mclWindow) {
+                mclWindow.focus();
+            } else {
+                // Fallback: alert user if popup blocked
+                alert("MCL Dashboard popup was blocked. Please enable popups for this site.");
+            }
+        };
+
         (function () {
             const existingBase = String(window.AQ_API_BASE || "").trim();
             window.AQ_API_BASE = existingBase || window.location.origin;
             // Always load canonical frontend assets from /frontend.
             const prefix = "/frontend";
-            const scripts = ["api.js", "chart.js", "mentor.js"];
+            const scripts = ["api.js", "market_causality_panel.js", "chart.js", "mentor.js"];
             const scriptVersion = String(window.AQ_SCRIPT_VERSION || "aq-v20260351");
 
             const load = (index) => {

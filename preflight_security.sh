@@ -31,6 +31,21 @@ info() {
   echo -e "${BLUE}INFO${NC}: $*"
 }
 
+run_pytest_gate() {
+  local tests=("$@")
+  set +e
+  local output
+  output=$("$PYTHON_BIN" -m pytest -q "${tests[@]}" 2>&1)
+  local code=$?
+  set -e
+  if [[ $code -eq 0 ]]; then
+    pass "Pytest gate passed: ${tests[*]}"
+  else
+    fail "Pytest gate failed: ${tests[*]}"
+    echo "$output"
+  fi
+}
+
 cleanup() {
   if [[ -n "${SERVER_PID:-}" ]] && kill -0 "$SERVER_PID" >/dev/null 2>&1; then
     kill "$SERVER_PID" >/dev/null 2>&1 || true
@@ -75,6 +90,12 @@ start_server_bg() {
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BLUE}  AstroQuant Security Preflight${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
+# 0) Fast unit-test gate for market-causality adapter/fallback behavior
+info "Running market-causality unit-test gate"
+run_pytest_gate \
+  "$ROOT_DIR/test_market_causality_router.py" \
+  "$ROOT_DIR/test_market_causality_fallback.py"
 
 # 1) Production must block insecure startup
 info "Checking production startup guard blocks insecure config"

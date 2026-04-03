@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from astroquant.backend.admin_control_store import AdminControlStore
 from astroquant.backend.governance.dynamic_prop_engine import DynamicPropEngine
+from astroquant.core.prop_profiles import PROP_PROFILES
 
 
 ROLE_ORDER = {
@@ -90,6 +91,13 @@ class DynamicPropEngineConfigureRequest(BaseModel):
 	primary_account: str = Field(default="50K")
 	mode_map: dict = Field(default_factory=dict)
 	default_mode: str = Field(default="STANDARD")
+
+
+SUPPORTED_ACCOUNT_SIZES = {
+	float(cfg.get("account_size"))
+	for cfg in PROP_PROFILES.values()
+	if cfg.get("account_size") is not None
+}
 
 
 dynamic_prop_engine = DynamicPropEngine()
@@ -425,8 +433,12 @@ def build_admin_router(runner, prop_engine, admin_token: str, default_role: str 
 		role = check_access("ADMIN", x_admin_token, x_admin_role)
 
 		account_size = float(data.account_size)
-		if account_size not in {20000.0, 50000.0}:
-			raise HTTPException(status_code=400, detail="Supported account_size values: 20000 or 50000")
+		if account_size not in SUPPORTED_ACCOUNT_SIZES:
+			supported_values = ", ".join(str(int(v)) for v in sorted(SUPPORTED_ACCOUNT_SIZES))
+			raise HTTPException(
+				status_code=400,
+				detail=f"Supported account_size values: {supported_values}",
+			)
 
 		if hasattr(prop_engine, "apply_account_size"):
 			prop_engine.apply_account_size(account_size)
