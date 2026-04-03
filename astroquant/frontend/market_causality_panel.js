@@ -49,6 +49,17 @@
         el.style.background = bg;
     }
 
+    function setOperationalState(status, errorMsg) {
+        const normalized = String(status || "").toLowerCase();
+        if (normalized === "timeout" || normalized === "stale_timeout" || normalized === "error") {
+            setWhyTone("caution");
+            if (typeof showError === "function") {
+                const msg = errorMsg ? `MCL degraded: ${errorMsg}` : `MCL degraded (${String(status || "unknown").toUpperCase()})`;
+                showError("mcl_panel", msg);
+            }
+        }
+    }
+
     function selectedContext() {
         const symbolInput = document.getElementById("mclSymbolInput");
         const timeframeSelect = document.getElementById("mclTimeframeSelect");
@@ -81,6 +92,7 @@
             const q = `?${params.toString()}`;
             const res = await apiFetch(`/market_causality/summary${q}`, {}, 20000);
             const data = await res.json();
+            const statusNormalized = String(data.status || "").toLowerCase();
 
             setText("mclStatus", String(data.status || "--").toUpperCase());
             setText("mclSignal", data.signal || "--");
@@ -124,6 +136,7 @@
             setText("mclWhyTitle", data.reasoning_tone ? String(data.reasoning_tone).toUpperCase() : "NEUTRAL");
             setText("mclWhySummary", data.reasoning_summary || "--");
             setWhyTone(data.reasoning_tone || "neutral");
+            setOperationalState(statusNormalized, data.error);
             setText("mclDeltaSignal", data.reasoning_delta?.has_previous
                 ? `${data.reasoning_delta.previous_signal || "--"} -> ${data.signal || "--"}${data.reasoning_delta.signal_changed ? " (CHANGED)" : " (UNCHANGED)"}`
                 : "--");
@@ -196,6 +209,7 @@
             setText("mclStatus", "ERROR");
             setText("mclSignal", "--");
             setText("mclLatency", "--");
+            setWhyTone("caution");
             if (typeof showError === "function") {
                 showError("mcl_panel", `Market Causality load failed: ${err?.message || err}`);
             }
@@ -243,9 +257,12 @@
                     <option value="1m">1m</option>
                     <option value="5m">5m</option>
                     <option value="15m">15m</option>
+                    <option value="30m">30m</option>
                     <option value="1h">1h</option>
                     <option value="4h">4h</option>
-                    <option value="1d">1d</option>
+                    <option value="1d" selected>1d</option>
+                    <option value="1w">1w</option>
+                    <option value="1month">1month</option>
                 </select>
                 <button id="mclUseChartContextBtn" title="Use current chart symbol/timeframe">Use Chart</button>
             </div>

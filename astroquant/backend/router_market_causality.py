@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import concurrent.futures
 import importlib.util
 import inspect
 import logging
@@ -24,6 +25,7 @@ _cache_ts_by_key: dict[str, float] = {}
 _CACHE_TTL_SECONDS = 30.0
 _SUMMARY_TIMEOUT_SECONDS = max(5.0, float(os.getenv("MCL_SUMMARY_TIMEOUT_SECONDS", "40")))
 _MATRIX_TIMEFRAMES = ("1d", "4h", "1h", "30m", "15m", "5m", "1m", "1w", "1month")
+_MATRIX_MAX_WORKERS = max(1, int(os.getenv("MCL_MATRIX_MAX_WORKERS", "4")))
 
 
 def _timeframe_seconds(timeframe: str | None) -> int:
@@ -496,68 +498,80 @@ def _compute_timeframe_matrix(
 
     rows: list[dict[str, Any]] = []
     ok_count = 0
-    for tf in _MATRIX_TIMEFRAMES:
-        try:
-            summary = _compute_summary(
-                refresh=refresh,
-                symbol=symbol,
-                timeframe=tf,
-                lookback_years=lookback_years,
-                source_mode=source_mode,
-            )
-            status = str(summary.get("status") or "").lower()
-            if status in {"ok", "stale_timeout"}:
-                ok_count += 1
 
-            top_drivers = summary.get("reasoning_top_drivers")
-            process_timing = summary.get("process_timing") or []
-            rows.append(
-                {
-                    "timeframe": tf,
-                    "status": summary.get("status"),
-                    "signal": summary.get("signal"),
-                    "confidence": summary.get("confidence"),
-                    "quality": summary.get("quality"),
-                    "requested_timeframe": summary.get("requested_timeframe"),
-                    "applied_timeframe": summary.get("applied_timeframe"),
-                    "timeframe_fallback_applied": summary.get("timeframe_fallback_applied"),
-                    "timeframe_fallback_reason": summary.get("timeframe_fallback_reason"),
-                    "rows_analyzed": summary.get("rows_analyzed"),
-                    "historical_depth_years": summary.get("historical_depth_years"),
-                    "lookback_target_met": summary.get("lookback_target_met"),
-                    "lookback_depth_warning": summary.get("lookback_depth_warning"),
-                    "memory_size": summary.get("memory_size"),
-                    "engine_stage_count": len(process_timing) if isinstance(process_timing, list) else 0,
-                    "engine_stage_names": [
-                        str(item.get("name")) for item in process_timing if isinstance(item, dict) and item.get("name")
-                    ] if isinstance(process_timing, list) else [],
-                    "ai_model_used": summary.get("ai_model_used"),
-                    "ai_model_version": summary.get("ai_model_version"),
-                    "ai_decision": summary.get("ai_decision"),
-                    "reasoning_summary": summary.get("reasoning_summary"),
-                    "reasoning_top_drivers": top_drivers,
-                    "observation": summary.get("observation"),
-                    "observation_trend_start_time": summary.get("observation_trend_start_time"),
-                    "observation_latest_time": summary.get("observation_latest_time"),
-                    "observation_news_previous_time": summary.get("observation_news_previous_time"),
-                    "observation_news_next_time": summary.get("observation_news_next_time"),
-                    "observation_gann_degree": summary.get("observation_gann_degree"),
-                    "observation_price_time_ratio": summary.get("observation_price_time_ratio"),
-                    "observation_degree_time_ratio": summary.get("observation_degree_time_ratio"),
-                    "news_status": summary.get("news_status"),
-                    "global_events_status": summary.get("global_events_status"),
-                    "elapsed_ms": summary.get("elapsed_ms"),
-                    "error": summary.get("error"),
-                }
-            )
-        except Exception as exc:
-            rows.append(
-                {
+    def _summary_to_row(tf: str, summary: dict[str, Any]) -> dict[str, Any]:
+        process_timing = summary.get("process_timing") or []
+        return {
+            "timeframe": tf,
+            "status": summary.get("status"),
+            "signal": summary.get("signal"),
+            "confidence": summary.get("confidence"),
+            "quality": summary.get("quality"),
+            "requested_timeframe": summary.get("requested_timeframe"),
+            "applied_timeframe": summary.get("applied_timeframe"),
+            "timeframe_fallback_applied": summary.get("timeframe_fallback_applied"),
+            "timeframe_fallback_reason": summary.get("timeframe_fallback_reason"),
+            "rows_analyzed": summary.get("rows_analyzed"),
+            "historical_depth_years": summary.get("historical_depth_years"),
+            "lookback_target_met": summary.get("lookback_target_met"),
+            "lookback_depth_warning": summary.get("lookback_depth_warning"),
+            "memory_size": summary.get("memory_size"),
+            "engine_stage_count": len(process_timing) if isinstance(process_timing, list) else 0,
+            "engine_stage_names": [
+                str(item.get("name")) for item in process_timing if isinstance(item, dict) and item.get("name")
+            ] if isinstance(process_timing, list) else [],
+            "ai_model_used": summary.get("ai_model_used"),
+            "ai_model_version": summary.get("ai_model_version"),
+            "ai_decision": summary.get("ai_decision"),
+            "reasoning_summary": summary.get("reasoning_summary"),
+            "reasoning_top_drivers": summary.get("reasoning_top_drivers"),
+            "observation": summary.get("observation"),
+            "observation_trend_start_time": summary.get("observation_trend_start_time"),
+            "observation_latest_time": summary.get("observation_latest_time"),
+            "observation_news_previous_time": summary.get("observation_news_previous_time"),
+            "observation_news_next_time": summary.get("observation_news_next_time"),
+            "observation_gann_degree": summary.get("observation_gann_degree"),
+            "observation_price_time_ratio": summary.get("observation_price_time_ratio"),
+            "observation_degree_time_ratio": summary.get("observation_degree_time_ratio"),
+            "news_status": summary.get("news_status"),
+            "global_events_status": summary.get("global_events_status"),
+            "elapsed_ms": summary.get("elapsed_ms"),
+            "error": summary.get("error"),
+        }
+
+    by_tf: dict[str, dict[str, Any]] = {}
+    worker_count = max(1, min(len(_MATRIX_TIMEFRAMES), _MATRIX_MAX_WORKERS))
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
+        future_map = {
+            executor.submit(
+                _compute_summary,
+                refresh,
+                symbol,
+                tf,
+                lookback_years,
+                source_mode,
+            ): tf
+            for tf in _MATRIX_TIMEFRAMES
+        }
+
+        for future in concurrent.futures.as_completed(future_map):
+            tf = future_map[future]
+            try:
+                summary = future.result()
+                status = str(summary.get("status") or "").lower()
+                if status in {"ok", "stale_timeout"}:
+                    ok_count += 1
+                by_tf[tf] = _summary_to_row(tf, summary)
+            except Exception as exc:
+                by_tf[tf] = {
                     "timeframe": tf,
                     "status": "error",
                     "error": str(exc),
                 }
-            )
+
+    # Preserve canonical timeframe order for stable UI rendering.
+    rows = [by_tf.get(tf, {"timeframe": tf, "status": "error", "error": "missing_row"}) for tf in _MATRIX_TIMEFRAMES]
 
     coverage_pct = round((ok_count / max(1, len(_MATRIX_TIMEFRAMES))) * 100.0, 2)
     return {
@@ -789,6 +803,94 @@ def market_causality_chart(
         lookback_years=lookback_years,
         limit=limit,
     )
+
+
+@router.get("/live_price")
+def market_causality_live_price(
+    symbol: str = Query(default="XAUUSD"),
+) -> dict[str, Any]:
+    """Return the most recent XAUUSD/GC live price.
+
+    Attempts MT5 (via MCL module fetch_xauusd) first, then falls back to
+    Databento Historical API using the last 1-minute bar from GLBX.MDP3.
+    Used by the MCL dashboard for periodic live price polling.
+    """
+    import pandas as _pd
+
+    symbol = _normalize_symbol(symbol)
+    started_at = time.time()
+
+    # --- attempt 1: MCL module fetch_xauusd (MT5-backed or Databento fallback) ---
+    try:
+        module = _load_module()
+        fetch_live = getattr(module, "fetch_xauusd", None)
+        if callable(fetch_live):
+            df = fetch_live(count=3)
+            if not df.empty:
+                last = df.iloc[-1]
+                close_price = float(getattr(last, "close", None) or 0.0)
+                raw_ts = getattr(last, "time", None)
+                ts = int(_pd.Timestamp(raw_ts).timestamp()) if raw_ts is not None else None
+                if close_price > 0.0:
+                    return {
+                        "status": "ok",
+                        "symbol": symbol,
+                        "price": round(close_price, 4),
+                        "source": "mt5_or_databento",
+                        "ts": ts,
+                        "elapsed_ms": round((time.time() - started_at) * 1000.0, 2),
+                    }
+    except Exception:
+        pass  # fall through to direct Databento attempt
+
+    # --- attempt 2: direct Databento Historical API ---
+    try:
+        api_key = str(os.getenv("DATABENTO_API_KEY", "")).strip()
+        if not api_key:
+            raise RuntimeError("DATABENTO_API_KEY is not configured")
+        import databento as _db  # type: ignore[import]
+
+        client = _db.Historical(api_key)
+        data = client.timeseries.get_range(
+            dataset="GLBX.MDP3",
+            symbols=["GC.c.0"],
+            stype_in="continuous",
+            schema="ohlcv-1m",
+            start="now-15m",
+        )
+        df = data.to_df()
+        if df.empty:
+            raise RuntimeError("Empty Databento OHLCV response")
+
+        if df.index.name in ("ts_event", "ts_recv") or hasattr(df.index, "tz"):
+            df = df.reset_index()
+
+        close_col = "close" if "close" in df.columns else df.columns[-1]
+        ts_col = next(
+            (c for c in ("ts_event", "ts_recv", "time") if c in df.columns), None
+        )
+        last_row = df.iloc[-1]
+        price = float(last_row[close_col])
+        raw_ts = last_row[ts_col] if ts_col else None
+        ts = int(_pd.Timestamp(raw_ts).timestamp()) if raw_ts is not None else None
+
+        return {
+            "status": "ok",
+            "symbol": symbol,
+            "price": round(price, 4),
+            "source": "databento",
+            "ts": ts,
+            "elapsed_ms": round((time.time() - started_at) * 1000.0, 2),
+        }
+    except Exception as exc:
+        return {
+            "status": "unavailable",
+            "symbol": symbol,
+            "price": None,
+            "source": None,
+            "error": str(exc),
+            "elapsed_ms": round((time.time() - started_at) * 1000.0, 2),
+        }
 
 
 @router.get("/timeframe_matrix")

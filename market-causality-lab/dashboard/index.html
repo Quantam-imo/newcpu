@@ -572,6 +572,21 @@
             <span class="header-icon">🔬</span>
             Market Causality Lab
         </h1>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <span id="livePriceBadge" style="
+                background:rgba(250,204,21,0.12);
+                border:1px solid #ca8a04;
+                color:#fcd34d;
+                border-radius:6px;
+                padding:4px 10px;
+                font-size:13px;
+                font-weight:700;
+                letter-spacing:0.2px;
+                min-width:120px;
+                text-align:center;
+            ">XAUUSD --</span>
+            <span id="livePriceSource" style="font-size:11px;color:#6b7280;">--</span>
+        </div>
         <div class="controls">
             <input type="text" id="symbolInput" placeholder="Symbol (e.g., XAUUSD)" value="XAUUSD" />
             <select id="timeframeSelect">
@@ -1412,8 +1427,82 @@
         document.getElementById("loadBtn").addEventListener("click", () => loadAnalysis(false));
         document.getElementById("refreshBtn").addEventListener("click", () => loadAnalysis(true));
 
+        // Chart-only reload when timeframe changes (no full analysis re-run needed).
+        document.getElementById("timeframeSelect").addEventListener("change", () => {
+            const symbol = document.getElementById("symbolInput").value.trim().toUpperCase() || DEFAULT_SYMBOL;
+            const tf = document.getElementById("timeframeSelect").value || DEFAULT_TIMEFRAME;
+            loadChart(symbol, tf).catch((err) => {
+                const statusEl = document.getElementById("mclChartStatus");
+                if (statusEl) {
+                    statusEl.className = "chart-status error";
+                    statusEl.textContent = `Chart error: ${err.message}`;
+                }
+            });
+        });
+
+        // ---- Live price polling ----
+        let _livePriceLine = null;
+
+        function _updateLivePriceBadge(price, source, age) {
+            const badge = document.getElementById("livePriceBadge");
+            const srcEl = document.getElementById("livePriceSource");
+            const symbol = document.getElementById("symbolInput").value.trim().toUpperCase() || DEFAULT_SYMBOL;
+            if (!badge) return;
+            if (price == null || typeof price !== "number") {
+                badge.textContent = `${symbol} UNAVAILABLE`;
+                badge.style.borderColor = "#7f1d1d";
+                badge.style.color = "#fca5a5";
+                badge.style.background = "rgba(239,68,68,0.10)";
+                if (srcEl) srcEl.textContent = "live feed unavailable";
+                return;
+            }
+            badge.textContent = `${symbol}  ${price.toFixed(2)}`;
+            badge.style.borderColor = "#ca8a04";
+            badge.style.color = "#fcd34d";
+            badge.style.background = "rgba(250,204,21,0.12)";
+            const ageStr = age != null ? ` · ${age}s ago` : "";
+            if (srcEl) srcEl.textContent = `live · ${source || "--"}${ageStr}`;
+
+            // Update live price line on chart.
+            if (mclCandlesSeries && mclChart) {
+                if (_livePriceLine) {
+                    try { mclCandlesSeries.removePriceLine(_livePriceLine); } catch (_) {}
+                }
+                _livePriceLine = mclCandlesSeries.createPriceLine({
+                    price,
+                    color: "#fbbf24",
+                    lineWidth: 1,
+                    lineStyle: 2, // LightweightCharts.LineStyle.Dashed
+                    axisLabelVisible: true,
+                    title: "LIVE",
+                });
+            }
+        }
+
+        async function _pollLivePrice() {
+            const symbol = document.getElementById("symbolInput").value.trim().toUpperCase() || DEFAULT_SYMBOL;
+            try {
+                const url = `${API_BASE}/market_causality/live_price?symbol=${encodeURIComponent(symbol)}`;
+                const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                const price = typeof data.price === "number" ? data.price : null;
+                const age = data.ts != null ? Math.max(0, Math.round(Date.now() / 1000 - data.ts)) : null;
+                _updateLivePriceBadge(price, data.source || "--", age);
+            } catch (err) {
+                _updateLivePriceBadge(null, null, null);
+                console.warn("MCL live price poll failed:", err?.message || err);
+            }
+        }
+
+        function startLivePricePoll(intervalMs = 6000) {
+            _pollLivePrice();
+            return setInterval(_pollLivePrice, intervalMs);
+        }
+
         document.addEventListener("DOMContentLoaded", () => {
             loadAnalysis(false);
+            startLivePricePoll(6000);
         });
     </script>
 </body>

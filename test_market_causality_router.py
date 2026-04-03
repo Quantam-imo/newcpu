@@ -451,3 +451,62 @@ def test_compute_summary_cache_expires_after_ttl(monkeypatch):
     assert first["signal"] == "TTL_1"
     assert within_ttl["signal"] == "TTL_1"
     assert expired["signal"] == "TTL_2"
+
+
+# ---- live_price endpoint contracts ------------------------------------------
+
+def test_live_price_endpoint_returns_unavailable_when_both_sources_fail(monkeypatch):
+    """When both MCL fetch_xauusd and Databento fail, status must be 'unavailable'."""
+    import astroquant.backend.router_market_causality as _r
+
+    # Disable MCL module so the first path raises.
+    monkeypatch.setattr(_r, "_module", None, raising=False)
+
+    # No DATABENTO_API_KEY in env so Databento attempt also fails.
+    monkeypatch.delenv("DATABENTO_API_KEY", raising=False)
+
+    result = _r.market_causality_live_price(symbol="XAUUSD")
+
+    assert result["status"] == "unavailable"
+    assert result["price"] is None
+    assert result["symbol"] == "XAUUSD"
+    assert "error" in result
+    assert "elapsed_ms" in result
+
+
+def test_live_price_endpoint_schema_keys_always_present(monkeypatch):
+    """Response dict must always contain the canonical key set regardless of outcome."""
+    import astroquant.backend.router_market_causality as _r
+
+    monkeypatch.setattr(_r, "_module", None, raising=False)
+    monkeypatch.delenv("DATABENTO_API_KEY", raising=False)
+
+    result = _r.market_causality_live_price(symbol="GC.FUT")
+
+    for key in ("status", "symbol", "price", "source", "elapsed_ms"):
+        assert key in result, f"Missing key '{key}' in live_price response"
+
+
+def test_live_price_endpoint_ok_path_via_mcl_module(monkeypatch):
+    """When MCL module provides fetch_xauusd returning a valid row, status must be 'ok'."""
+    import pandas as pd
+    import astroquant.backend.router_market_causality as _r
+
+    class _FakeModule:
+        @staticmethod
+        def fetch_xauusd(count=3):
+            return pd.DataFrame(
+                [{"time": pd.Timestamp("2026-04-03 12:00:00", tz="UTC"), "close": 3120.50}]
+            )
+
+    monkeypatch.setattr(_r, "_module", _FakeModule, raising=False)
+    # Ensure _load_module() returns our fake module without subprocess.
+    monkeypatch.setattr(_r, "_load_module", lambda: _FakeModule, raising=False)
+
+    result = _r.market_causality_live_price(symbol="XAUUSD")
+
+    assert result["status"] == "ok"
+    assert result["price"] == 3120.50
+    assert result["symbol"] == "XAUUSD"
+    assert result["ts"] is not None
+    assert result["elapsed_ms"] >= 0
