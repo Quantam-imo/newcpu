@@ -17,6 +17,15 @@ def get_last_known_chart(symbol: str = "GC.FUT", timeframe: str = "1", limit: in
 	"""
 	from astroquant.engine.candle.candle_reader import get_candle_series
 	import json
+
+	# Canonical → futures-feed alias mapping (for file fallback)
+	_SYMBOL_ALIASES = {
+		"XAUUSD": "GC.FUT",
+		"NQ": "NQ.FUT",
+		"US30": "YM.FUT",
+		"EURUSD": "6E.FUT",
+	}
+
 	# Try Redis first only if quickly reachable.
 	if _redis_reachable():
 		try:
@@ -30,16 +39,26 @@ def get_last_known_chart(symbol: str = "GC.FUT", timeframe: str = "1", limit: in
 				}
 		except Exception:
 			pass
-	# Fallback: try to load from a file (e.g., data/last_known_chart_{symbol}_{timeframe}.json)
-	fname = f"data/last_known_chart_{symbol}_{timeframe}.json"
-	if os.path.exists(fname):
-		try:
-			with open(fname, "r", encoding="utf-8") as f:
-				payload = json.load(f)
-			if payload and isinstance(payload, dict) and payload.get("candles"):
-				return payload
-		except Exception:
-			pass
+
+	# Build list of filenames to try (direct symbol + alias fallback)
+	sym_upper = str(symbol or "").strip().upper()
+	alias = _SYMBOL_ALIASES.get(sym_upper)
+	candidates = [sym_upper]
+	if alias and alias != sym_upper:
+		candidates.append(alias)
+
+	for sym_try in candidates:
+		for tf_try in [timeframe, timeframe.rstrip("m").rstrip("s"), f"{timeframe.rstrip('m')}m"] if "m" not in timeframe.lower() else [timeframe]:
+			fname = f"data/last_known_chart_{sym_try}_{tf_try}.json"
+			if os.path.exists(fname):
+				try:
+					with open(fname, "r", encoding="utf-8") as f:
+						payload = json.load(f)
+					if payload and isinstance(payload, dict) and payload.get("candles"):
+						return payload
+				except Exception:
+					pass
+
 	# If all else fails, return empty
 	return {
 		"candles": [],
@@ -273,7 +292,15 @@ def get_chart_data(symbol: str = "GC.FUT", timeframe: str = "1", limit: int = 80
 		except Exception:
 			pass
 
-	if not candles:
+	# Skip live Databento fetch on weekends — markets are closed and the call blocks for
+	# 10-15 seconds before returning a "request time range falls entirely inside a weekend"
+	# error.  Fall through to last-known cache instead.
+	_now_utc = datetime.now(timezone.utc)
+	_is_weekend = _now_utc.weekday() >= 5  # Saturday=5, Sunday=6
+	if not candles and _is_weekend:
+		error_msgs.append("Weekend: skipping live Databento fetch")
+
+	if not candles and not _is_weekend:
 		try:
 			pool = ThreadPoolExecutor(max_workers=1)
 			future = pool.submit(fetch_candles_unified, symbol=symbol, limit=limit)
@@ -1100,16 +1127,31 @@ def get_multi_symbol_dashboard() -> Any:
 			drawdown=0.0,
 		)
 
+		# Derive real HTF/LTF from candles when available (confidence can't be computed without full engine)
+		htf_bias = "NEUTRAL"
+		ltf_structure = "NEUTRAL"
+		model_name = "CORE"
+		confidence = 0.0
+		if candles and len(candles) >= 5:
+			try:
+				from astroquant.backend.ai.mentor_engine import MentorEngine as _ME
+				_me = _ME()
+				htf_bias = _me.derive_htf_bias(candles) or "NEUTRAL"
+				ltf_structure = _me.derive_ltf_structure(candles) or "NEUTRAL"
+				model_name = "ICT"
+			except Exception:
+				pass
+
 		rows.append(
 			{
 				"symbol": runtime_symbol,
 				"canonical_symbol": canonical,
 				"market": {
-					"htf_bias": "NEUTRAL",
-					"ltf_structure": "NEUTRAL",
+					"htf_bias": htf_bias,
+					"ltf_structure": ltf_structure,
 					"news_state": "NORMAL",
 				},
-				"model": {"active_model": "CORE", "confidence": 0.0},
+				"model": {"active_model": model_name, "confidence": confidence},
 				"risk": {"risk_percent": float(ACCOUNT_CONFIG.get("risk_per_trade_phase1", 0.005)) * 100.0, "phase": "PHASE1"},
 				"prop_behavior": {"mode": behavior.get("mode")},
 				"basis": {"status": basis_status},
@@ -1131,12 +1173,32 @@ def get_multi_symbol_dashboard() -> Any:
 
 @router.get("/news_severity")
 def get_news_severity() -> Any:
-	return {
-		"halt_active": False,
-		"upcoming_title": None,
-		"upcoming_currency": None,
-		"minutes_to_news": None,
-	}
+	try:
+		from astroquant.backend.router_status import _news_snapshot
+		snap = _news_snapshot(limit=1)
+		items = snap.get("next_news", [])
+		halt_active = bool(snap.get("news_halt", False))
+		if items:
+			top = items[0]
+			return {
+				"halt_active": halt_active,
+				"upcoming_title": top.get("title"),
+				"upcoming_currency": top.get("currency") or None,
+				"minutes_to_news": top.get("minutes_to_event"),
+			}
+		return {
+			"halt_active": halt_active,
+			"upcoming_title": None,
+			"upcoming_currency": None,
+			"minutes_to_news": None,
+		}
+	except Exception:
+		return {
+			"halt_active": False,
+			"upcoming_title": None,
+			"upcoming_currency": None,
+			"minutes_to_news": None,
+		}
 
 
 @router.get("/model_stats")
@@ -1387,3 +1449,65 @@ def get_symbols(q: str = "", include_all: bool = False):
 	# Sort by priority, then symbol
 	results.sort(key=lambda x: (x["priority"], x["symbol"]))
 	return {"symbols": results}
+
+
+# ---------------------------------------------------------------------------
+# Market Hours / Holiday Awareness
+# ---------------------------------------------------------------------------
+
+@router.get("/market/hours")
+def get_market_hours(symbol: str = "XAUUSD"):
+	"""
+	Return current market open/closed status, holiday info, early-close times,
+	and next session open for a given symbol.
+
+	Used by the frontend to show holiday banners and by governance to suppress
+	stale-feed errors when the market is legitimately closed.
+	"""
+	try:
+		from astroquant.engine.market_calendar import MarketCalendar
+		info = MarketCalendar.get_session_info(symbol)
+		# Serialise next_open_utc datetime to ISO string for JSON
+		if info.get("next_open_utc") is not None:
+			info["next_open_utc"] = info["next_open_utc"].isoformat()
+		return info
+	except Exception as exc:
+		_log.warning("market/hours error for %s: %s", symbol, exc)
+		return {
+			"symbol":          symbol.upper(),
+			"is_open":         True,
+			"is_weekend":      False,
+			"is_holiday":      False,
+			"is_early_close":  False,
+			"holiday_name":    None,
+			"reason":          "Unknown (calendar error)",
+			"error":           str(exc),
+		}
+
+
+@router.get("/market/holidays")
+def get_market_holidays(symbol: str = "XAUUSD", days: int = 60):
+	"""
+	Return upcoming holidays and early-close days for *symbol* in the next *days* calendar days.
+	"""
+	try:
+		from astroquant.engine.market_calendar import MarketCalendar
+		upcoming = MarketCalendar.get_upcoming_holidays(symbol, days=min(days, 365))
+		return {"symbol": symbol.upper(), "days_ahead": days, "events": upcoming}
+	except Exception as exc:
+		_log.warning("market/holidays error for %s: %s", symbol, exc)
+		return {"symbol": symbol.upper(), "days_ahead": days, "events": [], "error": str(exc)}
+
+
+@router.get("/market/status_all")
+def get_market_status_all():
+	"""
+	Return open/closed status for all tracked symbols in one call.
+	"""
+	try:
+		from astroquant.engine.market_calendar import MarketCalendar
+		symbols = ["XAUUSD", "NQ", "US30", "EURUSD"]
+		return {"markets": MarketCalendar.market_status_summary(symbols)}
+	except Exception as exc:
+		_log.warning("market/status_all error: %s", exc)
+		return {"markets": {}, "error": str(exc)}

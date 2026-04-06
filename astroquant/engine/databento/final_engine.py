@@ -29,8 +29,8 @@ class AstroQuantFinalDataEngine:
     - Friday-session fallback for empty windows
     """
 
-    DEFAULT_GC_SYMBOLS = ["GCJ6", "GCM6", "GCQ6"]
-    DEFAULT_ES_SYMBOLS = ["ESH6", "ESM6"]
+    DEFAULT_GC_SYMBOLS = ["GC.c.1", "GCM6", "GCQ6", "GCZ6"]  # GCJ6 expired April 2026
+    DEFAULT_ES_SYMBOLS = ["NQ.c.1", "NQM6", "NQU6"]
 
     def __init__(
         self,
@@ -84,25 +84,42 @@ class AstroQuantFinalDataEngine:
         return None
 
     def _fetch_df(self, symbol: str, start: datetime, end: datetime):
-        data = self.client.timeseries.get_range(
+        # Continuous contract symbols (e.g. "GC.c.1") need stype_in="continuous".
+        # All other raw symbols (e.g. "GCM6") use the default raw_symbol stype.
+        kwargs: dict = dict(
             dataset=self.dataset,
             schema=self.schema,
             symbols=[symbol],
             start=start,
             end=end,
         )
+        if re.search(r"\.c\.\d+$", symbol):
+            kwargs["stype_in"] = "continuous"
+        data = self.client.timeseries.get_range(**kwargs)
         return data.to_df()
 
-    def _previous_friday_session(self, ref: Optional[datetime] = None) -> Tuple[datetime, datetime]:
-        # Friday US session anchor used as stable fallback for validation.
-        ref = ref or self.safe_end()
-        d = ref.date()
-        while d.weekday() != 4:
-            d = d - timedelta(days=1)
+    def _session_fallback_windows(
+        self, ref: Optional[datetime] = None
+    ):
+        """Yield narrow 3-hour session windows going back one calendar day at a time.
 
-        start = datetime(d.year, d.month, d.day, 13, 0, 0, tzinfo=timezone.utc)
-        end = datetime(d.year, d.month, d.day, 14, 0, 0, tzinfo=timezone.utc)
-        return start, end
+        Starting from ``ref`` the generator steps back up to 7 days.  Each
+        window covers 18:00–21:00 UTC (the last active hours before CME gold /
+        equity futures close).  Saturday windows are skipped immediately since
+        CME is always closed Saturday.  Holidays (e.g. Good Friday) return 0
+        rows from Databento, so the caller naturally falls through to the next
+        window without any special holiday calendar needed.
+        """
+        ref = ref or self.safe_end()
+        for days_back in range(1, 8):
+            anchor = ref - timedelta(days=days_back)
+            if anchor.weekday() == 5:  # Saturday — never any CME data
+                continue
+            d = anchor.date()
+            yield (
+                datetime(d.year, d.month, d.day, 18, 0, 0, tzinfo=timezone.utc),
+                datetime(d.year, d.month, d.day, 21, 0, 0, tzinfo=timezone.utc),
+            )
 
     def fetch_with_fallback(
         self,
@@ -135,25 +152,31 @@ class AstroQuantFinalDataEngine:
                         dataframe=df,
                     )
 
-                # Empty data in clamped/current window: fallback to previous Friday session.
-                fb_start, fb_end = self._previous_friday_session(ref=end)
-                fb_df = self._fetch_df(symbol=symbol, start=fb_start, end=fb_end)
-                if len(fb_df) > 0:
-                    return FetchResult(
-                        symbol=symbol,
-                        records=len(fb_df),
-                        start=fb_start,
-                        end=fb_end,
-                        fallback_used=True,
-                        reason="friday_fallback_empty_primary",
-                        dataframe=fb_df,
-                    )
+                # Primary window empty (weekend / holiday): slide back day-by-day
+                # using narrow 3-hour windows.  Each window is small so downloads are
+                # fast; holidays return 0 rows and we naturally continue to the next day.
+                for fb_start, fb_end in self._session_fallback_windows(ref=end):
+                    try:
+                        fb_df = self._fetch_df(symbol=symbol, start=fb_start, end=fb_end)
+                        if len(fb_df) > 0:
+                            return FetchResult(
+                                symbol=symbol,
+                                records=len(fb_df),
+                                start=fb_start,
+                                end=fb_end,
+                                fallback_used=True,
+                                reason="session_fallback_empty_primary",
+                                dataframe=fb_df,
+                            )
+                    except Exception as fb_exc:
+                        last_error = f"session_fallback_error={fb_exc}"
 
             except Exception as exc:
                 last_error = str(exc)
+
                 available_end = self._extract_available_end(exc)
                 if available_end is not None:
-                    # Retry once by clamping to known available-end from API.
+                    # Retry once clamped to the API-reported available end.
                     retry_end = available_end - timedelta(seconds=1)
                     retry_start = retry_end - duration
                     try:
@@ -170,6 +193,23 @@ class AstroQuantFinalDataEngine:
                             )
                     except Exception as retry_exc:
                         last_error = f"{last_error} | retry_error={retry_exc}"
+
+                # Last resort: slide back day-by-day in narrow windows.
+                for fb_start, fb_end in self._session_fallback_windows(ref=end):
+                    try:
+                        fb_df = self._fetch_df(symbol=symbol, start=fb_start, end=fb_end)
+                        if len(fb_df) > 0:
+                            return FetchResult(
+                                symbol=symbol,
+                                records=len(fb_df),
+                                start=fb_start,
+                                end=fb_end,
+                                fallback_used=True,
+                                reason="session_fallback_after_error",
+                                dataframe=fb_df,
+                            )
+                    except Exception as fb_exc:
+                        last_error = f"{last_error} | session_fallback_error={fb_exc}"
 
         raise RuntimeError(f"All symbol candidates failed: {symbol_candidates}. last_error={last_error}")
 

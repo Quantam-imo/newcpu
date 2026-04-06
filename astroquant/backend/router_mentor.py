@@ -310,7 +310,9 @@ def mentor_context(symbol: str = "XAUUSD"):
                 live_price = float(lp)
         except Exception:
             pass
-        base = live_price if live_price else 2000.0
+        base = live_price  # None if feed down — surfaces as N/A in UI rather than fake $2000
+        if base is None:
+            base = 0.0  # neutral sentinel; UI will show N/A for price=0
         candles = [
             {"open": base, "high": base * 1.0005, "low": base * 0.9995, "close": base, "volume": 1000}
             for _ in range(30)

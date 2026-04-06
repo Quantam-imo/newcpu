@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone, timedelta
 
 import pandas as pd
 
@@ -25,13 +26,16 @@ def _fetch_via_databento(count: int) -> pd.DataFrame:
         ) from exc
 
     minutes_needed = max(120, count * 2)
+    start_dt = (datetime.now(timezone.utc) - timedelta(minutes=minutes_needed)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
     client = db.Historical(api_key)
     data = client.timeseries.get_range(
         dataset="GLBX.MDP3",
         symbols=["GC.c.0"],
         stype_in="continuous",
         schema="ohlcv-1m",
-        start=f"now-{minutes_needed}m",
+        start=start_dt,
     )
     df = data.to_df()
     if df.empty:

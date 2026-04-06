@@ -165,7 +165,6 @@ nohup python -m uvicorn astroquant.backend.main:app \
   --log-level info \
   > "$LOG_DIR/backend.log" 2>&1 &
 
-# Retry up to 45 seconds — cold boot takes longer than 6s
 _backend_ok=false
 for _i in 1 2 3 4 5 6 7 8 9; do
   sleep 5
@@ -188,9 +187,12 @@ if [ "$NO_CHROME" != true ]; then
   pkill -f "start_chrome_remote_debug.sh" 2>/dev/null || true
   pkill -f "chrome.*remote-debugging-port=9222" 2>/dev/null || true
 
+  DISPLAY=:1 \
   AQ_WORKSPACE="$WORKSPACE" \
   AQ_API_BASE="http://127.0.0.1:8000" \
   AQ_CHROME_PROFILE_DIR="$DATA_DIR/browser_session/chrome-profile" \
+  AQ_XVFB_DISPLAY=:1 \
+  AQ_USE_XVFB=true \
   nohup bash "$WORKSPACE/start_chrome_remote_debug.sh" > "$LOG_DIR/chrome.log" 2>&1 &
   
   sleep 6
@@ -341,23 +343,17 @@ while true; do
   fi
   
   # Check Backend
-  if ! curl -s http://127.0.0.1:8000/status > /dev/null 2>&1; then
-    log RED "✗ Backend down! Restarting..."
-    pkill -f "uvicorn.*main:app" || true
-    sleep 2
-    cd "$WORKSPACE"
-    nohup python -m uvicorn astroquant.backend.main:app \
-      --host 0.0.0.0 \
-      --port 8000 \
-      --log-level info \
-      > "$LOG_DIR/backend.log" 2>&1 &
-    sleep 3
-  fi
-  
-  # Check Chrome (optional)
-  if [ "$NO_CHROME" != true ]; then
-    if ! curl -s http://127.0.0.1:9222/json/version > /dev/null 2>&1; then
-      log YELLOW "⚠ Chrome not responding"
+  if !ds  qbacke
+   Co)url -s http://127.0.0.1:9222/json/version > /dev/null 2>&1; then
+      log YELLOW "⚠ Chrome not responding — restarting..."
+      pki-f "chrome.*remote-debu222" 2>/dev/null || true
+      sleep 1
+      DISPLAY=:1 \
+      AQ_WORKSPACE="$WORKSPACE" \
+      AQ_API_BASE="http://127.0.0.1:8000" \
+      AQ_CHROME_PROFILE_DIR="$DATA_DIR/browser_session/chrome-profile" \
+      AQ_XVFB_DISPLAY=:1 \
+      AQ_USE_XVFB=true \hrome_remote_debug.sh" >> "$LOG_DIR/chrome.log" 2>&1 &
     fi
   fi
 

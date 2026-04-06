@@ -102,6 +102,11 @@ start_chrome() {
     --disable-device-discovery-notifications \
     --disable-features=TranslateUI \
     --disable-blink-features=AutomationControlled \
+    --disable-webgl \
+    --disable-webgl2 \
+    --disable-accelerated-2d-canvas \
+    --disable-canvas-aa \
+    --disable-gpu-compositing \
     --window-size=1280,900 \
     $headless_flag \
     "$URL" > /tmp/chrome-astroquant.log 2>&1 &

@@ -1,8 +1,22 @@
 import os
 import sqlite3
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 
 import requests
+
+_IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _to_ist_label(ts_str: str) -> str:
+    """Convert an ISO UTC timestamp string to a short IST display label."""
+    try:
+        dt = datetime.fromisoformat(str(ts_str).replace("Z", "+00:00"))
+        return dt.astimezone(_IST).strftime("%I:%M %p IST")
+    except Exception:
+        try:
+            return str(ts_str).split("T", 1)[1][:8] if "T" in str(ts_str) else str(ts_str)
+        except Exception:
+            return str(ts_str)
 
 DB_PATH = "ai_trade_journal.db"
 
@@ -33,13 +47,14 @@ def send_daily_summary(summary_text):
 
 
 def _target_day_prefix(target_day: date | str | None = None):
+    # Use IST date so midnight-crossing doesn't log to the wrong day
     if target_day is None:
-        return datetime.now(timezone.utc).date().isoformat()
+        return datetime.now(_IST).date().isoformat()
     if isinstance(target_day, date):
         return target_day.isoformat()
     raw = str(target_day).strip()
     if not raw:
-        return datetime.now(timezone.utc).date().isoformat()
+        return datetime.now(_IST).date().isoformat()
     return raw
 
 
@@ -69,15 +84,14 @@ def _format_journal_block(rows):
     lines = ["Journal (latest):"]
     for idx, row in enumerate(rows, start=1):
         ts, symbol, model, result, pnl, r_multiple, confidence = row
-        try:
-            time_label = str(ts).split("T", 1)[1][:8] if "T" in str(ts) else str(ts)
-        except Exception:
-            time_label = "--:--:--"
+        time_label = _to_ist_label(ts)
         pnl_val = float(pnl or 0.0)
         rr_val = float(r_multiple or 0.0)
         conf_val = float(confidence or 0.0)
+        pnl_sign = "+" if pnl_val >= 0 else ""
+        result_upper = str(result or "--").upper()
         lines.append(
-            f"{idx}. {time_label} {symbol} {model} {str(result or '--').upper()} | PnL {pnl_val:.2f} | R {rr_val:.2f} | Conf {conf_val:.1f}%"
+            f"{idx}. {time_label} | {symbol} {model} {result_upper} | PnL {pnl_sign}{pnl_val:.2f} | R {rr_val:.2f}"
         )
     return "\n".join(lines)
 
@@ -100,7 +114,7 @@ def build_daily_summary(equity, pnl, trades, win_rate, phase, volatility_mode="N
 
 
 def daily_metrics_from_journal(now=None, target_day: date | str | None = None):
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(_IST)
     day_prefix = _target_day_prefix(target_day if target_day is not None else now.date())
 
     conn = sqlite3.connect(DB_PATH)

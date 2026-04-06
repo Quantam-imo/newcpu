@@ -138,23 +138,17 @@ async function refreshState() {
   await refreshDynamicPropState();
 }
 
-function selectedAdminPropAccounts() {
-  const values = Array.from(document.querySelectorAll(".admin-prop-account"))
-    .filter((node) => node.checked)
-    .map((node) => String(node.value || "").toUpperCase())
-    .filter(Boolean);
-  return Array.from(new Set(values));
-}
+// Account size in dollars mapping
+const ACCOUNT_SIZE_MAP = {
+  "5K": 5000, "10K": 10000, "15K": 15000, "20K": 20000,
+  "25K": 25000, "30K": 30000, "50K": 50000, "100K": 100000,
+};
 
-function syncPrimaryAccountSelection() {
-  const primaryEl = document.getElementById("adminPrimaryAccount");
-  if (!primaryEl) return;
-  const checked = selectedAdminPropAccounts();
-  if (checked.length <= 0) return;
-  const current = String(primaryEl.value || "50K").toUpperCase();
-  if (!checked.includes(current)) {
-    primaryEl.value = checked[0];
-  }
+function _highlightPresetBtn(accountKey) {
+  document.querySelectorAll(".preset-acct-btn").forEach((btn) => {
+    const isActive = String(btn.dataset.account || "").toUpperCase() === String(accountKey || "").toUpperCase();
+    btn.classList.toggle("active", isActive);
+  });
 }
 
 async function refreshDynamicPropState() {
@@ -164,49 +158,74 @@ async function refreshDynamicPropState() {
   const state = data?.state || {};
   const primary = String(state?.primary_account || "50K").toUpperCase();
   const mode = String(state?.primary_profile?.mode || "STANDARD").toUpperCase();
-  const active = Array.isArray(state?.active_accounts) ? state.active_accounts.map((item) => String(item).toUpperCase()) : [];
   const profile = state?.primary_profile || {};
-  const strictRisk = Number(state?.portfolio?.strict_risk_pct || 0) * 100;
   const accountSize = Number(profile?.account_size || 0);
+  const dailyMax = Number(profile?.daily_max_loss || 0);
+  const totalMax = Number(profile?.total_max_loss || 0);
+  const phase1Target = Number(profile?.phase1_target || 0);
+  const strictRisk = Number(state?.portfolio?.strict_risk_pct || 0) * 100;
 
   setValue("adminPrimaryAccount", primary);
   setValue("adminAccountMode", mode);
-  Array.from(document.querySelectorAll(".admin-prop-account")).forEach((node) => {
-    node.checked = active.includes(String(node.value || "").toUpperCase());
-  });
+  _highlightPresetBtn(primary);
 
   setText(
     "dynamicPropMeta",
-    `Primary ${primary} ${mode} | Account Size: ${accountSize > 0 ? accountSize.toFixed(0) : "--"} | Active: ${active.join(", ") || "--"} | Daily Max: ${Number(profile.daily_max_loss || 0).toFixed(2)} | Total Max: ${Number(profile.total_max_loss || 0).toFixed(2)} | Risk/Trade: ${strictRisk.toFixed(2)}%`,
+    `Account: ${primary} (${accountSize > 0 ? "$" + accountSize.toLocaleString() : "--"}) | Mode: ${mode}\n` +
+    `Daily Max Loss: $${dailyMax.toFixed(0)} | Total Max Loss: $${totalMax.toFixed(0)} | Phase1 Target: $${phase1Target.toFixed(0)}\n` +
+    `Risk/Trade: ${strictRisk.toFixed(2)}%`,
   );
 }
 
 async function applyDynamicPropEngine() {
   const primaryEl = document.getElementById("adminPrimaryAccount");
-  let primary = String(primaryEl?.value || "50K").toUpperCase();
+  const primary = String(primaryEl?.value || "50K").toUpperCase();
   const mode = String(document.getElementById("adminAccountMode")?.value || "STANDARD").toUpperCase();
-  const activeAccounts = selectedAdminPropAccounts();
-  if (activeAccounts.length > 0 && !activeAccounts.includes(primary)) {
-    primary = activeAccounts[0];
-    if (primaryEl) primaryEl.value = primary;
-  }
-  if (activeAccounts.length <= 0) {
-    activeAccounts.push(primary);
-  }
-  const modeMap = {};
-  activeAccounts.forEach((account) => {
-    modeMap[account] = mode;
-  });
+  const strictMode = document.getElementById("adminStrictMode")?.value !== "false";
+  const accountSizeDollars = ACCOUNT_SIZE_MAP[primary] || 50000;
 
+  // Step 1: Update dynamic prop engine module
   await adminFetch("/admin/prop_engine/configure", {
     method: "POST",
     body: JSON.stringify({
-      active_accounts: activeAccounts,
+      active_accounts: [primary],
       primary_account: primary,
-      mode_map: modeMap,
+      mode_map: { [primary]: mode },
       default_mode: mode,
     }),
   });
+
+  // Step 2: Bootstrap challenge — applies account size to the live runner
+  const bootstrapRes = await adminFetch("/admin/control/challenge/bootstrap", {
+    method: "POST",
+    body: JSON.stringify({ account_size: accountSizeDollars, strict_mode: strictMode }),
+  });
+
+  const metaEl = document.getElementById("dynamicPropMeta");
+  if (bootstrapRes && bootstrapRes.ok) {
+    const result = await bootstrapRes.json();
+    if (metaEl) {
+      metaEl.style.background = "#f0fdf4";
+      metaEl.style.borderColor = "#86efac";
+      setTimeout(() => {
+        metaEl.style.background = "#f0f7ff";
+        metaEl.style.borderColor = "#bfdbfe";
+      }, 2000);
+    }
+    _highlightPresetBtn(primary);
+  } else {
+    if (metaEl) {
+      metaEl.style.background = "#fff1f2";
+      metaEl.style.borderColor = "#fca5a5";
+      setText("dynamicPropMeta", `Apply failed (${bootstrapRes?.status}) — check ADMIN_API_TOKEN`);
+      setTimeout(() => {
+        metaEl.style.background = "#f0f7ff";
+        metaEl.style.borderColor = "#bfdbfe";
+      }, 3000);
+      return;
+    }
+  }
+
   await refreshDynamicPropState();
 }
 
@@ -214,9 +233,7 @@ async function useAccountPreset(accountKey) {
   const normalized = String(accountKey || "50K").toUpperCase();
   const primaryEl = document.getElementById("adminPrimaryAccount");
   if (primaryEl) primaryEl.value = normalized;
-  Array.from(document.querySelectorAll(".admin-prop-account")).forEach((node) => {
-    node.checked = String(node.value || "").toUpperCase() === normalized;
-  });
+  _highlightPresetBtn(normalized);
   await applyDynamicPropEngine();
 }
 
@@ -361,20 +378,9 @@ function bind() {
   document.getElementById("loadRiskBtn")?.addEventListener("click", () => loadAudit("/admin/control/risk_violations?limit=100").catch(() => {}));
   document.getElementById("loadRejectedBtn")?.addEventListener("click", () => loadAudit("/admin/control/rejected_trades?limit=100").catch(() => {}));
   document.getElementById("applyDynamicPropBtn")?.addEventListener("click", () => applyDynamicPropEngine().catch(() => {}));
-  document.getElementById("apply20kPresetBtn")?.addEventListener("click", () => useAccountPreset("20K").catch(() => {}));
 
-  document.getElementById("adminPrimaryAccount")?.addEventListener("change", () => {
-    const primary = String(document.getElementById("adminPrimaryAccount")?.value || "").toUpperCase();
-    if (!primary) return;
-    const nodes = Array.from(document.querySelectorAll(".admin-prop-account"));
-    const target = nodes.find((n) => String(n.value || "").toUpperCase() === primary);
-    if (target && !target.checked) target.checked = true;
-  });
-
-  Array.from(document.querySelectorAll(".admin-prop-account")).forEach((node) => {
-    node.addEventListener("change", () => {
-      syncPrimaryAccountSelection();
-    });
+  Array.from(document.querySelectorAll(".preset-acct-btn")).forEach((btn) => {
+    btn.addEventListener("click", () => useAccountPreset(btn.dataset.account).catch(() => {}));
   });
 }
 

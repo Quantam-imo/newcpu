@@ -1,6 +1,8 @@
 from dotenv import load_dotenv
 import os
 import logging
+import threading
+import time as _time
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
@@ -89,6 +91,165 @@ def _ensure_secure_runtime_for_production() -> None:
 
 
 _ensure_secure_runtime_for_production()
+
+
+# ── Live candle CSV updater ────────────────────────────────────────────────────
+# Runs in a background thread; fetches new completed candles from Databento
+# Historical API and appends them to XAU_1h, XAU_4h, and XAU_1d CSV files so
+# the MCL dashboard chart always reflects the latest XAUUSD price action.
+
+_DATA_DIR = BASE_DIR.parent / "market-causality-lab" / "data"
+
+def _update_csv_candles() -> None:
+    """Fetch any new completed candles from Databento and append to CSV files."""
+    import shutil
+    import pandas as _pd
+    try:
+        from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+        import databento as _db
+
+        _api_key = str(os.getenv("DATABENTO_API_KEY", "")).strip()
+        if not _api_key:
+            return
+
+        # Stay 2h behind now to avoid Databento available-end errors
+        _end = _dt.now(_tz.utc) - _td(hours=2)
+
+        # ── 1h ────────────────────────────────────────────────────────────────
+        _f1h = _DATA_DIR / "XAU_1h_data.csv"
+        _old1h = _pd.read_csv(_f1h, sep=";")
+        _old1h["time"] = _pd.to_datetime(_old1h["Date"], format="%Y.%m.%d %H:%M", utc=True)
+        _last1h = _old1h["time"].max()
+
+        if _last1h is not None and _pd.notna(_last1h) and (_end - _last1h).total_seconds() >= 3600:
+            _start = (_last1h + _td(minutes=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            _client = _db.Historical(_api_key)
+            _raw = _client.timeseries.get_range(
+                dataset="GLBX.MDP3",
+                symbols=["GC.c.0"],
+                stype_in="continuous",
+                schema="ohlcv-1h",
+                start=_start,
+                end=_end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            )
+            _new = _raw.to_df().reset_index().rename(columns={"ts_event": "time"})
+            _new["time"] = _pd.to_datetime(_new["time"], utc=True)
+            _new = _new[["time", "open", "high", "low", "close", "volume"]].dropna(subset=["time", "close"])
+            # Scale fixed-point prices if needed
+            if not _new.empty and float(_new["close"].iloc[0]) > 100000:
+                for _c in ("open", "high", "low", "close"):
+                    _new[_c] = _new[_c] / 1e9
+            _new = _new[_new["time"] > _last1h]
+            if not _new.empty:
+                shutil.copy(_f1h, str(_f1h) + ".bak")
+                _old1h_norm = _old1h.rename(
+                    columns={"Date": "Date", "Open": "open", "High": "high",
+                             "Low": "low", "Close": "close", "Volume": "volume"}
+                )
+                _combined = _pd.concat([_old1h_norm, _new], ignore_index=True)
+                _combined = (_combined.sort_values("time")
+                                      .drop_duplicates(subset=["time"])
+                                      .reset_index(drop=True))
+                _combined["Date"] = _combined["time"].dt.strftime("%Y.%m.%d %H:%M")
+                _combined[["Date", "open", "high", "low", "close", "volume"]].rename(
+                    columns={"open": "Open", "high": "High", "low": "Low",
+                             "close": "Close", "volume": "Volume"}
+                ).to_csv(_f1h, sep=";", index=False)
+                logging.info("[candle_updater] 1h: appended %d rows, last=%s",
+                             len(_new), _combined["Date"].iloc[-1])
+
+                # ── 4h (resample from new 1h rows) ────────────────────────────
+                _f4h = _DATA_DIR / "XAU_4h_data.csv"
+                _old4h = _pd.read_csv(_f4h, sep=";")
+                _old4h["time"] = _pd.to_datetime(_old4h["Date"], format="%Y.%m.%d %H:%M", utc=True)
+                _last4h = _old4h["time"].max()
+
+                _new4h_src = _new[_new["time"] > _last4h].copy().set_index("time")
+                if not _new4h_src.empty:
+                    _new4h = (_new4h_src
+                              .resample("4h", closed="left", label="left")
+                              .agg(open=("open", "first"), high=("high", "max"),
+                                   low=("low", "min"), close=("close", "last"),
+                                   volume=("volume", "sum"))
+                              .dropna(subset=["open", "close"])
+                              .reset_index())
+                    # Drop incomplete (last) 4h bar unless it ended before _end
+                    _new4h = _new4h[_new4h["time"] + _td(hours=4) <= _end + _td(minutes=30)]
+                    if not _new4h.empty:
+                        shutil.copy(_f4h, str(_f4h) + ".bak")
+                        _old4h_norm = _old4h.rename(
+                            columns={"Open": "open", "High": "high",
+                                     "Low": "low", "Close": "close", "Volume": "volume"}
+                        )
+                        _combined4h = _pd.concat([_old4h_norm, _new4h], ignore_index=True)
+                        _combined4h = (_combined4h.sort_values("time")
+                                                  .drop_duplicates(subset=["time"])
+                                                  .reset_index(drop=True))
+                        _combined4h["Date"] = _combined4h["time"].dt.strftime("%Y.%m.%d %H:%M")
+                        _combined4h[["Date", "open", "high", "low", "close", "volume"]].rename(
+                            columns={"open": "Open", "high": "High", "low": "Low",
+                                     "close": "Close", "volume": "Volume"}
+                        ).to_csv(_f4h, sep=";", index=False)
+                        logging.info("[candle_updater] 4h: appended %d rows, last=%s",
+                                     len(_new4h), _combined4h["Date"].iloc[-1])
+
+                # ── 1d (resample from new 1h rows) ────────────────────────────
+                _f1d = _DATA_DIR / "XAU_1d_data.csv"
+                _old1d = _pd.read_csv(_f1d, sep=";")
+                _old1d["time"] = _pd.to_datetime(_old1d["Date"], format="%Y.%m.%d %H:%M", utc=True)
+                _last1d = _old1d["time"].max()
+
+                _new1d_src = _new[_new["time"] > _last1d].copy().set_index("time")
+                if not _new1d_src.empty:
+                    _new1d = (_new1d_src
+                              .resample("1D", closed="left", label="left")
+                              .agg(open=("open", "first"), high=("high", "max"),
+                                   low=("low", "min"), close=("close", "last"),
+                                   volume=("volume", "sum"))
+                              .dropna(subset=["open", "close"])
+                              .reset_index())
+                    # Drop incomplete (today's) 1d bar
+                    _new1d = _new1d[_new1d["time"] + _td(days=1) <= _end + _td(hours=1)]
+                    # Drop Saturdays
+                    _new1d = _new1d[_new1d["time"].dt.dayofweek != 5]
+                    if not _new1d.empty:
+                        shutil.copy(_f1d, str(_f1d) + ".bak")
+                        _old1d_norm = _old1d.rename(
+                            columns={"Open": "open", "High": "high",
+                                     "Low": "low", "Close": "close", "Volume": "volume"}
+                        )
+                        _combined1d = _pd.concat([_old1d_norm, _new1d], ignore_index=True)
+                        _combined1d = (_combined1d.sort_values("time")
+                                                   .drop_duplicates(subset=["time"])
+                                                   .reset_index(drop=True))
+                        _combined1d["Date"] = _combined1d["time"].dt.strftime("%Y.%m.%d %H:%M")
+                        _combined1d[["Date", "open", "high", "low", "close", "volume"]].rename(
+                            columns={"open": "Open", "high": "High", "low": "Low",
+                                     "close": "Close", "volume": "Volume"}
+                        ).to_csv(_f1d, sep=";", index=False)
+                        logging.info("[candle_updater] 1d: appended %d rows, last=%s",
+                                     len(_new1d), _combined1d["Date"].iloc[-1])
+
+    except Exception as _exc:
+        logging.warning("[candle_updater] update skipped: %s", _exc)
+
+
+def _candle_updater_loop() -> None:
+    """Background thread: update CSVs every hour, aligned to the hour boundary."""
+    # Wait until the next hour + 5 min (e.g. 14:05) before first update
+    _time.sleep(60)  # short initial delay so server is fully up
+    while True:
+        _update_csv_candles()
+        # Sleep until the next hour + 5 minutes
+        _now = _time.time()
+        _next_hour = ((_now // 3600) + 1) * 3600 + 300   # HH:05:00
+        _time.sleep(max(60, _next_hour - _time.time()))
+
+
+threading.Thread(target=_candle_updater_loop, daemon=True, name="candle_csv_updater").start()
+logging.info("[candle_updater] background CSV updater started (runs every hour at HH:05)")
+
+# ── end Live candle CSV updater ───────────────────────────────────────────────
 
 
 app = FastAPI()

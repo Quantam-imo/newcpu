@@ -140,7 +140,7 @@ class PropGovernance:
 
         self.static_floor = account_size * (1 - self.config.static_dd_pct)
         self.daily_open_equity = account_size
-        self.daily_high = max(self.daily_high, account_size)
+        self.daily_high = account_size  # reset so guard doesn't trip on account switch
 
         self.phase_target_pct = float(payload.get("phase1_target_pct", 8.0)) / 100.0
         self.phase2_target_pct = float(payload.get("phase2_target_pct", 5.0)) / 100.0
@@ -153,6 +153,7 @@ class PropGovernance:
 
         self.funded_base_floor = account_size
         self.funded_lock_level = round(account_size * 1.04, 2)
+        self.trading_enabled = True  # always re-enable on profile apply
         self._persist()
 
     def apply_account_size(self, account_size: float):
@@ -164,11 +165,12 @@ class PropGovernance:
         self.config.internal_daily_guard_pct = self.phase_limits().get("daily_halt_pct", 0.02)
         self.static_floor = size * (1 - self.config.static_dd_pct)
         self.daily_open_equity = size
-        self.daily_high = max(self.daily_high, size)
+        self.daily_high = size  # reset so guard doesn't trip on account switch
         self.phase_target_pct = 0.08
         self.phase2_target_pct = 0.05
         self.funded_base_floor = size
         self.funded_lock_level = round(size * 1.04, 2)
+        self.trading_enabled = True  # always re-enable on account size change
         self._persist()
 
     def phase_target_reached(self, equity):

@@ -66,8 +66,8 @@ function connectLiveChartWebSocket(symbol) {
 		loadChartHistoryAsync(symbol).then((candles) => {
 			if (candles && candles.length && candlesSeries) {
 				candleBuffer = applyStreamingCandles(candles, timeframe);
-				setChartStateMessage("", "");
-				// Update cache
+				_checkCandleStaleness(candles);
+				// Only clear state message if data is fresh (staleness check sets its own message)
 				if (typeof setCache === "function") setCache(cacheKey, { candles: candleBuffer }, 60000);
 				showingCached = false;
 			} else {
@@ -138,6 +138,19 @@ function connectLiveChartWebSocket(symbol) {
 		} catch (err) {
 			console.error("Chart REST history load failed", err);
 			return [];
+		}
+	}
+	function _checkCandleStaleness(candles) {
+		if (!candles || !candles.length) return;
+		const last = candles[candles.length - 1];
+		const ts = Number(last?.time || last?.timestamp || 0);
+		if (!ts) return;
+		const ageHours = (Date.now() / 1000 - ts) / 3600;
+		if (ageHours > 2) {
+			const label = ageHours > 48
+				? `${Math.round(ageHours / 24)}d old`
+				: `${Math.round(ageHours)}h old`;
+			setChartStateMessage("stale", `⚠ Data ${label} — feed issue, not live`);
 		}
 	}
 	ws.onerror = (e) => {
@@ -577,7 +590,7 @@ function restoreChartSettings() {
 		symbol.value = settings.symbol;
 	}
 	if (symbol && !String(symbol.value || "").trim()) {
-		symbol.value = "GC.FUT";
+		symbol.value = "XAUUSD";
 	}
 	if (timeframe && settings.timeframe) {
 		timeframe.value = settings.timeframe;
@@ -615,13 +628,13 @@ function resetChartSettings() {
 	}
 	const symbol = document.getElementById("chartSymbolInput") || document.getElementById("chartSymbol");
 	const timeframe = document.getElementById("chartTimeframe");
-	if (symbol) symbol.value = "GC.FUT";
+	if (symbol) symbol.value = "XAUUSD";
 	if (timeframe) timeframe.value = "1m";
 	for (const id of toggleIds) {
 		const el = document.getElementById(id);
 		if (el) el.checked = false;
 	}
-	writeChartSettings({ symbol: "GC.FUT", timeframe: "1m" });
+	writeChartSettings({ symbol: "XAUUSD", timeframe: "1m" });
 	captureToggleSettings();
 	applyOverlayVisibility();
 	loadInstitutionalChart().catch(() => {});
@@ -937,7 +950,7 @@ function selectedSymbol() {
 	// Use the input box for symbol selection
 	const input = document.getElementById("chartSymbolInput");
 	const value = input ? String(input.value || "").trim().toUpperCase() : "";
-	return value || "GC.FUT";
+	return value || "XAUUSD";
 }
 
 function selectedTimeframe() {
@@ -1789,7 +1802,7 @@ function paintLiveCandleFromQuote(timeframe) {
 	}
 
 	const livePriceLabel = document.getElementById("chartLivePrice");
-	if (livePriceLabel) livePriceLabel.innerText = price.toFixed(2);
+	if (livePriceLabel) livePriceLabel.innerText = (Number.isFinite(price) && price > 0) ? price.toFixed(2) : "NO FEED";
 	upsertLivePriceLine(price);
 	lastPaintedLivePrice = price;
 }
@@ -1828,7 +1841,7 @@ function updateChartMeta(payload, timeframe, candles) {
 		: (Number.isFinite(safeLiveState) && safeLiveState > 0
 			? safeLiveState
 			: lastClose);
-	document.getElementById("chartLivePrice").innerText = Number.isFinite(uiPrice) ? uiPrice.toFixed(2) : "--";
+	document.getElementById("chartLivePrice").innerText = (Number.isFinite(uiPrice) && uiPrice > 0) ? uiPrice.toFixed(2) : "NO FEED";
 	document.getElementById("chartAutoMode").innerText = meta.auto_mode || "--";
 	document.getElementById("chartRisk").innerText = meta.risk_percent != null ? `${Number(meta.risk_percent).toFixed(2)}%` : "--";
 	document.getElementById("chartVolatility").innerText = meta.volatility_state || "--";

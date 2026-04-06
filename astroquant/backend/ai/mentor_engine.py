@@ -105,7 +105,10 @@ class MentorEngine:
             close = float(c.get("close", 0.0) or 0.0)
             open_px = float(c.get("open", 0.0) or 0.0)
             vol = float(c.get("volume", 0.0) or 0.0)
-            spread = max(1e-9, high - low)
+            # Skip candles with zero/invalid OHLC — prevents divide-by-near-zero
+            if close <= 0 or high <= 0 or low <= 0:
+                continue
+            spread = max(0.01, high - low)  # floor at 0.01 to avoid huge scores
             score = vol / spread
             strengths.append((score, close, open_px))
 

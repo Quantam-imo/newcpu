@@ -87,7 +87,16 @@ def _dynamic_contract_candidates(root: str, max_count: int = 3) -> List[str]:
     now = datetime.now(timezone.utc)
     current_month = int(now.month)
     year = int(now.year)
-    month_cursor = current_month
+    # Commodity futures (GC, CL, SI, HG, NG) expire BEFORE the delivery month.
+    # By day 5 of month N, contract N is already expired — advance to next cycle.
+    COMMODITY_ROOTS = {"GC", "CL", "SI", "HG", "NG", "ZC", "ZW", "ZS"}
+    if root_key in COMMODITY_ROOTS and now.day >= 5:
+        month_cursor = current_month + 1
+        if month_cursor > 12:
+            month_cursor = 1
+            year += 1
+    else:
+        month_cursor = current_month
     max_needed = max(1, int(max_count))
 
     picks: List[str] = []

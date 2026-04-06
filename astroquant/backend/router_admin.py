@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from astroquant.backend.admin_control_store import AdminControlStore
 from astroquant.backend.governance.dynamic_prop_engine import DynamicPropEngine
-from astroquant.core.prop_profiles import PROP_PROFILES
+from astroquant.core.prop_profiles import PROP_PROFILES, normalize_account_key, profile_for
 
 
 ROLE_ORDER = {
@@ -177,6 +177,17 @@ def build_admin_router(runner, prop_engine, admin_token: str, default_role: str 
 		runner.risk.max_risk_per_trade = float(risk_cfg.get("max_risk_per_trade") or 1.0) / 100.0
 		runner.risk.daily_loss_limit = float(prop_engine.config.account_size) * (float(prop_cfg.get("daily_dd_pct") or 1.5) / 100.0)
 		runner.risk.max_drawdown_floor = float(prop_engine.config.account_size) * (1.0 - (float(prop_cfg.get("overall_dd_pct") or 8.0) / 100.0))
+
+		# Sync runner.state.balance so position sizing is based on actual account size
+		if hasattr(runner, "state") and hasattr(runner.state, "balance"):
+			runner.state.balance = float(prop_engine.config.account_size)
+
+		# Sync ACCOUNT_CONFIG so /status PnL display reflects the correct baseline
+		from astroquant.backend import config as _cfg_mod
+		_acct = float(prop_engine.config.account_size)
+		_cfg_mod.ACCOUNT_CONFIG["initial_balance"] = _acct
+		_cfg_mod.ACCOUNT_CONFIG["daily_limit"] = round(_acct * (float(prop_cfg.get("daily_dd_pct") or 4.0) / 100.0), 2)
+		_cfg_mod.ACCOUNT_CONFIG["max_drawdown"] = round(_acct * (float(prop_cfg.get("overall_dd_pct") or 8.0) / 100.0), 2)
 		runner.max_trades_per_day_limit = int(risk_cfg.get("daily_max_trades") or runner.max_trades_per_day_limit)
 		runner.phase_risk_multipliers = {
 			"PHASE1": float(risk_cfg.get("risk_multiplier_phase1") or 1.0),
@@ -443,14 +454,27 @@ def build_admin_router(runner, prop_engine, admin_token: str, default_role: str 
 		if hasattr(prop_engine, "apply_account_size"):
 			prop_engine.apply_account_size(account_size)
 
+		# Immediately sync runner balance and ACCOUNT_CONFIG (apply_runtime_controls below finalises)
+		if hasattr(runner, "state") and hasattr(runner.state, "balance"):
+			runner.state.balance = account_size
+
+		from astroquant.backend import config as _cfg_mod
+		_cfg_mod.ACCOUNT_CONFIG["initial_balance"] = account_size
+
 		phase = str(getattr(prop_engine, "phase", "PHASE1") or "PHASE1").upper()
 		phase_target = 8.0 if phase == "PHASE1" else (5.0 if phase == "PHASE2" else 0.0)
 		lock_level = round(account_size * 1.04, 2)
 
+		# Use profile-defined DD limits so each account size gets its proper drawdown rules
+		_acct_key = normalize_account_key(str(data.account_size))
+		_prof = profile_for(_acct_key)
+		_daily_dd_pct = float(_prof.get("daily_dd_pct", 4.0))
+		_overall_dd_pct = float(_prof.get("max_dd_pct", 8.0))
+
 		store.upsert_singleton("prop_rules", {
 			"profit_target_pct": phase_target,
-			"daily_dd_pct": 2.0 if phase != "FUNDED" else 2.5,
-			"overall_dd_pct": 8.0,
+			"daily_dd_pct": _daily_dd_pct,
+			"overall_dd_pct": _overall_dd_pct,
 			"lock_level": lock_level,
 			"min_profitable_days": 3,
 			"leverage_limit": 20.0,

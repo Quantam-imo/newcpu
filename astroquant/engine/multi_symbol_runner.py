@@ -1,3 +1,4 @@
+import os
 import time
 import json
 import sqlite3
@@ -40,13 +41,23 @@ from astroquant.backend.config import (
 
 
 class MultiSymbolRunner:
-    def send_backend_alert(self, alert_type, message, extra=None):
-        # Send alert to Telegram
-        if hasattr(self, 'telegram') and self.telegram:
-            self.telegram.send(f"[ALERT] {alert_type}: {message}\n{json.dumps(extra or {}, indent=2)}")
-        # Optionally, log or persist for frontend pickup (e.g., via DB, file, or in-memory queue)
-        # For demo: print to console (could be replaced with a push to a websocket or alert table)
-        print(f"[ALERT] {alert_type}: {message}", extra)
+    def send_backend_alert(self, alert_type: str, message: str, extra: dict = None) -> None:
+        """Send a structured alert to Telegram and print to console."""
+        if hasattr(self, "telegram") and self.telegram:
+            _type_labels = {
+                "TRADE_EXECUTED": "TRADE EXECUTED",
+                "RISK_LIMIT_BLOCK": "RISK BLOCK",
+                "PROP_FLOOR_BLOCK": "PROP BLOCK",
+                "TRADE_IDENTITY_BLOCK": "IDENTITY BLOCK",
+            }
+            label = _type_labels.get(alert_type, alert_type.replace("_", " "))
+            lines = [f"{label}: {message}"]
+            if extra:
+                for k, v in (extra or {}).items():
+                    if v is not None:
+                        lines.append(f"  {k}: {v}")
+            self.telegram.send("\n".join(lines))
+        print(f"[ALERT] {alert_type}: {message}", extra or "")
 
 
     SYMBOL_MAP = {
@@ -390,7 +401,7 @@ class MultiSymbolRunner:
         # Enhanced fallback for GC-F and other symbols
         if include_contracts:
             if root in {"GC-F", "GC", "GC.FUT"}:
-                raw_contracts = ["GC.c.1", "GC.c.0", "GC.FUT", "GCJ6", "GCJ26"]
+                raw_contracts = ["GC.c.1", "GC.FUT", "GCM6", "GCQ6", "GCZ6"]
             elif root in {"NQ", "NQ-F", "NQ.FUT"}:
                 raw_contracts = ["NQ.c.1", "NQ.c.0", "NQ.FUT"]
             elif root in {"6E", "EURUSD", "6E.FUT"}:
@@ -1785,6 +1796,45 @@ class MultiSymbolRunner:
             self._audit_event("RISK_VIOLATION", "GOVERNANCE_BLOCK", {"symbol": symbol, "reason": reason})
             return {"status": "Blocked", "symbol": symbol, "reason": reason}
 
+        # --- Telegram approval gate (optional) ---
+        # When TELEGRAM_TRADE_APPROVAL=true the signal is queued for manual
+        # approval via /approve <id> before execution proceeds.
+        if os.getenv("TELEGRAM_TRADE_APPROVAL", "false").strip().lower() == "true":
+            try:
+                from astroquant.backend.router_status import (
+                    _PENDING_APPROVALS,
+                    post_pending_approval,
+                )
+                if not hasattr(self, "_pending_approval_ids"):
+                    self._pending_approval_ids = {}
+
+                existing_id = self._pending_approval_ids.get(symbol)
+                if existing_id:
+                    # A request was already sent — check decision
+                    rec = _PENDING_APPROVALS.get(existing_id)
+                    if rec is None or rec.get("status") == "REJECTED":
+                        del self._pending_approval_ids[symbol]
+                        return {"status": "Blocked", "symbol": symbol, "reason": "Trade rejected via Telegram"}
+                    if rec.get("status") == "PENDING":
+                        return {"status": "PendingApproval", "symbol": symbol, "trade_id": existing_id}
+                    # APPROVED — clear and fall through to execution
+                    del self._pending_approval_ids[symbol]
+                else:
+                    # New signal — queue it and notify Telegram
+                    trade_id = post_pending_approval(symbol, best)
+                    self._pending_approval_ids[symbol] = trade_id
+                    return {
+                        "status": "PendingApproval",
+                        "symbol": symbol,
+                        "trade_id": trade_id,
+                        "reason": "Waiting for Telegram approval",
+                    }
+            except Exception as _approval_exc:
+                # If approval store is unavailable fall through to direct execution
+                self.telegram.send(
+                    f"[WARN] Approval gate failed ({_approval_exc}); executing directly."
+                )
+
         limit_check, limit_reason = self.risk.check_limits()
         if not limit_check:
             self._audit_event("RISK_VIOLATION", "RISK_LIMIT_BLOCK", {"symbol": symbol, "reason": limit_reason})
@@ -1822,11 +1872,26 @@ class MultiSymbolRunner:
         risk_percent *= float(clawbot_state.get("risk_multiplier", 1.0) or 1.0)
         risk_percent *= float(self.phase_risk_multipliers.get(str(current_phase).upper(), 1.0) or 1.0)
 
-        lot_size = self.risk.calculate_position_size(risk_percent, stop_distance=50)
+        # Compute ATR-based stop distance from available candle data
+        _candles = market_data.get("candles") or []
+        _atr_dist = 50.0  # fallback
+        if len(_candles) >= 15:
+            try:
+                _highs = [float(c["high"]) for c in _candles[-15:]]
+                _lows = [float(c["low"]) for c in _candles[-15:]]
+                _closes = [float(c["close"]) for c in _candles[-15:]]
+                _atr_raw = self.prop_engine.vol_engine.calculate_atr(_highs, _lows, _closes) if self.prop_engine else None
+                if _atr_raw and _atr_raw > 0:
+                    _atr_dist = max(10.0, min(200.0, float(_atr_raw)))
+            except Exception:
+                pass
+
+        lot_size = self.risk.calculate_position_size(risk_percent, stop_distance=_atr_dist)
 
         intended_price = float(market_data["candles"][-1]["close"])
-        planned_tp = intended_price + 50 if best.get("direction") == "BUY" else intended_price - 50
-        planned_sl = intended_price - 50 if best.get("direction") == "BUY" else intended_price + 50
+        _tp_dist = round(_atr_dist * 1.5, 2)  # 1:1.5 RR
+        planned_tp = intended_price + _tp_dist if best.get("direction") == "BUY" else intended_price - _tp_dist
+        planned_sl = intended_price - _atr_dist if best.get("direction") == "BUY" else intended_price + _atr_dist
 
         trade_identity = self._resolve_trade_identity(
             symbol,
@@ -1951,12 +2016,16 @@ class MultiSymbolRunner:
 
         self.send_backend_alert(
             "TRADE_EXECUTED",
-            f"Trade Executed: {trade_identity.get('symbol_chain')}",
+            f"{trade_identity.get('symbol_chain')} {best.get('direction')}",
             extra={
+                "model": best.get("model"),
                 "entry": intended_price,
                 "sl": planned_sl,
                 "tp": planned_tp,
-                "direction": best.get("direction"),
+                "conf": f"{float(best.get('confidence', 0)) * 100:.0f}%" if float(best.get('confidence', 0) or 0) <= 1 else f"{best.get('confidence')}%",
+                "rr": f"{best.get('rr')}:1",
+                "lot": lot_size,
+                "session": current_session,
             },
         )
 

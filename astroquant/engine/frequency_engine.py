@@ -24,6 +24,7 @@ class FrequencyEngine:
         except Exception:
             self.data = self._default_state()
             self._save()
+        self.reset_if_new_day()
 
     def _save(self):
         self.file.parent.mkdir(parents=True, exist_ok=True)

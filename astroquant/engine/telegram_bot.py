@@ -14,7 +14,7 @@ def send_telegram(message):
         return {"ok": False, "reason": "telegram credentials missing"}
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
-        response = requests.post(url, data={"chat_id": chat_id, "text": message}, timeout=8)
+        response = requests.post(url, json={"chat_id": chat_id, "text": message}, timeout=8)
         response.raise_for_status()
         return {"ok": True}
     except Exception as exc:

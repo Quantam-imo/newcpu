@@ -25,9 +25,17 @@ class CandleEngine:
         minute = (dt.minute // timeframe) * timeframe
         return dt.replace(second=0, microsecond=0, minute=minute)
 
+    # Map live feed symbols (e.g. GC.c.0, GCM6) to canonical names for cross-reader lookups
+    _SYMBOL_ALIASES = {
+        "GC.c.0": "XAUUSD", "GC.c.1": "XAUUSD", "GC.FUT": "XAUUSD",
+        "GCM6": "XAUUSD", "GCQ6": "XAUUSD", "GCZ6": "XAUUSD",
+    }
+
     def process_tick(self, symbol, price, timestamp):
+        canonical = self._SYMBOL_ALIASES.get(symbol, symbol)
         for tf in [1, 5, 15]:
             bucket = self.get_bucket(timestamp, tf)
+            bucket_epoch = int(bucket.timestamp())
             key = f"{symbol}_{tf}_{bucket}"
             if key not in self.candles:
                 self.candles[key] = {
@@ -36,9 +44,10 @@ class CandleEngine:
                     "low": price,
                     "close": price,
                     "volume": 1,
+                    "time": bucket_epoch,
                     "timestamp": str(bucket),
                     "timeframe": tf,
-                    "symbol": symbol
+                    "symbol": canonical
                 }
             else:
                 candle = self.candles[key]
@@ -46,9 +55,15 @@ class CandleEngine:
                 candle["low"] = min(candle["low"], price)
                 candle["close"] = price
                 candle["volume"] += 1
-            redis_key = f"candle:{symbol}:{tf}"
-            self.redis.set(redis_key, json.dumps(self.candles[key]))
-            print("[CANDLE UPDATE]", symbol, price, timestamp)
+            candle_data = json.dumps(self.candles[key])
+            # Write latest key (for get_latest_candle)
+            self.redis.set(f"candle:{canonical}:{tf}", candle_data)
+            # Write timestamped key with 24h TTL (for get_candle_series)
+            self.redis.setex(f"candle:{canonical}:{tf}:{bucket_epoch}", 86400, candle_data)
+            # Also write under raw feed symbol for cross-lookup
+            if canonical != symbol:
+                self.redis.set(f"candle:{symbol}:{tf}", candle_data)
+        print(f"[CANDLE UPDATE] {canonical} ({symbol}) → {price}")
 
     def get_latest_candle(self, symbol, timeframe):
         data = self.redis.get(f"candle:{symbol}:{timeframe}")

@@ -265,6 +265,11 @@ elif [[ -n "$CHROME_BIN" ]]; then
         --disable-sync \
         --disable-default-apps \
         --disable-extensions \
+        --disable-webgl \
+        --disable-webgl2 \
+        --disable-accelerated-2d-canvas \
+        --disable-canvas-aa \
+        --disable-gpu-compositing \
         $chrome_headless_flag \
         "$BROKER_URL" \
         >"$LOG_DIR/chrome.log" 2>&1 &

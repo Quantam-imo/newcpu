@@ -1,10 +1,48 @@
 
+import time
+import uuid
 from typing import Any
 from fastapi import APIRouter
 from fastapi import HTTPException
 from fastapi import Query
 router = APIRouter()
 _FALLBACK_PLAYWRIGHT_ENGINE = None
+
+# ---------------------------------------------------------------------------
+# Pending trade approval store (in-process; survives across requests)
+# ---------------------------------------------------------------------------
+# Dict[trade_id: str, approval_record: dict]
+_PENDING_APPROVALS: dict = {}
+_APPROVAL_TTL_SEC = int(300)  # Requests expire after 5 minutes
+
+def _prune_expired_approvals() -> None:
+    """Remove expired approval records."""
+    now = time.time()
+    expired = [tid for tid, rec in _PENDING_APPROVALS.items()
+               if now - float(rec.get("requested_at", 0)) > _APPROVAL_TTL_SEC]
+    for tid in expired:
+        _PENDING_APPROVALS.pop(tid, None)
+
+
+def post_pending_approval(symbol: str, signal: dict) -> str:
+    """Register a pending trade for Telegram approval. Returns the trade_id."""
+    _prune_expired_approvals()
+    trade_id = uuid.uuid4().hex[:8]
+    _PENDING_APPROVALS[trade_id] = {
+        "trade_id": trade_id,
+        "symbol": symbol,
+        "model": signal.get("model", "UNKNOWN"),
+        "direction": signal.get("direction", "UNKNOWN"),
+        "confidence": round(float(signal.get("confidence", 0)), 2),
+        "rr": round(float(signal.get("rr", 0)), 2),
+        "entry": signal.get("entry_price"),
+        "sl": signal.get("sl"),
+        "tp": signal.get("tp"),
+        "requested_at": time.time(),
+        "status": "PENDING",
+        "decided_at": None,
+    }
+    return trade_id
 
 @router.get("/health")
 async def get_health() -> Any:
@@ -42,9 +80,32 @@ async def get_health() -> Any:
 					"details": "Broker not connected or no quote",
 				}
 		else:
+			# Playwright page not attached — try CDP URL directly (same check as /status)
+			_cdp_connected = False
+			try:
+				_cdp_base = _cdp_http_base(getattr(engine, "cdp_url", None) or EXECUTION_BROWSER_CDP_URL)
+				if _cdp_base:
+					_fetch_debug_json(_cdp_base, "/json/version")
+					_cdp_connected = True
+			except Exception:
+				pass
+			if not _cdp_connected:
+				# Last resort: check runner broker_spot_cache for recent activity
+				try:
+					_runner = get_runner()
+					_cache = getattr(_runner, "broker_spot_cache", {}) or {}
+					import time as _time
+					_recent = any(
+						v.get("captured_at", 0) > _time.time() - 30
+						and v.get("snapshot") is not None
+						for v in _cache.values() if isinstance(v, dict)
+					)
+					_cdp_connected = _recent
+				except Exception:
+					pass
 			broker_status = {
-				"status": "DISCONNECTED",
-				"details": "No broker page instance",
+				"status": "CONNECTED" if _cdp_connected else "DISCONNECTED",
+				"details": "Broker debug session reachable" if _cdp_connected else "No broker page instance",
 			}
 	except Exception as exc:
 		broker_status = {
@@ -52,11 +113,27 @@ async def get_health() -> Any:
 			"details": f"Broker health check error: {exc}",
 		}
 
-	# Data feed health (placeholder, expand as needed)
+	# Data feed health — check if any symbol has fresh data recently
 	data_feed_status = {
 		"status": "OK",
 		"details": "Data feed operational",
 	}
+	try:
+		_runner2 = get_runner()
+		_resolver = getattr(_runner2, "contract_resolver", None)
+		if _resolver is not None:
+			_registry = getattr(_resolver, "_cache", None) or {}
+			_errors = [
+				v for v in (_registry.values() if isinstance(_registry, dict) else [])
+				if isinstance(v, dict) and v.get("consecutive_failures", 0) > 3
+			]
+			if _errors:
+				data_feed_status = {
+					"status": "DEGRADED",
+					"details": f"Symbol feed errors on {len(_errors)} symbol(s). Check Databento subscription.",
+				}
+	except Exception:
+		pass
 
 	# Add more checks as needed (database, celery, orchestrator, etc.)
 	return {
@@ -496,7 +573,7 @@ async def get_status() -> Any:
 	news_view = _news_snapshot(limit=5)
 
 	return {
-		"balance": 50000,
+		"balance": float(ACCOUNT_CONFIG.get("initial_balance", 50000.0)),
 		"phase": "PHASE1",
 		"daily_loss": 0.0,
 		"news_halt": bool(news_view.get("news_halt", False)),
@@ -813,7 +890,7 @@ async def debug_sl_tp_dom() -> Any:
 			if not found:
 				try:
 					shadow_probe = page.evaluate(
-						"""() => {
+						r"""() => {
 							const queue = [document];
 							const hits = { sl: false, tp: false };
 							while (queue.length) {
@@ -916,7 +993,7 @@ async def execution_dom_probe() -> Any:
 			if page is None:
 				return {"status": "failed", "reason": "page_unavailable"}
 			return page.evaluate(
-			"""() => {
+			r"""() => {
 				const queue = [document];
 				const nodes = [];
 				while (queue.length) {
@@ -1634,12 +1711,14 @@ async def get_data_freshness(
 	if not requested:
 		requested = _runtime_symbols()[:1] or ["XAUUSD"]
 
+	import concurrent.futures
 	now = datetime.now(timezone.utc)
 	sync = DatabentoSyncEngine() if include_resolver else None
-	rows = []
-	for symbol in requested:
+	bounded_limit = max(1, int(limit))
+
+	def _fetch_one(symbol: str) -> dict:
 		try:
-			candles, meta = fetch_candles_unified(symbol=symbol, limit=max(1, int(limit)))
+			candles, meta = fetch_candles_unified(symbol=symbol, limit=bounded_limit)
 			latest_ts = None
 			stale_seconds = None
 			if candles:
@@ -1650,31 +1729,32 @@ async def get_data_freshness(
 						stale_seconds = max(0, int((now - dt).total_seconds()))
 					except Exception:
 						stale_seconds = None
-
-			rows.append(
-				{
-					"symbol": symbol,
-					"resolved_symbol": meta.get("resolved_symbol"),
-					"records": int(meta.get("records") or 0),
-					"candles": len(candles),
-					"latest_timestamp": latest_ts,
-					"stale_seconds": stale_seconds,
-					"fallback_used": bool(meta.get("fallback_used")),
-					"reason": meta.get("reason"),
-					"window_start": meta.get("window_start"),
-					"window_end": meta.get("window_end"),
-					"resolver": sync.contract_resolver.snapshot(symbol) if sync is not None else None,
-					"status": "OK" if candles else "EMPTY",
-				}
-			)
+			return {
+				"symbol": symbol,
+				"resolved_symbol": meta.get("resolved_symbol"),
+				"records": int(meta.get("records") or 0),
+				"candles": len(candles),
+				"latest_timestamp": latest_ts,
+				"stale_seconds": stale_seconds,
+				"fallback_used": bool(meta.get("fallback_used")),
+				"reason": meta.get("reason"),
+				"window_start": meta.get("window_start"),
+				"window_end": meta.get("window_end"),
+				"resolver": sync.contract_resolver.snapshot(symbol) if sync is not None else None,
+				"status": "OK" if candles else "EMPTY",
+			}
 		except Exception as exc:
-			rows.append(
-				{
-					"symbol": symbol,
-					"status": "ERROR",
-					"error": str(exc),
-				}
-			)
+			return {"symbol": symbol, "status": "ERROR", "error": str(exc)}
+
+	# Fetch all symbols in parallel — serial fetches were O(N * latency).
+	rows_map: dict[str, dict] = {}
+	with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(requested), 8)) as pool:
+		future_to_sym = {pool.submit(_fetch_one, sym): sym for sym in requested}
+		for fut in concurrent.futures.as_completed(future_to_sym, timeout=60):
+			result = fut.result()
+			rows_map[result["symbol"]] = result
+	# Restore original request order.
+	rows = [rows_map.get(sym, {"symbol": sym, "status": "ERROR", "error": "timeout"}) for sym in requested]
 
 	overall = "OK" if all(r.get("status") == "OK" for r in rows) else "DEGRADED"
 	return {
@@ -2275,3 +2355,44 @@ def execution_test_sl_tp_fill(
 
 
 
+
+# ---------------------------------------------------------------------------
+# Trade approval endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/pending_trades")
+async def get_pending_trades() -> Any:
+    """Return all pending trade approval requests that have not expired."""
+    _prune_expired_approvals()
+    return {
+        "pending": list(_PENDING_APPROVALS.values()),
+        "count": len(_PENDING_APPROVALS),
+    }
+
+
+@router.post("/trade/approve/{trade_id}")
+async def approve_trade(trade_id: str) -> Any:
+    """Approve a pending trade request. The engine will execute it on the next cycle."""
+    _prune_expired_approvals()
+    rec = _PENDING_APPROVALS.get(trade_id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="Trade request not found or expired")
+    if rec["status"] != "PENDING":
+        return {"ok": False, "trade_id": trade_id, "status": rec["status"], "reason": "already decided"}
+    rec["status"] = "APPROVED"
+    rec["decided_at"] = time.time()
+    return {"ok": True, "trade_id": trade_id, "status": "APPROVED"}
+
+
+@router.post("/trade/reject/{trade_id}")
+async def reject_trade(trade_id: str) -> Any:
+    """Reject a pending trade request."""
+    _prune_expired_approvals()
+    rec = _PENDING_APPROVALS.get(trade_id)
+    if not rec:
+        raise HTTPException(status_code=404, detail="Trade request not found or expired")
+    if rec["status"] != "PENDING":
+        return {"ok": False, "trade_id": trade_id, "status": rec["status"], "reason": "already decided"}
+    rec["status"] = "REJECTED"
+    rec["decided_at"] = time.time()
+    return {"ok": True, "trade_id": trade_id, "status": "REJECTED"}

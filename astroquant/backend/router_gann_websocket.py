@@ -83,8 +83,13 @@ async def gann_websocket(websocket: WebSocket, symbol: str):
         sq9 = GannSquareOf9Engine()
         spiral = GannSpiralEngine()
         
-        # Simulate live price updates
-        price = 2050.5
+        # Initialize price from live feed; will be updated by client messages
+        try:
+            from astroquant.engine.candle.candle_reader import get_latest_candle
+            _c = get_latest_candle("XAUUSD", 1)
+            price = float(_c["close"]) if _c else 4637.0
+        except Exception:
+            price = 4637.0
         
         while True:
             # Receive client message (price or request)

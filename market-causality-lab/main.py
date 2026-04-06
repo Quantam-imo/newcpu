@@ -238,6 +238,47 @@ def _stage_duration(stage_started_at: pd.Timestamp, stage_completed_at: pd.Times
     return round((stage_completed_at - stage_started_at).total_seconds() * 1000.0, 2)
 
 
+def _apply_gann_signal_alignment(result: dict) -> dict:
+    out = dict(result or {})
+    observation = (out.get("observation") or {}) if isinstance(out.get("observation"), dict) else {}
+
+    original_signal = str(out.get("filtered_signal") or "WAIT").upper()
+    gann_candidate = str(observation.get("gann_recommended_signal") or "WAIT").upper()
+    geometry_ok = str(observation.get("confirmation_geometry") or "NO").upper() == "YES"
+    time_ok = str(observation.get("confirmation_time") or "NO").upper() == "YES"
+    structure_ok = str(observation.get("confirmation_structure") or "NO").upper() == "YES"
+    tape_ok = str(observation.get("confirmation_tape_action") or "NO").upper() == "YES"
+
+    news_guard = bool(out.get("news_guard_applied"))
+    rejection_reason = str(out.get("rejection_reason") or "").strip().lower()
+    risk_blocked = news_guard or (rejection_reason not in {"", "none"})
+
+    gann_confluence_ready = geometry_ok and time_ok and (structure_ok or tape_ok)
+    aligned_signal = original_signal
+
+    if risk_blocked:
+        aligned_signal = "WAIT"
+    elif gann_confluence_ready and gann_candidate in {"BUY", "SELL"}:
+        aligned_signal = gann_candidate
+
+    out["filtered_signal_original"] = original_signal
+    out["gann_signal_candidate"] = gann_candidate
+    out["gann_confluence_ready"] = gann_confluence_ready
+    out["filtered_signal"] = aligned_signal
+    out["learning_profile"] = {
+        "style": "gann_confluence",
+        "geometry_confirmed": geometry_ok,
+        "time_confirmed": time_ok,
+        "structure_confirmed": structure_ok,
+        "tape_confirmed": tape_ok,
+        "gann_mindset_bias": observation.get("gann_mindset_bias"),
+        "gann_time_phase": observation.get("gann_time_phase"),
+        "gann_recommended_signal": gann_candidate,
+        "risk_gate_blocked": risk_blocked,
+    }
+    return out
+
+
 def process(df):
     # Core intelligence pipeline
     phase1_cfg = get_phase1_config()
@@ -625,15 +666,6 @@ def _load_historical_with_fallback(
     min_required_depth = max(0.0, target_years - 0.25)
 
     candidate_chain = _timeframe_fallback_chain(requested_tf)
-    # Deep lookback requests are better served by coarse timeframes first;
-    # this avoids loading very large intraday CSVs that cannot satisfy the
-    # requested years anyway and may exceed runtime budgets.
-    if target_years >= 10:
-        preferred = ["1d", "4h", "1h", "30m", "15m", "5m", "1m", "1w", "1month"]
-        coarse_first = [tf for tf in preferred if tf in candidate_chain]
-        remainder = [tf for tf in candidate_chain if tf not in coarse_first]
-        candidate_chain = coarse_first + remainder
-
     best = None
     load_errors: list[str] = []
 
@@ -888,6 +920,7 @@ def full_system(
     )
 
     news_stage_started_at = pd.Timestamp.now("UTC")
+    news_df = None
     news_path = Path(news_file)
     if news_path.exists():
         try:
@@ -931,6 +964,10 @@ def full_system(
     else:
         df = integrate_event_features(df, None, prefix="global_event")
         global_events_status = "missing_optional_file"
+    # Fall back to news_df for neighbor-event context when global_events.csv is absent
+    if events_df is None and news_df is not None:
+        events_df = news_df
+        global_events_status = f"fallback_to_news ({len(events_df)} events)"
 
     events_stage_completed_at = pd.Timestamp.now("UTC")
     lifecycle_stages.append(
@@ -1016,6 +1053,7 @@ def full_system(
             source_mode=source_mode_norm,
         )
         result.update(observation_meta)
+        result = _apply_gann_signal_alignment(result)
         observation_logged = True
     except Exception as exc:
         # Observation logging should never block live/historical intelligence output.

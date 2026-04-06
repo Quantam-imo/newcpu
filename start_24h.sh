@@ -192,6 +192,11 @@ else
       --disable-background-timer-throttling \
       --disable-renderer-backgrounding \
       --disable-popup-blocking \
+      --disable-webgl \
+      --disable-webgl2 \
+      --disable-accelerated-2d-canvas \
+      --disable-canvas-aa \
+      --disable-gpu-compositing \
       --window-size=1280,900 \
       '$BROKER_URL' > '$LOG_DIR/chrome.log' 2>&1"
 

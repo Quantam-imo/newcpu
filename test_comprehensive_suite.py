@@ -52,6 +52,7 @@ def test_ict_structure_detection() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_ict_liquidity_sweep() -> TestResult:
@@ -68,6 +69,7 @@ def test_ict_liquidity_sweep() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_ict_fvg_detection() -> TestResult:
@@ -84,6 +86,7 @@ def test_ict_fvg_detection() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_ict_order_block() -> TestResult:
@@ -100,6 +103,7 @@ def test_ict_order_block() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_ict_turtle_soup() -> TestResult:
@@ -116,6 +120,7 @@ def test_ict_turtle_soup() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_ict_model() -> TestResult:
@@ -138,6 +143,7 @@ def test_ict_model() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 # ============================================================================
@@ -156,6 +162,7 @@ def test_gann_analysis() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_gann_square_of_9() -> TestResult:
@@ -171,6 +178,7 @@ def test_gann_square_of_9() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_gann_spiral() -> TestResult:
@@ -186,6 +194,7 @@ def test_gann_spiral() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_gann_degree() -> TestResult:
@@ -202,6 +211,7 @@ def test_gann_degree() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 # ============================================================================
@@ -222,6 +232,7 @@ def test_astrology_planets() -> TestResult:
             result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_astrology_aspects() -> TestResult:
@@ -241,6 +252,7 @@ def test_astrology_aspects() -> TestResult:
             result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 # ============================================================================
@@ -258,6 +270,7 @@ def test_mentor_engine_initialization() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_mentor_htf_bias() -> TestResult:
@@ -273,6 +286,7 @@ def test_mentor_htf_bias() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_mentor_ltf_structure() -> TestResult:
@@ -288,6 +302,7 @@ def test_mentor_ltf_structure() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_mentor_iceberg_detection() -> TestResult:
@@ -303,6 +318,7 @@ def test_mentor_iceberg_detection() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_mentor_context_building() -> TestResult:
@@ -343,6 +359,7 @@ def test_mentor_context_building() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_mentor_model_disable() -> TestResult:
@@ -358,6 +375,7 @@ def test_mentor_model_disable() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_mentor_ict_sub_engine() -> TestResult:
@@ -374,6 +392,7 @@ def test_mentor_ict_sub_engine() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_mentor_gann_sub_engine() -> TestResult:
@@ -390,6 +409,7 @@ def test_mentor_gann_sub_engine() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_mentor_astro_sub_engine() -> TestResult:
@@ -406,6 +426,7 @@ def test_mentor_astro_sub_engine() -> TestResult:
         result.message = "Module not available"
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 # ============================================================================
@@ -427,6 +448,7 @@ def test_broker_bridge_endpoint() -> TestResult:
         result.data = {k: data[k] for k in ["status", "bridge_ready", "same_browser_mode"] if k in data}
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_status_endpoint() -> TestResult:
@@ -445,6 +467,7 @@ def test_status_endpoint() -> TestResult:
         result.data = {k: data[k] for k in ["balance", "phase", "daily_loss"] if k in data}
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_symbol_registry_endpoint() -> TestResult:
@@ -463,6 +486,7 @@ def test_symbol_registry_endpoint() -> TestResult:
         result.data = {"item_count": len(data) if isinstance(data, dict) else len(data)}
     except Exception as e:
         result.message = f"Error: {str(e)}"
+    assert result.passed, result.message
     return result
 
 def test_ai_mentor_endpoint() -> TestResult:
@@ -481,6 +505,7 @@ def test_ai_mentor_endpoint() -> TestResult:
         result.data = {"keys": list(data.keys())}
     except Exception as e:
         result.message = f"Error or endpoint not implemented: {str(e)}"
+    assert result.passed, result.message
     return result
 
 # ============================================================================

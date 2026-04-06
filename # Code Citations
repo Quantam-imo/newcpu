@@ -1,0 +1,13 @@
+# Code Citations
+
+## License: MIT
+https://github.com/silenc3502/fastapi-spring-connector/tree/b09e8c4df62d1fe693fda716ad91673cc5551566/demo/src/main/java/com/example/demo/config/CorsConfig.java
+
+```
+http://127.0.0.1:8080",
+             "http://localhost:8080",
+             "http://127.0.0.1:8000",
+             "http://localhost:8000",
+             "http:/
+```
+

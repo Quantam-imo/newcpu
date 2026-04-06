@@ -307,6 +307,166 @@
             color: var(--muted);
         }
 
+        .math-verdict {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            border: 1px solid var(--border);
+            background: var(--surface-alt);
+            color: var(--text);
+        }
+
+        .math-verdict.strong {
+            border-color: var(--success);
+            color: var(--success);
+        }
+
+        .math-verdict.acceptable {
+            border-color: #22d3ee;
+            color: #22d3ee;
+        }
+
+        .math-verdict.weak {
+            border-color: var(--warning);
+            color: var(--warning);
+        }
+
+        .math-verdict.fail {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        .math-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .math-item {
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 10px;
+        }
+
+        .math-item .k {
+            color: var(--muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+            margin-bottom: 4px;
+        }
+
+        .math-item .v {
+            color: var(--text);
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .math-qa {
+            display: grid;
+            gap: 8px;
+            max-height: 260px;
+            overflow-y: auto;
+            padding-right: 2px;
+        }
+
+        .math-qa-item {
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 10px;
+        }
+
+        .math-qa-item.pass {
+            border-left: 3px solid var(--success);
+        }
+
+        .math-qa-item.fail {
+            border-left: 3px solid var(--danger);
+        }
+
+        .math-qa-head {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+
+        .math-qa-detail {
+            font-size: 11px;
+            color: var(--muted);
+        }
+
+        /* ── Blocking alert banners (WAIT / Post-trade review) ── */
+        .alert-banner {
+            display: none;
+            width: 100%;
+            border-radius: 8px;
+            padding: 14px 18px;
+            margin-bottom: 14px;
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            border-left: 5px solid;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .alert-banner.visible { display: flex; }
+        .alert-banner-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+        .alert-banner-body { flex: 1; }
+        .alert-banner-body .banner-title { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+        .alert-banner-body .banner-sub { font-size: 12px; font-weight: 400; color: inherit; opacity: 0.85; }
+
+        .alert-banner.wait-banner {
+            background: rgba(245, 158, 11, 0.12);
+            border-color: var(--warning);
+            color: var(--warning);
+        }
+        .alert-banner.post-trade-banner {
+            background: rgba(248, 113, 113, 0.12);
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        /* ── 52-question Gann scoring panel ── */
+        .gann-q-verdict {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            border: 1px solid var(--border);
+            background: var(--surface-alt);
+            color: var(--text);
+        }
+        .gann-q-verdict.strong  { background: rgba(16,185,129,0.15); border-color: #10b981; color: #10b981; }
+        .gann-q-verdict.acceptable { background: rgba(56,189,248,0.12); border-color: var(--accent); color: var(--accent); }
+        .gann-q-verdict.weak    { background: rgba(245,158,11,0.12); border-color: var(--warning); color: var(--warning); }
+        .gann-q-verdict.fail    { background: rgba(248,113,113,0.12); border-color: var(--danger); color: var(--danger); }
+
+        .gann-q-list {
+            display: grid;
+            gap: 6px;
+            max-height: 340px;
+            overflow-y: auto;
+            padding-right: 2px;
+            margin-top: 10px;
+        }
+        .gann-q-item {
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 10px;
+        }
+        .gann-q-item.pass { border-left: 3px solid var(--success); }
+        .gann-q-item.fail { border-left: 3px solid var(--danger); }
+        .gann-q-head { font-size: 11px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
+        .gann-q-detail { font-size: 11px; color: var(--muted); }
+
         .ai-badge {
             display: inline-block;
             background: linear-gradient(135deg, rgba(56, 189, 248, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%);
@@ -322,6 +482,124 @@
         .responsive {
             overflow-x: auto;
         }
+
+        /* ── Record Outcome modal ── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.65);
+            z-index: 9000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.open { display: flex; }
+        .modal-box {
+            background: var(--surface);
+            border: 1px solid var(--border-strong);
+            border-radius: 10px;
+            padding: 24px;
+            width: min(540px, 94vw);
+            max-height: 88vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow);
+        }
+        .modal-title {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .modal-form-group {
+            margin-bottom: 14px;
+        }
+        .modal-form-group label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: var(--muted);
+            margin-bottom: 5px;
+        }
+        .modal-form-group input,
+        .modal-form-group select {
+            width: 100%;
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            color: var(--text);
+            padding: 8px 10px;
+            font-size: 13px;
+            outline: none;
+        }
+        .modal-form-group input:focus,
+        .modal-form-group select:focus {
+            border-color: var(--accent);
+        }
+        .modal-form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 18px;
+            justify-content: flex-end;
+        }
+        .modal-btn {
+            padding: 8px 18px;
+            border-radius: 5px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: var(--surface-alt);
+            color: var(--text);
+        }
+        .modal-btn.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #060b14;
+        }
+        .modal-btn.primary:hover { opacity: 0.88; }
+        .modal-result {
+            margin-top: 14px;
+            padding: 10px 12px;
+            border-radius: 5px;
+            font-size: 12px;
+            display: none;
+        }
+        .modal-result.success {
+            background: rgba(16,185,129,0.12);
+            border: 1px solid var(--success);
+            color: var(--success);
+            display: block;
+        }
+        .modal-result.error {
+            background: rgba(248,113,113,0.12);
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            display: block;
+        }
+        .banner-record-btn {
+            margin-left: auto;
+            background: var(--danger);
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .banner-record-btn:hover { opacity: 0.85; }
 
         @media (max-width: 768px) {
             .header {
@@ -612,19 +890,95 @@
 
     <div class="container">
         <div id="messageBox"></div>
-        <div id="content" style="display:none;">
-            <div class="chart-shell">
-                <div class="chart-head">
-                    <div class="chart-title">XAUUSD Market Structure Chart</div>
-                    <div class="chart-meta">
-                        <span id="chartMetaRange">Range: 25Y</span>
-                        <span id="chartMetaRows">Candles: --</span>
-                        <span id="chartMetaTf">Applied TF: --</span>
+
+        <!-- WAIT signal blocking banner -->
+        <div class="alert-banner wait-banner" id="waitBanner">
+            <div class="alert-banner-icon">⏸</div>
+            <div class="alert-banner-body">
+                <div class="banner-title">WAIT — No Trade</div>
+                <div class="banner-sub" id="waitBannerSub">Confluence insufficient. Do not enter until conditions align.</div>
+            </div>
+        </div>
+
+        <!-- Pending outcome floating indicator (visible when localStorage has a stored prediction ID) -->
+        <div id="pendingOutcomeIndicator"
+             style="display:none;position:fixed;top:12px;right:16px;z-index:200;
+                    background:#b45309;color:#fff;border-radius:20px;
+                    padding:6px 14px;font-size:12px;font-weight:600;
+                    cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.4);"
+             onclick="openOutcomeModal()">📋 Pending Outcome</div>
+
+        <!-- Post-trade review blocking banner -->
+        <div class="alert-banner post-trade-banner" id="postTradeBanner">
+            <div class="alert-banner-icon">📋</div>
+            <div class="alert-banner-body">
+                <div class="banner-title">POST-TRADE REVIEW REQUIRED</div>
+                <div class="banner-sub" id="postTradeBannerSub">Signal window closed. Record the outcome to close the learning loop.</div>
+            </div>
+            <button class="banner-record-btn" onclick="openOutcomeModal()">Record Outcome</button>
+        </div>
+
+        <!-- Record Outcome Modal -->
+        <div class="modal-overlay" id="outcomeModal">
+            <div class="modal-box">
+                <div class="modal-title">📋 Record Trade Outcome</div>
+
+                <div class="modal-form-group">
+                    <label>Prediction / Observation ID</label>
+                    <input type="text" id="roFieldId" placeholder="e.g. obs-2026-04-04" />
+                </div>
+
+                <div class="modal-form-row">
+                    <div class="modal-form-group">
+                        <label>Outcome Direction</label>
+                        <select id="roFieldDirection">
+                            <option value="UP">UP (price rose)</option>
+                            <option value="DOWN">DOWN (price fell)</option>
+                            <option value="SIDEWAYS">SIDEWAYS (no move)</option>
+                        </select>
+                    </div>
+                    <div class="modal-form-group">
+                        <label>Realized Price</label>
+                        <input type="number" id="roFieldRealizedPrice" step="0.01" placeholder="e.g. 3085.50" />
                     </div>
                 </div>
-                <div id="mclChart" class="chart-wrap"></div>
-                <div id="mclChartStatus" class="chart-status">Waiting for chart data...</div>
+
+                <div class="modal-form-row">
+                    <div class="modal-form-group">
+                        <label>Actual Move (pips / points)</label>
+                        <input type="number" id="roFieldMovePips" step="0.01" placeholder="e.g. 35.5" />
+                    </div>
+                    <div class="modal-form-group">
+                        <label>Bars / Candles to Outcome</label>
+                        <input type="number" id="roFieldBars" step="1" min="1" placeholder="e.g. 12" />
+                    </div>
+                </div>
+
+                <div id="roResult" class="modal-result"></div>
+
+                <div class="modal-actions">
+                    <button class="modal-btn" onclick="closeOutcomeModal()">Cancel</button>
+                    <button class="modal-btn primary" onclick="submitOutcome()">Submit Outcome</button>
+                </div>
             </div>
+        </div>
+
+        <!-- Chart renders immediately on load, independent of slow analysis API -->
+        <div class="chart-shell">
+            <div class="chart-head">
+                <div class="chart-title" id="chartTitle">XAUUSD Market Structure Chart</div>
+                <div class="chart-meta">
+                    <span id="chartMetaRange">Range: 25Y</span>
+                    <span id="chartMetaRows">Candles: --</span>
+                    <span id="chartMetaTf">Applied TF: --</span>
+                    <span id="chartLiveTag" style="color:#fcd34d;display:none;">&#9679; LIVE</span>
+                </div>
+            </div>
+            <div id="mclChart" class="chart-wrap"></div>
+            <div id="mclChartStatus" class="chart-status">Loading chart data...</div>
+        </div>
+
+        <div id="content" style="display:none;">
 
             <!-- Primary Signal -->
             <div class="grid">
@@ -811,6 +1165,58 @@
                 <div id="driversList"></div>
             </div>
 
+            <!-- Mathematical Validation -->
+            <div class="section" id="mathSection" style="display:none;">
+                <div class="section-title">📐 Mathematical Validation (MATH_01..MATH_15)</div>
+                <div class="math-grid">
+                    <div class="math-item">
+                        <div class="k">Verdict</div>
+                        <div class="v"><span id="mathVerdict" class="math-verdict">--</span></div>
+                    </div>
+                    <div class="math-item">
+                        <div class="k">Score</div>
+                        <div class="v" id="mathScore">--</div>
+                    </div>
+                    <div class="math-item">
+                        <div class="k">Pass / Fail</div>
+                        <div class="v" id="mathPassFail">--</div>
+                    </div>
+                    <div class="math-item">
+                        <div class="k">Post-Trade Review</div>
+                        <div class="v" id="postTradeReview">--</div>
+                    </div>
+                </div>
+                <div class="math-qa" id="mathQuestionList"></div>
+            </div>
+
+            <!-- 52-Question Gann Scoring Panel -->
+            <div class="section" id="gannQSection" style="display:none;">
+                <div class="section-title">🔢 52-Question Gann Score (All Frameworks)</div>
+                <div class="math-grid">
+                    <div class="math-item">
+                        <div class="k">Verdict</div>
+                        <div class="v"><span id="gannQVerdict" class="gann-q-verdict">--</span></div>
+                    </div>
+                    <div class="math-item">
+                        <div class="k">Score</div>
+                        <div class="v" id="gannQScore">--</div>
+                    </div>
+                    <div class="math-item">
+                        <div class="k">Pass / Fail</div>
+                        <div class="v" id="gannQPassFail">--</div>
+                    </div>
+                    <div class="math-item">
+                        <div class="k">Weakest Component</div>
+                        <div class="v" id="gannQWeakest">--</div>
+                    </div>
+                    <div class="math-item">
+                        <div class="k">Probabilities</div>
+                        <div class="v" id="gannQProbs">--</div>
+                    </div>
+                </div>
+                <div class="gann-q-list" id="gannQList"></div>
+            </div>
+
             <!-- Trend Start-End and Signal Reason -->
             <div class="section">
                 <div class="section-title">🧭 25Y Trend Window and Signal Reason</div>
@@ -843,6 +1249,58 @@
                 <div class="reason-panel" id="signalReasonBox">Signal reasoning will appear here.</div>
             </div>
 
+            <!-- ⚖️ Learning Engine Weights Panel -->
+            <div class="section" id="weightsSection">
+                <div class="section-title">⚖️ Learning Engine — Calibrated Signal Weights</div>
+                <div id="weightsStatus" style="font-size:11px;color:var(--muted);margin-bottom:8px;">Loading weights...</div>
+                <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+                    <button onclick="runBatchReplay()" id="btnRunBatch" style="padding:5px 14px;font-size:11px;background:#1e3a5f;color:#90caf9;border:1px solid #2a5298;border-radius:6px;cursor:pointer;" title="Run batch replay over all chart data files">🔄 Run Batch Replay</button>
+                    <button onclick="resetWeights()" id="btnResetWeights" style="padding:5px 14px;font-size:11px;background:#3b1515;color:#f87171;border:1px solid #7f1d1d;border-radius:6px;cursor:pointer;" title="Reset all signal weights to baseline">↩ Reset Weights</button>
+                    <span id="batchReplayStatus" style="font-size:10px;color:var(--muted);align-self:center;"></span>
+                </div>
+                <div id="weightsGrid" class="trend-grid" style="gap:8px;"></div>
+                <div style="margin-top:10px;">
+                    <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">📊 Signal Accuracy (last 20 outcomes trend)</div>
+                    <div id="accuracySparkline" style="display:flex;align-items:flex-end;gap:2px;height:32px;"></div>
+                </div>
+                <div id="directionAccuracyRow" style="margin-top:10px;display:flex;gap:12px;flex-wrap:wrap;"></div>
+            </div>
+
+            <!-- 📈 Trade History Panel -->
+            <div class="section" id="tradeHistorySection">
+                <div class="section-title">📈 Trade History (Last 50 Outcomes)</div>
+                <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+                    <div id="tradeHistoryStatus" style="font-size:11px;color:var(--muted);flex:1;">Loading history...</div>
+                    <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px;cursor:pointer;">
+                        <input type="checkbox" id="tradeHistoryWinsOnly" onchange="loadTradeHistory()" style="cursor:pointer;">
+                        Wins only
+                    </label>
+                </div>
+                <div class="matrix-shell">
+                    <table class="matrix-table" id="tradeHistoryTable">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Timestamp</th>
+                                <th>ID</th>
+                                <th>Direction</th>
+                                <th>Entry</th>
+                                <th>Realized</th>
+                                <th>Move (pips)</th>
+                                <th>Outcome</th>
+                                <th>Bars</th>
+                                <th>Result</th>
+                                <th>Accuracy</th>
+                                <th>Confluence</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tradeHistoryBody">
+                            <tr><td colspan="12">Load analysis to populate trade history.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Timeframe-wise AI Observation Matrix -->
             <div class="section">
                 <div class="section-title">📋 AI Observation Matrix (Timeframe-wise)</div>
@@ -861,23 +1319,73 @@
                                 <th>Date</th>
                                 <th>Time</th>
                                 <th>Trend Start</th>
+                                <th>Start Price</th>
                                 <th>Trend End</th>
+                                <th>End Price</th>
+                                <th>Window (h)</th>
                                 <th>Astro Event</th>
                                 <th>News Event</th>
                                 <th>Gann (Price=Degree)</th>
+                                <th>Gann Confirm</th>
+                                <th>Time Confirm</th>
+                                <th>Structure Confirm</th>
+                                <th>Tape Confirm</th>
+                                <th>Confluence</th>
                                 <th>Price=Time</th>
                                 <th>Time=Price</th>
                                 <th>Count=Cycles</th>
                                 <th>Signal</th>
+                                <th>Gann Score</th>
                                 <th>AI Model</th>
                                 <th>Memory Size</th>
                                 <th>Engines Read</th>
-                                <th>Signal Reason</th>
+                                <th>Gann Mindset Narration</th>
                             </tr>
                         </thead>
                         <tbody id="tfObsBody">
                             <tr>
-                                <td colspan="17">Load analysis to build timeframe observation matrix.</td>
+                                <td colspan="26">Load analysis to build timeframe observation matrix.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Gann Deep Q&A (Date Selectable) -->
+            <div class="section">
+                <div class="section-title">🧠 Gann Deep Q&A (Past / Present / Future)</div>
+                <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+                    <label for="gannQaDate" style="font-size:12px;color:var(--muted);">Select Date</label>
+                    <input id="gannQaDate" type="date" style="background:#0b1220;color:#d6deeb;border:1px solid #243446;border-radius:8px;padding:6px 8px;" />
+                    <label for="gannQaHorizon" style="font-size:12px;color:var(--muted);">Forecast Horizon</label>
+                    <select id="gannQaHorizon" style="background:#0b1220;color:#d6deeb;border:1px solid #243446;border-radius:8px;padding:6px 8px;">
+                        <option value="1">+1 day</option>
+                        <option value="3">+3 days</option>
+                        <option value="7">+7 days</option>
+                        <option value="14">+14 days</option>
+                    </select>
+                    <button id="loadGannQaBtn" class="btn" style="padding:6px 10px;">Load Gann Q&A</button>
+                    <span id="gannQaMeta" style="font-size:11px;color:var(--muted);">--</span>
+                </div>
+                <div id="gannQaSummary" class="reason-panel" style="margin-bottom:10px;">Date summary will appear here.</div>
+                <div class="matrix-shell">
+                    <table class="matrix-table">
+                        <thead>
+                            <tr>
+                                <th>Era</th>
+                                <th>Date Time</th>
+                                <th>Mode</th>
+                                <th>Question</th>
+                                <th>AI Answer (Gann + Supporting Concepts)</th>
+                                <th>Scenario Probabilities</th>
+                                <th>Invalidation Rules</th>
+                                <th>News Context</th>
+                                <th>Suggested Signal</th>
+                            </tr>
+                        </thead>
+                        <tbody id="gannQaBody">
+                            <tr>
+                                <td colspan="9">Select date to load Gann Q&A automatically.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -1024,6 +1532,9 @@
         }
 
         function _buildSignalReasonText(data) {
+            const obs = data.observation || {};
+            const gannMindset = String(obs.gann_mindset_narration || data.observation_gann_mindset_narration || "").trim();
+            if (gannMindset) return gannMindset;
             const summary = String(data.reasoning_summary || "").trim();
             const chain = Array.isArray(data.reasoning_chain) ? data.reasoning_chain : [];
             if (summary) return summary;
@@ -1057,18 +1568,39 @@
                 gann_degree: (data.observation || {}).gann_degree ?? data.observation_gann_degree,
                 geometry_angle_deg: (data.observation || {}).geometry_angle_deg ?? data.observation_geometry_angle_deg,
                 physics_velocity_price_per_hour: (data.observation || {}).physics_velocity_price_per_hour ?? data.observation_physics_velocity,
+                signal_start_time: (data.observation || {}).signal_start_time || data.observation_signal_start_time,
+                signal_end_time: (data.observation || {}).signal_end_time || data.observation_signal_end_time,
+                signal_start_price: (data.observation || {}).signal_start_price ?? data.observation_signal_start_price,
+                signal_end_price: (data.observation || {}).signal_end_price ?? data.observation_signal_end_price,
+                signal_window_hours: (data.observation || {}).signal_window_hours ?? data.observation_signal_window_hours,
+                gann_nearest_key_angle: (data.observation || {}).gann_nearest_key_angle ?? data.observation_gann_nearest_key_angle,
+                gann_angle_proximity: (data.observation || {}).gann_angle_proximity ?? data.observation_gann_angle_proximity,
+                confirmation_geometry: (data.observation || {}).confirmation_geometry || data.observation_confirmation_geometry,
+                confirmation_time: (data.observation || {}).confirmation_time || data.observation_confirmation_time,
+                confirmation_structure: (data.observation || {}).confirmation_structure || data.observation_confirmation_structure,
+                confirmation_tape_action: (data.observation || {}).confirmation_tape_action || data.observation_confirmation_tape_action,
+                numerology_cycle_runtime: (data.observation || {}).numerology_cycle_runtime || data.observation_numerology_cycle_runtime,
+                structure_major_runtime: (data.observation || {}).structure_major_runtime || data.observation_structure_major_runtime,
+                physics_momentum_runtime: (data.observation || {}).physics_momentum_runtime || data.observation_physics_momentum_runtime,
+                gann_mindset_bias: (data.observation || {}).gann_mindset_bias || data.observation_gann_mindset_bias,
+                gann_mindset_narration: (data.observation || {}).gann_mindset_narration || data.observation_gann_mindset_narration,
                 price_time_ratio: (data.observation || {}).price_time_ratio ?? data.observation_price_time_ratio,
                 degree_time_ratio: (data.observation || {}).degree_time_ratio ?? data.observation_degree_time_ratio,
             };
             const latest = _dtParts(observation.latest_time || data.observation_latest_time || data.analysis_completed_at_utc);
-            const tStart = observation.trend_start_time || data.observation_trend_start_time || "--";
-            const tEnd = observation.latest_time || data.observation_latest_time || "--";
-            const gann = `${observation.price_degree != null ? observation.price_degree : "--"} = ${observation.gann_degree != null ? observation.gann_degree : "--"}deg`;
-            const signalReason = _buildSignalReasonText(data);
+            const tStart = observation.signal_start_time || observation.trend_start_time || data.observation_signal_start_time || data.observation_trend_start_time || "--";
+            const tEnd = observation.signal_end_time || observation.latest_time || data.observation_signal_end_time || data.observation_latest_time || "--";
+            const startPrice = _fmt(observation.signal_start_price != null ? observation.signal_start_price : observation.trend_start_price, 4);
+            const endPrice = _fmt(observation.signal_end_price != null ? observation.signal_end_price : observation.latest_price, 4);
+            const windowHours = _fmt(observation.signal_window_hours, 2);
+            const gann = `${observation.price_degree != null ? observation.price_degree : "--"} = ${observation.gann_degree != null ? observation.gann_degree : "--"}deg @${observation.gann_nearest_key_angle != null ? observation.gann_nearest_key_angle : "--"}deg (${observation.gann_angle_proximity || "--"})`;
+            const signalReason = String(observation.gann_mindset_narration || _buildSignalReasonText(data));
+            const confluence = `${observation.numerology_cycle_runtime || "--"} | ${observation.structure_major_runtime || "--"} | ${observation.physics_momentum_runtime || "--"} | ${observation.gann_mindset_bias || "--"}`;
             const cycles = observation.gann_cycle_degree != null
                 ? `${observation.gann_cycle_degree}${observation.gann_cycle_quadrant ? ` (${observation.gann_cycle_quadrant})` : ""}`
                 : "--";
             const signal = String(data.signal || "--").toUpperCase();
+            const signalOriginal = String(data.signal_original || signal).toUpperCase();
             const aiModel = data.ai_model_used
                 ? String(data.ai_model_version || "model-active")
                 : "rule-fallback";
@@ -1130,14 +1662,23 @@
                     <td>${_escapeHtml(latest.date)}</td>
                     <td>${_escapeHtml(latest.time)}</td>
                     <td>${_escapeHtml(String(tStart).replace("T", " "))}</td>
+                    <td>${_escapeHtml(startPrice)}</td>
                     <td>${_escapeHtml(String(tEnd).replace("T", " "))}</td>
+                    <td>${_escapeHtml(endPrice)}</td>
+                    <td>${_escapeHtml(windowHours)}</td>
                     <td>${_escapeHtml(astro)}</td>
                     <td>${_escapeHtml(news)}</td>
                     <td>${_escapeHtml(gann)}</td>
+                    <td>${_escapeHtml(observation.confirmation_geometry || "--")}</td>
+                    <td>${_escapeHtml(observation.confirmation_time || "--")}</td>
+                    <td>${_escapeHtml(observation.confirmation_structure || "--")}</td>
+                    <td>${_escapeHtml(observation.confirmation_tape_action || "--")}</td>
+                    <td>${_escapeHtml(confluence)}</td>
                     <td>${_escapeHtml(_fmt(observation.price_time_ratio, 8))}</td>
                     <td>${_escapeHtml(_fmt(observation.degree_time_ratio, 8))}</td>
                     <td>${_escapeHtml(cycles)}</td>
-                    <td>${_escapeHtml(signal)}</td>
+                    <td>${_escapeHtml(signal === signalOriginal ? signal : `${signal} (orig:${signalOriginal})`)}</td>
+                    <td>${_escapeHtml(data.gann_questions_pct != null ? `${Number(data.gann_questions_pct).toFixed(1)}% (${String(data.gann_questions_verdict || "--")})` : "--")}</td>
                     <td>${_escapeHtml(aiModel)}</td>
                     <td>${_escapeHtml(memorySize)}</td>
                     <td>${_escapeHtml(engineCount)}</td>
@@ -1191,11 +1732,84 @@
             }
         }
 
+        async function _fetchGannQA(symbol, dateValue, horizonDays, timeoutMs = 20000) {
+            const params = new URLSearchParams();
+            params.set("symbol", symbol);
+            if (dateValue) params.set("date", dateValue);
+            params.set("horizon_days", String(horizonDays || 1));
+            params.set("limit", "120");
+
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                const response = await fetch(`${API_BASE}/market_causality/gann_qa?${params.toString()}`, {
+                    signal: controller.signal,
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return await response.json();
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+
+        async function loadGannQATable(symbol, selectedDate) {
+            const body = document.getElementById("gannQaBody");
+            const meta = document.getElementById("gannQaMeta");
+            const summaryEl = document.getElementById("gannQaSummary");
+            const horizonEl = document.getElementById("gannQaHorizon");
+            const horizonDays = Number(horizonEl?.value || 1);
+            if (!body) return;
+
+            body.innerHTML = `<tr><td colspan="9">Loading Gann Q&A...</td></tr>`;
+            try {
+                const payload = await _fetchGannQA(symbol, selectedDate, horizonDays, 25000);
+                const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+                const counts = payload?.counts || {};
+                const summary = payload?.summary || {};
+
+                if (meta) {
+                    meta.textContent = `Past ${counts.past ?? 0} | Present ${counts.present ?? 0} | Future ${counts.future ?? 0} | QA ${counts.qa_rows ?? rows.length}`;
+                }
+                if (summaryEl) {
+                    const dominant = summary?.dominant_signal || "--";
+                    const sc = summary?.signal_counts || {};
+                    const overview = summary?.overview || "No summary available for selected date.";
+                    const hz = summary?.horizon_days ?? horizonDays;
+                    summaryEl.textContent = `${overview} | Horizon=+${hz}d | Dominant=${dominant} | BUY=${sc.BUY ?? 0}, SELL=${sc.SELL ?? 0}, WAIT=${sc.WAIT ?? 0}`;
+                }
+
+                if (rows.length === 0) {
+                    body.innerHTML = `<tr><td colspan="9">No Q&A rows found for selected date.</td></tr>`;
+                    return;
+                }
+
+                body.innerHTML = rows.map((r) => `
+                    <tr>
+                        <td>${_escapeHtml(r.era || "--")}</td>
+                        <td>${_escapeHtml(String(r.ts || "--").replace("T", " "))}</td>
+                        <td>${_escapeHtml(r.answer_mode || "--")}</td>
+                        <td class="reason">${_escapeHtml(r.question || "--")}</td>
+                        <td class="reason">${_escapeHtml(r.answer || "--")}</td>
+                        <td>${_escapeHtml(`H+${r.forecast_horizon_days || horizonDays}d | BUY:${((r.scenario_probs||{}).buy ?? 0)} SELL:${((r.scenario_probs||{}).sell ?? 0)} WAIT:${((r.scenario_probs||{}).wait ?? 0)}`)}</td>
+                        <td class="reason">${_escapeHtml(Array.isArray(r.invalidation_rules) ? r.invalidation_rules.join(" | ") : "--")}</td>
+                        <td class="reason">${_escapeHtml(r.news_context || "--")}</td>
+                        <td>${_escapeHtml((r.recommended_signal || "--").toUpperCase())}</td>
+                    </tr>
+                `).join("");
+            } catch (err) {
+                if (meta) meta.textContent = "Q&A unavailable";
+                if (summaryEl) summaryEl.textContent = "Unable to build date summary for selected date.";
+                body.innerHTML = `<tr><td colspan="9">Unable to load Gann Q&A: ${_escapeHtml(err?.message || "unknown error")}</td></tr>`;
+            }
+        }
+
         async function loadTimeframeObservationMatrix(symbol, selectedData, selectedTimeframe, forceRefresh = false) {
             const body = document.getElementById("tfObsBody");
             if (!body) return;
 
-            body.innerHTML = `<tr><td colspan="17">Building timeframe matrix...</td></tr>`;
+            body.innerHTML = `<tr><td colspan="25">Building timeframe matrix...</td></tr>`;
 
             try {
                 const matrixPayload = await _fetchTimeframeMatrix(symbol, forceRefresh, 50000);
@@ -1221,7 +1835,7 @@
                     rows.push(`
                         <tr>
                             <td><span class="matrix-pill">${_escapeHtml(String(tf).toUpperCase())}</span></td>
-                            <td colspan="16" class="reason">Unable to load timeframe: ${_escapeHtml(error?.message || "unknown error")}</td>
+                            <td colspan="24" class="reason">Unable to load timeframe: ${_escapeHtml(error?.message || "unknown error")}</td>
                         </tr>
                     `);
                 }
@@ -1232,10 +1846,10 @@
 
         function updateTrendWindowFromSummary(data) {
             const obs = data.observation || {};
-            const startTime = obs.trend_start_time || data.observation_trend_start_time || "--";
-            const endTime = obs.latest_time || data.observation_latest_time || "--";
-            const startPrice = _asFiniteNumber(obs.trend_start_price);
-            const endPrice = _asFiniteNumber(obs.latest_price);
+            const startTime = obs.signal_start_time || obs.trend_start_time || data.observation_signal_start_time || data.observation_trend_start_time || "--";
+            const endTime = obs.signal_end_time || obs.latest_time || data.observation_signal_end_time || data.observation_latest_time || "--";
+            const startPrice = _asFiniteNumber(obs.signal_start_price != null ? obs.signal_start_price : obs.trend_start_price);
+            const endPrice = _asFiniteNumber(obs.signal_end_price != null ? obs.signal_end_price : obs.latest_price);
             const moveAbs = startPrice != null && endPrice != null ? endPrice - startPrice : null;
             const movePct = startPrice != null && endPrice != null && startPrice !== 0
                 ? ((endPrice - startPrice) / startPrice) * 100
@@ -1390,8 +2004,12 @@
             if (statusEl) {
                 const depth = payload.historical_depth_years != null ? `${payload.historical_depth_years}y depth` : "depth unknown";
                 const fallback = payload.timeframe_fallback_applied ? ` | fallback: ${payload.timeframe_fallback_reason || "yes"}` : "";
+                const gapFill = payload.live_gap_fill_applied ? ` | live-fill: ${payload.live_gap_reason || "yes"}` : "";
+                const lastBar = normalized.length > 0
+                    ? ` | last: ${new Date(normalized[normalized.length-1].time * 1000).toISOString().replace("T"," ").slice(0,16)} UTC`
+                    : "";
                 statusEl.className = "chart-status";
-                statusEl.textContent = `Loaded ${normalized.length} candles (${depth})${fallback}`;
+                statusEl.textContent = `Loaded ${normalized.length} candles (${depth})${fallback}${gapFill}${lastBar}`;
             }
         }
 
@@ -1407,6 +2025,8 @@
         async function loadAnalysis(forceRefresh = false) {
             const symbol = document.getElementById("symbolInput").value.trim().toUpperCase() || DEFAULT_SYMBOL;
             const timeframe = document.getElementById("timeframeSelect").value || DEFAULT_TIMEFRAME;
+            const qaDateEl = document.getElementById("gannQaDate");
+            const qaDate = qaDateEl && qaDateEl.value ? qaDateEl.value : new Date().toISOString().slice(0, 10);
 
             document.getElementById("content").style.display = "none";
             showMessage("Loading analysis...");
@@ -1437,6 +2057,7 @@
                 updateTrendWindowFromSummary(data);
                 await loadChart(symbol, timeframe);
                 loadTimeframeObservationMatrix(symbol, data, timeframe, forceRefresh);
+                loadGannQATable(symbol, qaDate);
                 showMessage("✅ Analysis loaded successfully", "success");
                 document.getElementById("content").style.display = "block";
             } catch (error) {
@@ -1451,8 +2072,43 @@
         }
 
         function displayResults(data) {
-            // Signal
+            // ── Blocking banners ────────────────────────────────────────────
+            const waitBanner = document.getElementById("waitBanner");
+            const postTradeBanner = document.getElementById("postTradeBanner");
+
+            // WAIT banner
             const signal = data.signal || "--";
+            if (signal === "WAIT") {
+                const waitSub = `Confidence: ${data.confidence != null ? Number(data.confidence).toFixed(3) : "N/A"} | Tone: ${String(data.reasoning_tone || "neutral").toUpperCase()}`;
+                document.getElementById("waitBannerSub").textContent = waitSub;
+                waitBanner.classList.add("visible");
+            } else {
+                waitBanner.classList.remove("visible");
+            }
+
+            // Post-trade review banner
+            const reviewRequired = Boolean(data.post_trade_review_required);
+            // Track the current observation ID so the modal can pre-fill it
+            _currentPredictionId = data.observation_id || null;
+            if (_currentPredictionId) {
+                localStorage.setItem('mcl_pending_prediction_id', _currentPredictionId);
+            } else {
+                localStorage.removeItem('mcl_pending_prediction_id');
+            }
+            _updatePendingOutcomeIndicator();
+            if (reviewRequired) {
+                const dueAt = data.post_trade_due_at
+                    ? new Date(data.post_trade_due_at * 1000).toUTCString()
+                    : "unknown time";
+                const reason = String(data.post_trade_due_reason || "--").replaceAll("_", " ");
+                document.getElementById("postTradeBannerSub").textContent =
+                    `Signal window closed (${dueAt}). Reason: ${reason}.`;
+                postTradeBanner.classList.add("visible");
+            } else {
+                postTradeBanner.classList.remove("visible");
+            }
+
+            // Signal card
             document.getElementById("cardSignal").textContent = signal;
             const signalCard = document.getElementById("signalCard");
             signalCard.className = "card";
@@ -1613,6 +2269,106 @@
                 document.getElementById("driversSection").style.display = "block";
             }
 
+            // Mathematical validation (MATH_01..MATH_15)
+            const mathQuestions = Array.isArray(data.math_questions) ? data.math_questions : [];
+            const mathSection = document.getElementById("mathSection");
+            const mathVerdictEl = document.getElementById("mathVerdict");
+            const mathScoreEl = document.getElementById("mathScore");
+            const mathPassFailEl = document.getElementById("mathPassFail");
+            const mathListEl = document.getElementById("mathQuestionList");
+            const postTradeReviewEl = document.getElementById("postTradeReview");
+
+            const verdict = String(data.math_verdict || "INSUFFICIENT_DATA");
+            const score = Number.isFinite(Number(data.math_score)) ? Number(data.math_score) : 0;
+            const scorePct = Number.isFinite(Number(data.math_score_pct)) ? Number(data.math_score_pct) : 0;
+            const passed = Array.isArray(data.math_passed_ids) ? data.math_passed_ids.length : mathQuestions.filter(q => q && q.answer).length;
+            const failed = Array.isArray(data.math_failed_ids) ? data.math_failed_ids.length : mathQuestions.filter(q => q && !q.answer).length;
+
+            mathVerdictEl.textContent = verdict;
+            mathVerdictEl.className = "math-verdict";
+            if (verdict === "STRONG_MATH") mathVerdictEl.classList.add("strong");
+            else if (verdict === "ACCEPTABLE_MATH") mathVerdictEl.classList.add("acceptable");
+            else if (verdict === "WEAK_MATH") mathVerdictEl.classList.add("weak");
+            else if (verdict === "FAIL_MATH") mathVerdictEl.classList.add("fail");
+
+            mathScoreEl.textContent = `${score}/15 (${scorePct.toFixed(1)}%)`;
+            mathPassFailEl.textContent = `${passed} pass / ${failed} fail`;
+
+            const reviewReason = String(data.post_trade_due_reason || "--").replaceAll("_", " ");
+            postTradeReviewEl.textContent = reviewRequired ? `REQUIRED (${reviewReason})` : `Not due (${reviewReason})`;
+            postTradeReviewEl.style.color = reviewRequired ? "var(--danger)" : "var(--success)";
+
+            if (mathQuestions.length > 0) {
+                mathListEl.innerHTML = mathQuestions.map((q) => {
+                    const qid = String(q.question_id || "--");
+                    const mark = q.answer ? "PASS" : "FAIL";
+                    const rowClass = q.answer ? "pass" : "fail";
+                    const detail = String(q.detail || "--");
+                    const conf = Number.isFinite(Number(q.confidence)) ? Number(q.confidence) : 0;
+                    return `
+                        <div class="math-qa-item ${rowClass}">
+                            <div class="math-qa-head">${qid} · ${mark}</div>
+                            <div class="math-qa-detail">${String(q.question || "--")}</div>
+                            <div class="math-qa-detail">${detail} | confidence ${(conf * 100).toFixed(0)}%</div>
+                        </div>
+                    `;
+                }).join("");
+            } else {
+                mathListEl.innerHTML = `<div class="math-qa-item fail"><div class="math-qa-head">No math rows</div><div class="math-qa-detail">Summary had insufficient data for MATH_01..MATH_15.</div></div>`;
+            }
+            mathSection.style.display = "block";
+
+            // 52-Question Gann Score Panel
+            const gannQS = Array.isArray(data.gann_questions) ? data.gann_questions : [];
+            const gannQSection = document.getElementById("gannQSection");
+            if (gannQS.length > 0 || data.gann_questions_verdict) {
+                const gVerdictEl = document.getElementById("gannQVerdict");
+                const gVerdictRaw = String(data.gann_questions_verdict || "FAIL").toUpperCase();
+                gVerdictEl.textContent = gVerdictRaw;
+                gVerdictEl.className = "gann-q-verdict";
+                if (gVerdictRaw === "STRONG") gVerdictEl.classList.add("strong");
+                else if (gVerdictRaw === "ACCEPTABLE") gVerdictEl.classList.add("acceptable");
+                else if (gVerdictRaw === "WEAK") gVerdictEl.classList.add("weak");
+                else gVerdictEl.classList.add("fail");
+
+                const gScore = Number.isFinite(Number(data.gann_questions_score)) ? Number(data.gann_questions_score) : 0;
+                const gTotal = Number.isFinite(Number(data.gann_questions_total)) ? Number(data.gann_questions_total) : 52;
+                const gPct = Number.isFinite(Number(data.gann_questions_pct)) ? Number(data.gann_questions_pct) : 0;
+                document.getElementById("gannQScore").textContent = `${gScore}/${gTotal} (${gPct.toFixed(1)}%)`;
+
+                const gPass = gannQS.filter(q => q && q.answer).length;
+                const gFail = gannQS.filter(q => q && !q.answer).length;
+                document.getElementById("gannQPassFail").textContent = `${gPass} pass / ${gFail} fail`;
+
+                const weakest = String(data.gann_weakest_component || "--").toUpperCase();
+                document.getElementById("gannQWeakest").textContent = weakest;
+
+                const bProb = data.gann_buy_prob != null ? Number(data.gann_buy_prob).toFixed(1) : "--";
+                const sProb = data.gann_sell_prob != null ? Number(data.gann_sell_prob).toFixed(1) : "--";
+                const wProb = data.gann_wait_prob != null ? Number(data.gann_wait_prob).toFixed(1) : "--";
+                document.getElementById("gannQProbs").textContent = `B:${bProb}% S:${sProb}% W:${wProb}%`;
+
+                const gannListEl = document.getElementById("gannQList");
+                if (gannQS.length > 0) {
+                    gannListEl.innerHTML = gannQS.map(q => {
+                        const qid = String(q.question_id || "--");
+                        const mark = q.answer ? "✅ PASS" : "❌ FAIL";
+                        const rowClass = q.answer ? "pass" : "fail";
+                        const reasoning = String(q.reasoning || "--");
+                        const conf = Number.isFinite(Number(q.confidence)) ? (Number(q.confidence) * 100).toFixed(0) : "--";
+                        return `
+                            <div class="gann-q-item ${rowClass}">
+                                <div class="gann-q-head">${_escapeHtml(qid)} · ${mark} · conf ${conf}%</div>
+                                <div class="gann-q-detail">${_escapeHtml(reasoning)}</div>
+                            </div>
+                        `;
+                    }).join("");
+                } else {
+                    gannListEl.innerHTML = `<div class="gann-q-item fail"><div class="gann-q-head">No questions answered</div><div class="gann-q-detail">Payload had insufficient data.</div></div>`;
+                }
+                gannQSection.style.display = "block";
+            }
+
             // Reasoning
             if (data.reasoning_summary) {
                 document.getElementById("reasoningSummary").textContent = data.reasoning_summary;
@@ -1644,11 +2400,30 @@
 
         document.getElementById("loadBtn").addEventListener("click", () => loadAnalysis(false));
         document.getElementById("refreshBtn").addEventListener("click", () => loadAnalysis(true));
+        document.getElementById("loadGannQaBtn").addEventListener("click", () => {
+            const symbol = document.getElementById("symbolInput").value.trim().toUpperCase() || DEFAULT_SYMBOL;
+            const dateValue = document.getElementById("gannQaDate").value || new Date().toISOString().slice(0, 10);
+            loadGannQATable(symbol, dateValue);
+        });
+        document.getElementById("gannQaDate").addEventListener("change", () => {
+            const symbol = document.getElementById("symbolInput").value.trim().toUpperCase() || DEFAULT_SYMBOL;
+            const dateValue = document.getElementById("gannQaDate").value || new Date().toISOString().slice(0, 10);
+            loadGannQATable(symbol, dateValue);
+        });
+        document.getElementById("gannQaHorizon").addEventListener("change", () => {
+            const symbol = document.getElementById("symbolInput").value.trim().toUpperCase() || DEFAULT_SYMBOL;
+            const dateValue = document.getElementById("gannQaDate").value || new Date().toISOString().slice(0, 10);
+            loadGannQATable(symbol, dateValue);
+        });
 
         // Chart-only reload when timeframe changes (no full analysis re-run needed).
         document.getElementById("timeframeSelect").addEventListener("change", () => {
             const symbol = document.getElementById("symbolInput").value.trim().toUpperCase() || DEFAULT_SYMBOL;
             const tf = document.getElementById("timeframeSelect").value || DEFAULT_TIMEFRAME;
+            const chartTitle = document.getElementById("chartTitle");
+            if (chartTitle) chartTitle.textContent = `${symbol} Market Structure Chart`;
+            // Destroy chart so ensureChart() recreates it cleanly for the new timeframe
+            if (mclChart) { try { mclChart.remove(); } catch (_) {} mclChart = null; mclCandlesSeries = null; _livePriceLine = null; }
             loadChart(symbol, tf).catch((err) => {
                 const statusEl = document.getElementById("mclChartStatus");
                 if (statusEl) {
@@ -1658,10 +2433,20 @@
             });
         });
 
+        // Reload chart when symbol changes too.
+        document.getElementById("symbolInput").addEventListener("change", () => {
+            const symbol = document.getElementById("symbolInput").value.trim().toUpperCase() || DEFAULT_SYMBOL;
+            const tf = document.getElementById("timeframeSelect").value || DEFAULT_TIMEFRAME;
+            const chartTitle = document.getElementById("chartTitle");
+            if (chartTitle) chartTitle.textContent = `${symbol} Market Structure Chart`;
+            if (mclChart) { try { mclChart.remove(); } catch (_) {} mclChart = null; mclCandlesSeries = null; _livePriceLine = null; }
+            loadChart(symbol, tf).catch(() => {});
+        });
+
         // ---- Live price polling ----
         let _livePriceLine = null;
 
-        function _updateLivePriceBadge(price, source, age) {
+        function _updateLivePriceBadge(price, source, age, isSpot) {
             const badge = document.getElementById("livePriceBadge");
             const srcEl = document.getElementById("livePriceSource");
             const symbol = document.getElementById("symbolInput").value.trim().toUpperCase() || DEFAULT_SYMBOL;
@@ -1675,13 +2460,23 @@
                 return;
             }
             badge.textContent = `${symbol}  ${price.toFixed(2)}`;
-            badge.style.borderColor = "#ca8a04";
-            badge.style.color = "#fcd34d";
-            badge.style.background = "rgba(250,204,21,0.12)";
             const ageStr = age != null ? ` · ${age}s ago` : "";
-            if (srcEl) srcEl.textContent = `live · ${source || "--"}${ageStr}`;
+            if (isSpot === false) {
+                // Futures proxy — amber warning
+                badge.style.borderColor = "#92400e";
+                badge.style.color = "#fbbf24";
+                badge.style.background = "rgba(180,83,9,0.13)";
+                if (srcEl) srcEl.textContent = `FUTURES proxy · ${source || "databento_gc"}${ageStr}`;
+            } else {
+                // True spot price — green
+                badge.style.borderColor = "#ca8a04";
+                badge.style.color = "#fcd34d";
+                badge.style.background = "rgba(250,204,21,0.12)";
+                if (srcEl) srcEl.textContent = `SPOT · ${source || "stooq"}${ageStr}`;
+            }
 
-            // Update live price line on chart.
+            // Update live price line on chart and show ● LIVE tag.
+            const liveTag = document.getElementById("chartLiveTag");
             if (mclCandlesSeries && mclChart) {
                 if (_livePriceLine) {
                     try { mclCandlesSeries.removePriceLine(_livePriceLine); } catch (_) {}
@@ -1694,6 +2489,9 @@
                     axisLabelVisible: true,
                     title: "LIVE",
                 });
+                if (liveTag) liveTag.style.display = "inline";
+            } else {
+                if (liveTag) liveTag.style.display = "none";
             }
         }
 
@@ -1706,9 +2504,9 @@
                 const data = await res.json();
                 const price = typeof data.price === "number" ? data.price : null;
                 const age = data.ts != null ? Math.max(0, Math.round(Date.now() / 1000 - data.ts)) : null;
-                _updateLivePriceBadge(price, data.source || "--", age);
+                _updateLivePriceBadge(price, data.source || "--", age, data.spot !== false);
             } catch (err) {
-                _updateLivePriceBadge(null, null, null);
+                _updateLivePriceBadge(null, null, null, null);
                 console.warn("MCL live price poll failed:", err?.message || err);
             }
         }
@@ -1718,10 +2516,328 @@
             return setInterval(_pollLivePrice, intervalMs);
         }
 
+        // Refresh last candle on the chart every 5 minutes (keeps current bar live)
+        function _refreshLastChartCandle() {
+            const symbol = document.getElementById("symbolInput")?.value.trim().toUpperCase() || DEFAULT_SYMBOL;
+            const tf     = document.getElementById("timeframeSelect")?.value || DEFAULT_TIMEFRAME;
+            if (!mclCandlesSeries) return;
+            const params = new URLSearchParams({ symbol, timeframe: tf, lookback_years: "1", limit: "5" });
+            fetch(`${API_BASE}/market_causality/chart?${params}`)
+                .then((r) => r.json())
+                .then((payload) => {
+                    const candles = Array.isArray(payload.candles) ? payload.candles : [];
+                    candles
+                        .map((r) => ({ time: Number(r.time), open: Number(r.open), high: Number(r.high), low: Number(r.low), close: Number(r.close) }))
+                        .filter((r) => Number.isFinite(r.time) && Number.isFinite(r.close))
+                        .forEach((c) => { try { mclCandlesSeries.update(c); } catch (_) {} });
+                })
+                .catch(() => {});
+        }
+        setInterval(_refreshLastChartCandle, 5 * 60 * 1000); // every 5 min
+
         document.addEventListener("DOMContentLoaded", () => {
-            loadAnalysis(false);
+            const dateEl = document.getElementById("gannQaDate");
+            if (dateEl && !dateEl.value) {
+                dateEl.value = new Date().toISOString().slice(0, 10);
+            }
+            _updatePendingOutcomeIndicator();
+
+            // ── Load chart immediately on page open ──────────────────────────
+            const _initSymbol = (document.getElementById("symbolInput")?.value.trim().toUpperCase()) || DEFAULT_SYMBOL;
+            const _initTf     = document.getElementById("timeframeSelect")?.value || DEFAULT_TIMEFRAME;
+            const chartTitle  = document.getElementById("chartTitle");
+            if (chartTitle) chartTitle.textContent = `${_initSymbol} Market Structure Chart`;
+            loadChart(_initSymbol, _initTf).catch((err) => {
+                const statusEl = document.getElementById("mclChartStatus");
+                if (statusEl) {
+                    statusEl.className = "chart-status error";
+                    statusEl.textContent = `Chart load failed: ${err.message}`;
+                }
+            });
+
+            // ── Start live price immediately ─────────────────────────────────
             startLivePricePoll(6000);
+
+            // ── Full analysis in background (non-blocking) ───────────────────
+            setTimeout(() => {
+                loadAnalysis(false);
+                loadWeightsPanel();
+                loadTradeHistory();
+            }, 0);
         });
+
+        // ── Weights panel ─────────────────────────────────────────────────────
+        async function loadWeightsPanel() {
+            const grid = document.getElementById("weightsGrid");
+            const status = document.getElementById("weightsStatus");
+            const sparkline = document.getElementById("accuracySparkline");
+            try {
+                const resp = await fetch(`${API_BASE}/market_causality/weights`);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                const weights = data.weights || {};
+                const sigAcc = data.signal_accuracy || {};
+                const accuracy = data.overall_accuracy != null ? `${(data.overall_accuracy * 100).toFixed(1)}%` : "--";
+                const confidence = data.model_confidence || "--";
+                const predictions = data.total_predictions || 0;
+                if (status) {
+                    status.textContent = `${data.learning_message || "Weights calibrated."} | Accuracy: ${accuracy} | Confidence: ${confidence} | Predictions: ${predictions}`;
+                }
+                if (grid) {
+                    const signals = Object.keys(weights);
+                    grid.innerHTML = signals.map(k => {
+                        const wPct = Math.round(Number(weights[k]) * 100);
+                        const aPct = sigAcc[k] != null ? Math.round(Number(sigAcc[k]) * 100) : null;
+                        const wColor = wPct >= 70 ? "#22c55e" : wPct >= 45 ? "#f59e0b" : "#ef4444";
+                        const aColor = aPct != null ? (aPct >= 50 ? "#22c55e" : aPct >= 35 ? "#f59e0b" : "#ef4444") : "#64748b";
+                        return `
+                            <div class="trend-cell">
+                                <div class="k">${_escapeHtml(k)}</div>
+                                <div class="v" style="color:${wColor}" title="Trust weight">${wPct}%</div>
+                                <div style="background:#1a2535;border-radius:4px;height:4px;margin-top:4px;">
+                                    <div style="background:${wColor};width:${wPct}%;height:4px;border-radius:4px;"></div>
+                                </div>
+                                        <div style="font-size:9px;color:${aColor};margin-top:3px;" title="Signal accuracy">${aPct != null ? `acc ${aPct}%` : `<span style='color:#475569'>acc N/A</span>`}</div>
+                            </div>`;
+                    }).join("");
+                }
+                // Sparkline: last 20 accuracy_score values as bar chart
+                if (sparkline) {
+                    const trend = (data.accuracy_trend || []);
+                    if (trend.length > 0) {
+                        sparkline.innerHTML = trend.map(v => {
+                            const h = Math.max(2, Math.round(Number(v) * 32));
+                            const c = Number(v) >= 0.6 ? "#22c55e" : Number(v) >= 0.3 ? "#f59e0b" : "#ef4444";
+                            return `<div style="width:${Math.floor(100/trend.length)}%;max-width:14px;height:${h}px;background:${c};border-radius:2px 2px 0 0;" title="${(Number(v)*100).toFixed(0)}%"></div>`;
+                        }).join("");
+                    } else {
+                        sparkline.innerHTML = `<span style="font-size:10px;color:var(--muted)">No trend data yet.</span>`;
+                    }
+                }
+                // Direction accuracy badges
+                const dirAcc = data.direction_accuracy || {};
+                const dirRow = document.getElementById("directionAccuracyRow");
+                if (dirRow) {
+                    const dirLabels = {BUY: "🟢 BUY acc", SELL: "🔴 SELL acc", WAIT: "🟡 WAIT acc"};
+                    dirRow.innerHTML = Object.entries(dirLabels).map(([dir, label]) => {
+                        const val = dirAcc[dir];
+                        if (val == null) return "";
+                        const pct = Math.round(val * 100);
+                        const c = pct >= 50 ? "#22c55e" : pct >= 35 ? "#f59e0b" : "#ef4444";
+                        return `<div style="font-size:11px;padding:4px 10px;background:#1a2535;border-radius:6px;color:${c};">${label}: <strong>${pct}%</strong></div>`;
+                    }).join("");
+                }
+            } catch (err) {
+                if (status) status.textContent = `Weights unavailable: ${_escapeHtml(err?.message || "unknown error")}`;
+            }
+        }
+
+        // ── Batch Replay + Reset Weights actions ─────────────────────────────
+        async function runBatchReplay() {
+            const btn = document.getElementById("btnRunBatch");
+            const batchStatus = document.getElementById("batchReplayStatus");
+            try {
+                if (btn) { btn.disabled = true; btn.textContent = "⏳ Running..."; }
+                if (batchStatus) batchStatus.textContent = "Batch replay in progress…";
+                const resp = await fetch(`${API_BASE}/market_causality/run_batch`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({}),
+                });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                const total   = data.total_predictions ?? "?";
+                const acc     = data.batch_accuracy_pct != null ? `${data.batch_accuracy_pct.toFixed(1)}%` : "?";
+                const cleaned = data.cleaned_bare_ids > 0 ? ` · cleaned ${data.cleaned_bare_ids} stale IDs` : "";
+                if (batchStatus) batchStatus.textContent = `Done — ${total} trades, ${acc} accuracy${cleaned}`;
+                await loadWeightsPanel();
+                await loadTradeHistory();
+            } catch (err) {
+                if (batchStatus) batchStatus.textContent = `Error: ${_escapeHtml(err?.message || "unknown")}`;
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = "🔄 Run Batch Replay"; }
+            }
+        }
+
+        async function resetWeights() {
+            if (!confirm("Reset all signal weights to baseline? This cannot be undone.")) return;
+            const btn = document.getElementById("btnResetWeights");
+            const batchStatus = document.getElementById("batchReplayStatus");
+            try {
+                if (btn) { btn.disabled = true; btn.textContent = "⏳ Resetting..."; }
+                const resp = await fetch(`${API_BASE}/market_causality/reset_weights`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({}),
+                });
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                if (batchStatus) batchStatus.textContent = "";
+                await loadWeightsPanel();
+            } catch (err) {
+                if (batchStatus) batchStatus.textContent = `Error: ${_escapeHtml(err?.message || "unknown")}`;
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = "↩ Reset Weights"; }
+            }
+        }
+
+        // ── Trade History panel ───────────────────────────────────────────────
+        async function loadTradeHistory() {
+            const tbody = document.getElementById("tradeHistoryBody");
+            const status = document.getElementById("tradeHistoryStatus");
+            const winsOnly = document.getElementById("tradeHistoryWinsOnly")?.checked || false;
+            try {
+                const url = `${API_BASE}/market_causality/history?limit=50${winsOnly ? "&correct_only=true" : ""}`;
+                const resp = await fetch(url);
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                const rows = data.history || [];
+                if (status) {
+                    const label = winsOnly ? "wins" : "outcomes";
+                    const returned = data.returned ?? rows.length;
+                    const suffix = returned < data.total ? ` (showing ${returned})` : "";
+                    status.textContent = `${data.total} ${label} recorded${suffix}.`;
+                }
+                if (!tbody) return;
+                if (rows.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="12" style="color:var(--muted)">No ${winsOnly ? "winning " : ""}outcomes recorded yet.</td></tr>`;
+                    return;
+                }
+                tbody.innerHTML = rows.map((r, i) => {
+                    const correct = r.was_correct;
+                    const resultColor = correct ? "#22c55e" : "#ef4444";
+                    const resultLabel = correct ? "✅ WIN" : "❌ LOSS";
+                    const accPct = r.accuracy_score != null ? `${(r.accuracy_score * 100).toFixed(0)}%` : "--";
+                    const fmt = v => (v != null ? Number(v).toFixed(2) : "--");
+                    const ts = r.prediction_timestamp
+                        ? new Date(typeof r.prediction_timestamp === "number"
+                            ? r.prediction_timestamp * 1000
+                            : r.prediction_timestamp).toLocaleString(undefined, {month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"})
+                        : "--";
+                    return `<tr>
+                        <td style="color:var(--muted)">${i + 1}</td>
+                        <td style="font-size:10px;color:var(--muted)">${_escapeHtml(ts)}</td>
+                        <td style="font-size:10px;color:var(--muted)">${_escapeHtml(String(r.prediction_id || "").slice(0, 8))}</td>
+                        <td><span style="color:${r.direction === 'BUY' ? '#22c55e' : '#ef4444'}">${_escapeHtml(r.direction || "--")}</span></td>
+                        <td>${fmt(r.entry_price)}</td>
+                        <td>${fmt(r.realized_price)}</td>
+                        <td>${r.actual_move_pips != null ? Number(r.actual_move_pips).toFixed(1) : "--"}</td>
+                        <td><span style="color:${r.outcome_direction === 'BUY' ? '#22c55e' : '#ef4444'}">${_escapeHtml(r.outcome_direction || "--")}</span></td>
+                        <td>${r.timeframe_reached != null ? r.timeframe_reached : "--"}</td>
+                        <td style="color:${resultColor};font-weight:700">${resultLabel}</td>
+                        <td style="color:${resultColor}">${accPct}</td>
+                        <td style="color:var(--muted);font-size:11px">${r.confluence_score != null ? Number(r.confluence_score).toFixed(2) : "--"}</td>
+                    </tr>`;
+                }).join("");
+            } catch (err) {
+                if (status) status.textContent = `History unavailable: ${_escapeHtml(err?.message || "unknown error")}`;
+            }
+        }
+
+        // ── Pending outcome indicator ─────────────────────────────────────────
+        function _updatePendingOutcomeIndicator() {
+            const indicator = document.getElementById("pendingOutcomeIndicator");
+            if (!indicator) return;
+            const stored = localStorage.getItem('mcl_pending_prediction_id');
+            indicator.style.display = stored ? "block" : "none";
+            if (stored) {
+                indicator.title = `Pending prediction ID: ${stored}`;
+            }
+        }
+
+        // ── Record Outcome modal ──────────────────────────────────────────────
+        let _currentPredictionId = null;
+
+        function openOutcomeModal(predictionId) {
+            const modal = document.getElementById("outcomeModal");
+            const idField = document.getElementById("roFieldId");
+            const resultEl = document.getElementById("roResult");
+            resultEl.className = "modal-result";
+            resultEl.textContent = "";
+            // Pre-fill ID from banner context, in-memory state, or localStorage (survives refresh)
+            const storedId = localStorage.getItem('mcl_pending_prediction_id');
+            if (predictionId || _currentPredictionId || storedId) {
+                idField.value = predictionId || _currentPredictionId || storedId || "";
+            }
+            modal.classList.add("open");
+        }
+
+        function closeOutcomeModal() {
+            document.getElementById("outcomeModal").classList.remove("open");
+        }
+
+        // Close on backdrop click
+        document.addEventListener("click", (e) => {
+            const modal = document.getElementById("outcomeModal");
+            if (e.target === modal) closeOutcomeModal();
+        });
+
+        async function submitOutcome() {
+            const resultEl = document.getElementById("roResult");
+            resultEl.className = "modal-result";
+            resultEl.textContent = "";
+
+            const predictionId    = document.getElementById("roFieldId").value.trim();
+            const outcomeDirection = document.getElementById("roFieldDirection").value;
+            const realizedPrice   = parseFloat(document.getElementById("roFieldRealizedPrice").value);
+            const movePips        = parseFloat(document.getElementById("roFieldMovePips").value);
+            const barsToOutcome   = parseInt(document.getElementById("roFieldBars").value, 10);
+
+            if (!predictionId) {
+                resultEl.textContent = "Error: Prediction / Observation ID is required.";
+                resultEl.className = "modal-result error";
+                return;
+            }
+            if (isNaN(realizedPrice) || isNaN(movePips) || isNaN(barsToOutcome)) {
+                resultEl.textContent = "Error: Realized price, move pips, and bars are required numbers.";
+                resultEl.className = "modal-result error";
+                return;
+            }
+
+            const body = {
+                prediction_id:     predictionId,
+                outcome_direction: outcomeDirection,
+                realized_price:    realizedPrice,
+                actual_move_pips:  movePips,
+                timeframe_reached: barsToOutcome,
+            };
+
+            try {
+                const resp = await fetch(`${API_BASE}/market_causality/record_outcome`, {
+                    method:  "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body:    JSON.stringify(body),
+                });
+                const data = await resp.json();
+
+                if (!resp.ok || data.status === "error") {
+                    resultEl.textContent = `Error: ${data.error || data.detail || "Unknown error"}`;
+                    resultEl.className = "modal-result error";
+                    return;
+                }
+
+                const wasCorrect = data.was_correct ? "✅ Correct" : "❌ Incorrect";
+                const accuracy   = data.accuracy_score != null ? ` | Accuracy: ${Number(data.accuracy_score * 100).toFixed(0)}%` : "";
+                resultEl.textContent = `Recorded! Direction: ${wasCorrect}${accuracy}. Learning weights updated.`;
+                resultEl.className = "modal-result success";
+
+                // Clear persisted prediction ID after successful submission
+                localStorage.removeItem('mcl_pending_prediction_id');
+                _currentPredictionId = null;
+                _updatePendingOutcomeIndicator();
+                // Refresh live panels so new outcome is immediately visible
+                loadWeightsPanel();
+                loadTradeHistory();
+                // Hide post-trade banner after successful submission
+                setTimeout(() => {
+                    document.getElementById("postTradeBanner").classList.remove("visible");
+                    closeOutcomeModal();
+                }, 2500);
+
+            } catch (err) {
+                resultEl.textContent = `Network error: ${err.message}`;
+                resultEl.className = "modal-result error";
+            }
+        }
     </script>
 </body>
 </html>

@@ -1,0 +1,1767 @@
+{
+  "schema_version": 1,
+  "meta": {
+    "created_at": 1775247519,
+    "updated_at": 1775496768
+  },
+  "weights": {
+    "geometry": 0.4198455246905739,
+    "time": 0.39423605538093814,
+    "structure": 0.39440085709750966,
+    "momentum": 0.3936248324594166,
+    "gann": 0.37475084285695975,
+    "ict": 0.38114641735775817,
+    "confluence": 0.46428902257946186
+  },
+  "predictions": [
+    {
+      "id": "replay-GC.FUT-5m-bar24",
+      "direction": "BUY",
+      "confluence_score": 0.667,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": true,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 4403.8,
+      "stop_price": 4394.975,
+      "target_price": 4421.450000000001,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-5m-bar36",
+      "direction": "SELL",
+      "confluence_score": 0.667,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": true,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 4371.2,
+      "stop_price": 4380.962500000001,
+      "target_price": 4351.674999999999,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-5m-bar48",
+      "direction": "BUY",
+      "confluence_score": 1.0,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": true,
+        "gann": true,
+        "ict": true,
+        "confluence": true
+      },
+      "entry_price": 4390.7,
+      "stop_price": 4381.7,
+      "target_price": 4408.7,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-GC.FUT-5m-bar60",
+      "direction": "BUY",
+      "confluence_score": 0.667,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": true,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 4401.3,
+      "stop_price": 4395.825000000001,
+      "target_price": 4412.25,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-5m-bar84",
+      "direction": "BUY",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 4397.9,
+      "stop_price": 4393.4,
+      "target_price": 4406.9,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-5m-bar108",
+      "direction": "SELL",
+      "confluence_score": 1.0,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": true,
+        "gann": true,
+        "ict": true,
+        "confluence": true
+      },
+      "entry_price": 4386.9,
+      "stop_price": 4392.8375,
+      "target_price": 4375.024999999999,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-5m-bar132",
+      "direction": "BUY",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 4393.3,
+      "stop_price": 4390.3375,
+      "target_price": 4399.225,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar25",
+      "direction": "SELL",
+      "confluence_score": 1.0,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": true,
+        "gann": true,
+        "ict": true
+      },
+      "entry_price": 4379.5,
+      "stop_price": 4381.9525,
+      "target_price": 4374.595,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar30",
+      "direction": "SELL",
+      "confluence_score": 1.0,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": true,
+        "gann": true,
+        "ict": true
+      },
+      "entry_price": 4384.1,
+      "stop_price": 4387.0325,
+      "target_price": 4378.235000000001,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 0.5
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar35",
+      "direction": "SELL",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false
+      },
+      "entry_price": 4388.5,
+      "stop_price": 4391.83,
+      "target_price": 4381.84,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar50",
+      "direction": "SELL",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false
+      },
+      "entry_price": 4378.5,
+      "stop_price": 4382.1675000000005,
+      "target_price": 4371.165,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar55",
+      "direction": "SELL",
+      "confluence_score": 0.667,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": true,
+        "ict": false
+      },
+      "entry_price": 4378.9,
+      "stop_price": 4382.74,
+      "target_price": 4371.219999999999,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar60",
+      "direction": "SELL",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false
+      },
+      "entry_price": 4374.0,
+      "stop_price": 4377.787499999999,
+      "target_price": 4366.425,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar70",
+      "direction": "BUY",
+      "confluence_score": 0.333,
+      "signals": {
+        "geometry": true,
+        "time": false,
+        "structure": false,
+        "momentum": false,
+        "gann": true,
+        "ict": false
+      },
+      "entry_price": 4387.0,
+      "stop_price": 4382.5675,
+      "target_price": 4395.865,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 0.5
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar75",
+      "direction": "BUY",
+      "confluence_score": 0.667,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": true,
+        "ict": false
+      },
+      "entry_price": 4387.6,
+      "stop_price": 4383.137500000001,
+      "target_price": 4396.525,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar80",
+      "direction": "BUY",
+      "confluence_score": 0.667,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": true,
+        "ict": false
+      },
+      "entry_price": 4387.1,
+      "stop_price": 4382.405000000001,
+      "target_price": 4396.49,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar90",
+      "direction": "BUY",
+      "confluence_score": 1.0,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": true,
+        "gann": true,
+        "ict": true
+      },
+      "entry_price": 4400.3,
+      "stop_price": 4397.06,
+      "target_price": 4406.78,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar95",
+      "direction": "BUY",
+      "confluence_score": 0.667,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": true,
+        "ict": false
+      },
+      "entry_price": 4404.9,
+      "stop_price": 4400.9175,
+      "target_price": 4412.865,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar100",
+      "direction": "BUY",
+      "confluence_score": 0.667,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": true,
+        "ict": false
+      },
+      "entry_price": 4411.4,
+      "stop_price": 4407.724999999999,
+      "target_price": 4418.75,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar105",
+      "direction": "BUY",
+      "confluence_score": 0.667,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": true,
+        "ict": false
+      },
+      "entry_price": 4413.9,
+      "stop_price": 4410.022499999999,
+      "target_price": 4421.655,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar110",
+      "direction": "BUY",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false
+      },
+      "entry_price": 4406.6,
+      "stop_price": 4402.8125,
+      "target_price": 4414.175,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar125",
+      "direction": "BUY",
+      "confluence_score": 1.0,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": true,
+        "gann": true,
+        "ict": true
+      },
+      "entry_price": 4425.1,
+      "stop_price": 4421.740000000001,
+      "target_price": 4431.820000000001,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar130",
+      "direction": "BUY",
+      "confluence_score": 1.0,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": true,
+        "gann": true,
+        "ict": true
+      },
+      "entry_price": 4431.3,
+      "stop_price": 4427.9175000000005,
+      "target_price": 4438.0650000000005,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar135",
+      "direction": "BUY",
+      "confluence_score": 0.667,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": true,
+        "ict": false
+      },
+      "entry_price": 4429.0,
+      "stop_price": 4425.1525,
+      "target_price": 4436.695,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar140",
+      "direction": "BUY",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false
+      },
+      "entry_price": 4423.4,
+      "stop_price": 4419.53,
+      "target_price": 4431.139999999999,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar145",
+      "direction": "SELL",
+      "confluence_score": 0.333,
+      "signals": {
+        "geometry": true,
+        "time": false,
+        "structure": false,
+        "momentum": true,
+        "gann": false,
+        "ict": false
+      },
+      "entry_price": 4424.0,
+      "stop_price": 4426.9475,
+      "target_price": 4418.1050000000005,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar150",
+      "direction": "SELL",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false
+      },
+      "entry_price": 4425.8,
+      "stop_price": 4429.2125,
+      "target_price": 4418.975,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar170",
+      "direction": "BUY",
+      "confluence_score": 0.833,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": true,
+        "gann": false,
+        "ict": true
+      },
+      "entry_price": 4427.0,
+      "stop_price": 4424.1425,
+      "target_price": 4432.715,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar185",
+      "direction": "SELL",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false
+      },
+      "entry_price": 4421.4,
+      "stop_price": 4424.2725,
+      "target_price": 4415.655,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar190",
+      "direction": "SELL",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false
+      },
+      "entry_price": 4423.5,
+      "stop_price": 4425.6825,
+      "target_price": 4419.134999999999,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": null,
+      "accuracy": 0.5
+    },
+    {
+      "id": "replay-6E.FUT-5m-bar48",
+      "direction": "SELL",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 1.16355,
+      "stop_price": 2.66355,
+      "target_price": -1.83645,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar24",
+      "direction": "SELL",
+      "confluence_score": 1.0,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": true,
+        "gann": true,
+        "ict": true,
+        "confluence": true
+      },
+      "entry_price": 4382.0,
+      "stop_price": 4383.8875,
+      "target_price": 4378.225,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar36",
+      "direction": "BUY",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 4390.1,
+      "stop_price": 4386.1,
+      "target_price": 4398.1,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar72",
+      "direction": "BUY",
+      "confluence_score": 0.833,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": true,
+        "gann": false,
+        "ict": true,
+        "confluence": true
+      },
+      "entry_price": 4392.3,
+      "stop_price": 4386.825000000001,
+      "target_price": 4403.25,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar96",
+      "direction": "BUY",
+      "confluence_score": 0.667,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": true,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 4404.9,
+      "stop_price": 4400.287499999999,
+      "target_price": 4414.125,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar120",
+      "direction": "BUY",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 4411.4,
+      "stop_price": 4408.7,
+      "target_price": 4416.799999999999,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar132",
+      "direction": "BUY",
+      "confluence_score": 0.833,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": true,
+        "gann": false,
+        "ict": true,
+        "confluence": true
+      },
+      "entry_price": 4427.7,
+      "stop_price": 4423.225,
+      "target_price": 4436.65,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar144",
+      "direction": "SELL",
+      "confluence_score": 0.833,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": true,
+        "gann": false,
+        "ict": true,
+        "confluence": true
+      },
+      "entry_price": 4421.3,
+      "stop_price": 4423.8625,
+      "target_price": 4416.175,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-GC.FUT-1m-bar168",
+      "direction": "BUY",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 4426.0,
+      "stop_price": 4422.65,
+      "target_price": 4432.700000000001,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-NQ.FUT-1m-bar12",
+      "direction": "SELL",
+      "confluence_score": 0.333,
+      "signals": {
+        "geometry": true,
+        "time": false,
+        "structure": false,
+        "momentum": false,
+        "gann": true,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 24547.25,
+      "stop_price": 24609.28125,
+      "target_price": 24423.1875,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-NQ.FUT-1m-bar24",
+      "direction": "SELL",
+      "confluence_score": 0.667,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": true,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 24487.5,
+      "stop_price": 24573.75,
+      "target_price": 24315.0,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-NQ.FUT-1m-bar84",
+      "direction": "BUY",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 24589.5,
+      "stop_price": 24541.46875,
+      "target_price": 24685.5625,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-NQ.FUT-1m-bar96",
+      "direction": "SELL",
+      "confluence_score": 0.333,
+      "signals": {
+        "geometry": true,
+        "time": false,
+        "structure": false,
+        "momentum": true,
+        "gann": false,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 24554.5,
+      "stop_price": 24594.15625,
+      "target_price": 24475.1875,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-NQ.FUT-1m-bar120",
+      "direction": "SELL",
+      "confluence_score": 0.833,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": true,
+        "gann": false,
+        "ict": true,
+        "confluence": true
+      },
+      "entry_price": 24471.0,
+      "stop_price": 24504.15625,
+      "target_price": 24404.6875,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-NQ.FUT-1m-bar132",
+      "direction": "BUY",
+      "confluence_score": 0.667,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": true,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 24553.25,
+      "stop_price": 24480.96875,
+      "target_price": 24697.8125,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-NQ.FUT-1m-bar144",
+      "direction": "BUY",
+      "confluence_score": 1.0,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": true,
+        "gann": true,
+        "ict": true,
+        "confluence": true
+      },
+      "entry_price": 24580.0,
+      "stop_price": 24521.1875,
+      "target_price": 24697.625,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-NQ.FUT-1m-bar168",
+      "direction": "BUY",
+      "confluence_score": 0.667,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": true,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 24636.75,
+      "stop_price": 24591.375,
+      "target_price": 24727.5,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-NQ.FUT-1m-bar180",
+      "direction": "SELL",
+      "confluence_score": 0.167,
+      "signals": {
+        "geometry": true,
+        "time": false,
+        "structure": false,
+        "momentum": false,
+        "gann": false,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 24613.5,
+      "stop_price": 24644.65625,
+      "target_price": 24551.1875,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-NQ.FUT-5m-bar36",
+      "direction": "BUY",
+      "confluence_score": 0.833,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": true,
+        "gann": false,
+        "ict": true,
+        "confluence": true
+      },
+      "entry_price": 24684.5,
+      "stop_price": 24648.0625,
+      "target_price": 24757.375,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-NQ.FUT-5m-bar84",
+      "direction": "BUY",
+      "confluence_score": 0.833,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": true,
+        "gann": false,
+        "ict": true,
+        "confluence": true
+      },
+      "entry_price": 24678.75,
+      "stop_price": 24643.75,
+      "target_price": 24748.75,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-NQ.FUT-5m-bar96",
+      "direction": "SELL",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 24654.0,
+      "stop_price": 24681.03125,
+      "target_price": 24599.9375,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-NQ.FUT-5m-bar120",
+      "direction": "SELL",
+      "confluence_score": 0.833,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": true,
+        "gann": false,
+        "ict": true,
+        "confluence": true
+      },
+      "entry_price": 24500.25,
+      "stop_price": 24536.5625,
+      "target_price": 24427.625,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-NQ.FUT-5m-bar132",
+      "direction": "SELL",
+      "confluence_score": 0.667,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": true,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 24381.5,
+      "stop_price": 24427.75,
+      "target_price": 24289.0,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-NQ.FUT-5m-bar144",
+      "direction": "BUY",
+      "confluence_score": 0.667,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": true,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 24443.5,
+      "stop_price": 24405.59375,
+      "target_price": 24519.3125,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-NQ.FUT-5m-bar156",
+      "direction": "SELL",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 24379.0,
+      "stop_price": 24412.28125,
+      "target_price": 24312.4375,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-NQ.FUT-5m-bar192",
+      "direction": "SELL",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 24368.75,
+      "stop_price": 24402.5,
+      "target_price": 24301.25,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392921,
+      "accuracy": 1.0
+    },
+    {
+      "id": "replay-YM.FUT-1m-bar12",
+      "direction": "BUY",
+      "confluence_score": 1.0,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": true,
+        "gann": true,
+        "ict": true,
+        "confluence": true
+      },
+      "entry_price": 46884.0,
+      "stop_price": 46804.125,
+      "target_price": 47043.75,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392922,
+      "accuracy": 0.0
+    },
+    {
+      "id": "replay-YM.FUT-1m-bar36",
+      "direction": "BUY",
+      "confluence_score": 0.5,
+      "signals": {
+        "geometry": true,
+        "time": true,
+        "structure": true,
+        "momentum": false,
+        "gann": false,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 46846.0,
+      "stop_price": 46784.5,
+      "target_price": 46969.0,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775392922,
+      "accuracy": 1.0
+    },
+    {
+      "id": "live-test-1775296760",
+      "direction": "BUY",
+      "confluence_score": 0.0,
+      "signals": {
+        "geometry": false,
+        "time": false,
+        "structure": false,
+        "momentum": false,
+        "gann": false,
+        "ict": false,
+        "confluence": false
+      },
+      "entry_price": 2040.0,
+      "stop_price": 2030.0,
+      "target_price": 2060.0,
+      "forecast_horizon_days": 1,
+      "prediction_timestamp": 1775296760,
+      "accuracy": 1.0
+    }
+  ],
+  "outcomes": [
+    {
+      "prediction_id": "replay-GC.FUT-5m-bar24",
+      "realized_price": 4368.4,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 35.400000000000546,
+      "timeframe_reached": 5,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-5m-bar36",
+      "realized_price": 4403.1,
+      "outcome_direction": "UP",
+      "actual_move_pips": 31.900000000000546,
+      "timeframe_reached": 1,
+      "predicted_direction": "SELL",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-5m-bar48",
+      "realized_price": 4403.1,
+      "outcome_direction": "UP",
+      "actual_move_pips": 12.400000000000546,
+      "timeframe_reached": 5,
+      "predicted_direction": "BUY",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-5m-bar60",
+      "realized_price": 4389.3,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 12.0,
+      "timeframe_reached": 3,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-5m-bar84",
+      "realized_price": 4383.8,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 14.099999999999454,
+      "timeframe_reached": 1,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-5m-bar108",
+      "realized_price": 4397.1,
+      "outcome_direction": "UP",
+      "actual_move_pips": 10.200000000000728,
+      "timeframe_reached": 1,
+      "predicted_direction": "SELL",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-5m-bar132",
+      "realized_price": 4402.3,
+      "outcome_direction": "UP",
+      "actual_move_pips": 9.0,
+      "timeframe_reached": 2,
+      "predicted_direction": "BUY",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar25",
+      "realized_price": 4390.7,
+      "outcome_direction": "UP",
+      "actual_move_pips": 11.199999999999818,
+      "timeframe_reached": 1,
+      "predicted_direction": "SELL",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar30",
+      "realized_price": 4383.6,
+      "outcome_direction": "SIDEWAYS",
+      "actual_move_pips": 0.5,
+      "timeframe_reached": 10,
+      "predicted_direction": "SELL",
+      "was_correct": false,
+      "accuracy_score": 0.5
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar35",
+      "realized_price": 4382.4,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 6.100000000000364,
+      "timeframe_reached": 2,
+      "predicted_direction": "SELL",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar50",
+      "realized_price": 4370.5,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 8.0,
+      "timeframe_reached": 2,
+      "predicted_direction": "SELL",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar55",
+      "realized_price": 4384.0,
+      "outcome_direction": "UP",
+      "actual_move_pips": 5.100000000000364,
+      "timeframe_reached": 6,
+      "predicted_direction": "SELL",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar60",
+      "realized_price": 4387.0,
+      "outcome_direction": "UP",
+      "actual_move_pips": 13.0,
+      "timeframe_reached": 1,
+      "predicted_direction": "SELL",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar70",
+      "realized_price": 4387.1,
+      "outcome_direction": "SIDEWAYS",
+      "actual_move_pips": 0.1000000000003638,
+      "timeframe_reached": 10,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.5
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar75",
+      "realized_price": 4395.2,
+      "outcome_direction": "UP",
+      "actual_move_pips": 7.599999999999454,
+      "timeframe_reached": 1,
+      "predicted_direction": "BUY",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar80",
+      "realized_price": 4400.5,
+      "outcome_direction": "UP",
+      "actual_move_pips": 13.399999999999636,
+      "timeframe_reached": 2,
+      "predicted_direction": "BUY",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar90",
+      "realized_price": 4411.6,
+      "outcome_direction": "UP",
+      "actual_move_pips": 11.300000000000182,
+      "timeframe_reached": 1,
+      "predicted_direction": "BUY",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar95",
+      "realized_price": 4414.3,
+      "outcome_direction": "UP",
+      "actual_move_pips": 9.400000000000546,
+      "timeframe_reached": 2,
+      "predicted_direction": "BUY",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar100",
+      "realized_price": 4405.5,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 5.899999999999636,
+      "timeframe_reached": 7,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar105",
+      "realized_price": 4405.5,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 8.399999999999636,
+      "timeframe_reached": 1,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar110",
+      "realized_price": 4414.0,
+      "outcome_direction": "UP",
+      "actual_move_pips": 7.399999999999636,
+      "timeframe_reached": 1,
+      "predicted_direction": "BUY",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar125",
+      "realized_price": 4433.6,
+      "outcome_direction": "UP",
+      "actual_move_pips": 8.5,
+      "timeframe_reached": 4,
+      "predicted_direction": "BUY",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar130",
+      "realized_price": 4422.9,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 8.400000000000546,
+      "timeframe_reached": 2,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar135",
+      "realized_price": 4421.0,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 8.0,
+      "timeframe_reached": 4,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar140",
+      "realized_price": 4429.1,
+      "outcome_direction": "UP",
+      "actual_move_pips": 5.700000000000728,
+      "timeframe_reached": 1,
+      "predicted_direction": "BUY",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar145",
+      "realized_price": 4429.1,
+      "outcome_direction": "UP",
+      "actual_move_pips": 5.100000000000364,
+      "timeframe_reached": 1,
+      "predicted_direction": "SELL",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar150",
+      "realized_price": 4419.8,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 6.0,
+      "timeframe_reached": 1,
+      "predicted_direction": "SELL",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar170",
+      "realized_price": 4424.4,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 2.600000000000364,
+      "timeframe_reached": 2,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar185",
+      "realized_price": 4425.0,
+      "outcome_direction": "UP",
+      "actual_move_pips": 3.600000000000364,
+      "timeframe_reached": 5,
+      "predicted_direction": "SELL",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar190",
+      "realized_price": 4423.2,
+      "outcome_direction": "SIDEWAYS",
+      "actual_move_pips": 0.3000000000001819,
+      "timeframe_reached": 10,
+      "predicted_direction": "SELL",
+      "was_correct": false,
+      "accuracy_score": 0.5
+    },
+    {
+      "prediction_id": "replay-6E.FUT-5m-bar48",
+      "realized_price": 1.16245,
+      "outcome_direction": "SIDEWAYS",
+      "actual_move_pips": 0.001100000000000101,
+      "timeframe_reached": 24,
+      "predicted_direction": "SELL",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar24",
+      "realized_price": 4380.2,
+      "outcome_direction": "SIDEWAYS",
+      "actual_move_pips": 1.800000000000182,
+      "timeframe_reached": 24,
+      "predicted_direction": "SELL",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar36",
+      "realized_price": 4370.5,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 19.600000000000364,
+      "timeframe_reached": 1,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar72",
+      "realized_price": 4411.6,
+      "outcome_direction": "UP",
+      "actual_move_pips": 19.300000000000182,
+      "timeframe_reached": 14,
+      "predicted_direction": "BUY",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar96",
+      "realized_price": 4414.3,
+      "outcome_direction": "UP",
+      "actual_move_pips": 9.400000000000546,
+      "timeframe_reached": 1,
+      "predicted_direction": "BUY",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar120",
+      "realized_price": 4433.6,
+      "outcome_direction": "UP",
+      "actual_move_pips": 22.200000000000728,
+      "timeframe_reached": 1,
+      "predicted_direction": "BUY",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar132",
+      "realized_price": 4419.8,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 7.899999999999636,
+      "timeframe_reached": 8,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar144",
+      "realized_price": 4434.6,
+      "outcome_direction": "UP",
+      "actual_move_pips": 13.300000000000182,
+      "timeframe_reached": 2,
+      "predicted_direction": "SELL",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-GC.FUT-1m-bar168",
+      "realized_price": 4423.2,
+      "outcome_direction": "SIDEWAYS",
+      "actual_move_pips": 2.800000000000182,
+      "timeframe_reached": 24,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-NQ.FUT-1m-bar12",
+      "realized_price": 24345.0,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 202.25,
+      "timeframe_reached": 1,
+      "predicted_direction": "SELL",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-NQ.FUT-1m-bar24",
+      "realized_price": 24345.0,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 142.5,
+      "timeframe_reached": 1,
+      "predicted_direction": "SELL",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-NQ.FUT-1m-bar84",
+      "realized_price": 24539.75,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 49.75,
+      "timeframe_reached": 1,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-NQ.FUT-1m-bar96",
+      "realized_price": 24432.5,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 122.0,
+      "timeframe_reached": 1,
+      "predicted_direction": "SELL",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-NQ.FUT-1m-bar120",
+      "realized_price": 24610.0,
+      "outcome_direction": "UP",
+      "actual_move_pips": 139.0,
+      "timeframe_reached": 1,
+      "predicted_direction": "SELL",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-NQ.FUT-1m-bar132",
+      "realized_price": 24487.0,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 66.25,
+      "timeframe_reached": 1,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-NQ.FUT-1m-bar144",
+      "realized_price": 24646.75,
+      "outcome_direction": "UP",
+      "actual_move_pips": 66.75,
+      "timeframe_reached": 1,
+      "predicted_direction": "BUY",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-NQ.FUT-1m-bar168",
+      "realized_price": 24597.75,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 39.0,
+      "timeframe_reached": 1,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-NQ.FUT-1m-bar180",
+      "realized_price": 24579.25,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 34.25,
+      "timeframe_reached": 6,
+      "predicted_direction": "SELL",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-NQ.FUT-5m-bar36",
+      "realized_price": 24579.25,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 105.25,
+      "timeframe_reached": 1,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-NQ.FUT-5m-bar84",
+      "realized_price": 24581.25,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 97.5,
+      "timeframe_reached": 1,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-NQ.FUT-5m-bar96",
+      "realized_price": 24483.0,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 171.0,
+      "timeframe_reached": 1,
+      "predicted_direction": "SELL",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-NQ.FUT-5m-bar120",
+      "realized_price": 24370.25,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 130.0,
+      "timeframe_reached": 3,
+      "predicted_direction": "SELL",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-NQ.FUT-5m-bar132",
+      "realized_price": 24379.0,
+      "outcome_direction": "SIDEWAYS",
+      "actual_move_pips": 2.5,
+      "timeframe_reached": 24,
+      "predicted_direction": "SELL",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-NQ.FUT-5m-bar144",
+      "realized_price": 24308.5,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 135.0,
+      "timeframe_reached": 1,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-NQ.FUT-5m-bar156",
+      "realized_price": 24426.0,
+      "outcome_direction": "UP",
+      "actual_move_pips": 47.0,
+      "timeframe_reached": 1,
+      "predicted_direction": "SELL",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-NQ.FUT-5m-bar192",
+      "realized_price": 24311.25,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 57.5,
+      "timeframe_reached": 3,
+      "predicted_direction": "SELL",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "replay-YM.FUT-1m-bar12",
+      "realized_price": 46690.0,
+      "outcome_direction": "DOWN",
+      "actual_move_pips": 194.0,
+      "timeframe_reached": 1,
+      "predicted_direction": "BUY",
+      "was_correct": false,
+      "accuracy_score": 0.0
+    },
+    {
+      "prediction_id": "replay-YM.FUT-1m-bar36",
+      "realized_price": 46924.0,
+      "outcome_direction": "UP",
+      "actual_move_pips": 78.0,
+      "timeframe_reached": 1,
+      "predicted_direction": "BUY",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    },
+    {
+      "prediction_id": "live-test-1775296760",
+      "realized_price": 2050.0,
+      "outcome_direction": "UP",
+      "actual_move_pips": 10.0,
+      "timeframe_reached": 5,
+      "predicted_direction": "BUY",
+      "was_correct": true,
+      "accuracy_score": 1.0
+    }
+  ]
+}

@@ -660,6 +660,7 @@ function toggleGovernancePanel(forceOpen) {
 		updateDrawdownBar().catch(console.error);
 		updateModelStats().catch(console.error);
 		updateNewsSeverity().catch(console.error);
+		updateMarketHours().catch(console.error);
 		syncPropEngineControls().catch(console.error);
 	}
 	return opened;
@@ -1147,10 +1148,66 @@ async function updateNewsSeverity() {
 	}
 
 	const halt = data.halt_active ? "HALT ACTIVE" : "No Halt";
-	const upcoming = data.upcoming_title ? `${data.upcoming_title} (${data.upcoming_currency || "--"})` : "No upcoming event";
-	const countdown = data.minutes_to_news != null ? `${data.minutes_to_news} min` : "--";
+	const currencyPart = data.upcoming_currency ? ` (${data.upcoming_currency})` : "";
+	const upcoming = data.upcoming_title ? `${data.upcoming_title}${currencyPart}` : "No upcoming event";
+	const mins = data.minutes_to_news;
+	const countdown = mins != null ? `T-${Math.round(mins)}min` : "T---";
 
-	panel.innerText = `${halt} | Next: ${upcoming} | T-${countdown}`;
+	panel.innerText = `${halt} | Next: ${upcoming} | ${countdown}`;
+}
+
+// ---------------------------------------------------------------------------
+// Market Hours / Holiday Banner
+// ---------------------------------------------------------------------------
+async function updateMarketHours() {
+	const symbol = selectedChartSymbol?.() || "XAUUSD";
+	let data = null;
+	try {
+		const res = await apiFetch(`/market/hours?symbol=${encodeURIComponent(symbol)}`);
+		if (res.ok) data = await res.json();
+	} catch (_) {
+		data = null;
+	}
+
+	// Banner element — optional, only show if present in HTML
+	const banner = document.getElementById("marketHoursBanner");
+	if (!banner) return;
+
+	if (!data) {
+		banner.style.display = "none";
+		return;
+	}
+
+	if (data.is_open && !data.is_early_close) {
+		banner.style.display = "none";
+		return;
+	}
+
+	// Build banner text
+	let msg = "";
+	let bannerClass = "market-banner-closed";
+
+	if (data.is_early_close) {
+		const ec = data.early_close_utc ? data.early_close_utc.substring(11, 16) + " UTC" : "";
+		const name = data.holiday_name || "Early Close";
+		msg = `Early Close today at ${ec} — ${name}`;
+		bannerClass = "market-banner-early-close";
+	} else if (data.is_holiday) {
+		const name = data.holiday_name || "Market Holiday";
+		const next = data.next_open_label || "";
+		msg = `Market Holiday: ${name}${next ? ` — Opens ${next}` : ""}`;
+	} else if (data.is_weekend) {
+		const next = data.next_open_label || "";
+		msg = `Weekend — ${symbol} opens ${next}`;
+	} else {
+		// Between sessions
+		const next = data.next_open_label || "";
+		msg = data.reason || `Market Closed — opens ${next}`;
+	}
+
+	banner.textContent = msg;
+	banner.className = `market-hours-banner ${bannerClass}`;
+	banner.style.display = "block";
 }
 
 function healthClass(ok) {
@@ -1282,7 +1339,7 @@ async function loadJournal() {
 
 	if (!Array.isArray(data) || data.length === 0) {
 		const tr = document.createElement("tr");
-		tr.innerHTML = `<td colspan="7">No symbol-specific journal rows for ${symbol}</td>`;
+		tr.innerHTML = `<td colspan="7" style="text-align:center;color:#6b7a95;padding:16px;font-style:italic;">No trades recorded yet for ${symbol}</td>`;
 		tbody.appendChild(tr);
 		return;
 	}
@@ -1307,9 +1364,13 @@ async function updateVolatility() {
 		const bar = document.getElementById("volatilityBar");
 		if (!bar) return;
 
+		const hasRealData = data.atr != null && data.atr > 0;
 		const mode = (data.mode || "NORMAL").toUpperCase();
-		bar.className = "vol-bar " + mode;
-		bar.innerText = "VOL: " + mode;
+		bar.className = "vol-bar " + (hasRealData ? mode : "UNKNOWN");
+		bar.innerText = hasRealData ? "VOL: " + mode : "VOL: N/A";
+		bar.title = hasRealData
+			? `ATR: ${Number(data.atr).toFixed(2)} | Baseline: ${data.baseline_atr != null ? Number(data.baseline_atr).toFixed(2) : "--"}`
+			: "No ATR data — feed issue";
 	} catch (_) {
 		// keep last shown state on transient API errors
 	}
@@ -1337,7 +1398,7 @@ function selectedChartSymbol() {
 	const input = document.getElementById("chartSymbolInput");
 	if (input && input.value) return input.value;
 	const select = document.getElementById("chartSymbol");
-	return select && select.value ? select.value : "GC.FUT";
+	return select && select.value ? select.value : "XAUUSD";
 }
 
 function setText(id, value) {
@@ -1449,7 +1510,7 @@ async function updateMultiSymbolDashboard() {
 			   <td>${market.htf_bias || "--"}</td>
 			   <td>${market.ltf_structure || "--"}</td>
 			   <td>${model.active_model || "--"}</td>
-			   <td>${model.confidence != null ? Number(model.confidence).toFixed(2) : "--"}</td>
+			   <td>${(model.confidence != null && model.confidence > 0) ? `${(Number(model.confidence)*100).toFixed(0)}%` : "--"}</td>
 			   <td>${risk.risk_percent != null ? Number(risk.risk_percent).toFixed(2) : "--"}</td>
 			   <td>${risk.phase || "--"}</td>
 			   <td>${(row.prop_behavior || {}).mode || "--"}</td>
@@ -1457,9 +1518,9 @@ async function updateMultiSymbolDashboard() {
 			   <td>${resolver.status || "--"}</td>
 			   <td>${resolver.watch_only ? "YES" : "NO"}</td>
 			   <td>${market.news_state || "--"}</td>
-			   <td>${row.broker_price != null ? fmtPrice(row.broker_price, 2) : "--"}</td>
-			   <td>${row.system_price != null ? fmtPrice(row.system_price, 2) : "--"}</td>
-			   <td>${row.offset_diff != null ? fmtPrice(row.offset_diff, 2) : "--"}</td>
+			   <td style="color:${row.broker_price != null ? 'inherit' : '#6b7a95'}">${row.broker_price != null ? fmtPrice(row.broker_price, 2) : "no feed"}</td>
+			   <td style="color:${row.system_price != null ? 'inherit' : '#6b7a95'}">${row.system_price != null ? fmtPrice(row.system_price, 2) : "no feed"}</td>
+			   <td style="color:${row.offset_diff != null ? 'inherit' : '#6b7a95'}">${row.offset_diff != null ? fmtPrice(row.offset_diff, 2) : "--"}</td>
 		   `;
 
 		tr.addEventListener("click", () => {
@@ -2814,6 +2875,7 @@ setSingletonInterval("governancePanelRefresh", () => {
 	updateDrawdownBar().catch(console.error);
 	updateModelStats().catch(console.error);
 	updateNewsSeverity().catch(console.error);
+	updateMarketHours().catch(console.error);
 }, 5000);
 
 setSingletonInterval("systemHealthPanelRefresh", () => {

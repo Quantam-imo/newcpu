@@ -9,10 +9,14 @@ import os
 import sys
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Body, Query
+
+from astroquant.backend.mathematical_engines import LearningFeedbackEngine, MathematicalQuestionChecker
+from astroquant.backend.prediction_tracker import PredictionTracker
 
 
 router = APIRouter(prefix="/market_causality", tags=["market-causality"])
@@ -22,10 +26,148 @@ _module = None
 _cache_lock = threading.Lock()
 _cache_payloads: dict[str, dict[str, Any]] = {}
 _cache_ts_by_key: dict[str, float] = {}
-_CACHE_TTL_SECONDS = 30.0
-_SUMMARY_TIMEOUT_SECONDS = max(5.0, float(os.getenv("MCL_SUMMARY_TIMEOUT_SECONDS", "40")))
+_CACHE_TTL_SECONDS = 300.0  # 5-minute cache — summaries take 40-90s to compute
+_SUMMARY_TIMEOUT_SECONDS = max(5.0, float(os.getenv("MCL_SUMMARY_TIMEOUT_SECONDS", "90")))
 _MATRIX_TIMEFRAMES = ("1d", "4h", "1h", "30m", "15m", "5m", "1m", "1w", "1month")
-_MATRIX_MAX_WORKERS = max(1, int(os.getenv("MCL_MATRIX_MAX_WORKERS", "4")))
+_MATRIX_MAX_WORKERS = max(1, int(os.getenv("MCL_MATRIX_MAX_WORKERS", "9")))
+_PREDICTION_TRACKER = PredictionTracker()
+_LEARNING_ENGINE = LearningFeedbackEngine(tracker=_PREDICTION_TRACKER)
+
+_TRADING_GANN_QUESTION_BANK: list[dict[str, str]] = [
+    # REGIME (2 questions)
+    {"id": "REGIME_01", "category": "regime", "framework": "core", "question": "What is the dominant market regime now: trend, range, transition, or trap?"},
+    {"id": "REGIME_02", "category": "regime", "framework": "core", "question": "Is this regime stable across major and minor timeframes?"},
+    # RISK (2 questions)
+    {"id": "RISK_01", "category": "risk", "framework": "core", "question": "Is a high-impact event guard active and blocking directional execution?"},
+    {"id": "RISK_02", "category": "risk", "framework": "core", "question": "What is current reliability score vs threshold for valid execution?"},
+    # STRUCTURE (2 questions)
+    {"id": "STRUCT_01", "category": "structure", "framework": "smc", "question": "Is BOS/CHOCH confirmed in the intended trade direction?"},
+    {"id": "STRUCT_02", "category": "structure", "framework": "smc", "question": "Are HH/HL or LL/LH sequences aligned with entry direction?"},
+    # PHYSICS (7 questions)
+    {"id": "PHYS_01", "category": "physics", "framework": "market_physics", "question": "Is momentum strengthening, weakening, or diverging from structure?"},
+    {"id": "PHYS_02", "category": "physics", "framework": "market_physics", "question": "Is acceleration supporting continuation or signaling exhaustion?"},
+    {"id": "PHYS_03", "category": "physics", "framework": "market_physics", "question": "How long can this velocity direction persist before natural exhaustion?"},
+    {"id": "PHYS_04", "category": "physics", "framework": "market_physics", "question": "Where are gravity wells (support/resistance) pulling price toward now?"},
+    {"id": "PHYS_05", "category": "physics", "framework": "market_physics", "question": "What specific conditions signal momentum onset vs momentum exhaustion?"},
+    {"id": "PHYS_06", "category": "physics", "framework": "market_physics", "question": "Is price moving against gravity (rejection force) or with gravity (acceleration)?"},
+    {"id": "PHYS_07", "category": "physics", "framework": "market_physics", "question": "What is the time until next natural momentum reversal based on oscillation frequency?"},
+    # GANN (10 questions)
+    {"id": "GANN_01", "category": "gann", "framework": "gann", "question": "Has price reached a cardinal/key Gann angle (45/90/180/225/315)?"},
+    {"id": "GANN_02", "category": "gann", "framework": "gann", "question": "Is Gann angle proximity EXACT/NEAR/NONE at the current bar?"},
+    {"id": "GANN_03", "category": "gann", "framework": "gann", "question": "Is Price=Time relationship aligned enough for execution now?"},
+    {"id": "GANN_04", "category": "gann", "framework": "gann", "question": "What is the nearest key angle, and does it act as launch or rejection level?"},
+    {"id": "GANN_05", "category": "gann", "framework": "gann", "question": "How does current price/time map to Gann Square of 9 or 144 derived levels?"},
+    {"id": "GANN_06", "category": "gann", "framework": "gann", "question": "Is price/time vibration frequency synchronized with expected harmonic?"},
+    {"id": "GANN_07", "category": "gann", "framework": "gann", "question": "What are the calculated swing reversal zones and balance points?"},
+    {"id": "GANN_08", "category": "gann", "framework": "gann", "question": "Is price penetrating key angles with conviction or weak rejection?"},
+    {"id": "GANN_09", "category": "gann", "framework": "gann", "question": "What quadrant is active and what does its position signal?"},
+    {"id": "GANN_10", "category": "gann", "framework": "gann", "question": "When or if a key angle fails, what is the next reversal target?"},
+    # TIME (5 questions)
+    {"id": "TIME_01", "category": "time", "framework": "gann_time", "question": "Is the selected date inside an active signal time window?"},
+    {"id": "TIME_02", "category": "time", "framework": "gann_time", "question": "Is the setup early, on-time, or late relative to cycle phase?"},
+    {"id": "TIME_03", "category": "time", "framework": "gann_time", "question": "Are daily/weekly/monthly natural inflection points approaching?"},
+    {"id": "TIME_04", "category": "time", "framework": "gann_time", "question": "What is the dominant oscillation period (hours/days/weeks)?"},
+    {"id": "TIME_05", "category": "time", "framework": "gann_time", "question": "Are price distance and time distance squared in harmony?"},
+    # GEOMETRY (4 questions)
+    {"id": "GEOM_01", "category": "geometry", "framework": "gann_geometry", "question": "What geometric shape is price forming (wedge, triangle, channel, flag, pennant)?"},
+    {"id": "GEOM_02", "category": "geometry", "framework": "gann_geometry", "question": "Are width:height proportions harmonious or unbalanced in current formation?"},
+    {"id": "GEOM_03", "category": "geometry", "framework": "gann_geometry", "question": "Is price following a straight axis, parabolic arc, or random wave?"},
+    {"id": "GEOM_04", "category": "geometry", "framework": "gann_geometry", "question": "What is the natural 1:1 angle slope for this price level and timeframe?"},
+    # NUMEROLOGY (2 questions)
+    {"id": "NUM_01", "category": "numerology", "framework": "numerology", "question": "Are event, date, and price numerology harmoniously aligned?"},
+    {"id": "NUM_02", "category": "numerology", "framework": "numerology", "question": "What numerology cycle phase is active: expansion, consolidation, or completion?"},
+    # ASTROLOGY (2 questions)
+    {"id": "ASTRO_01", "category": "astrology", "framework": "astro", "question": "What nearby astro event is active and what impact level is expected?"},
+    {"id": "ASTRO_02", "category": "astrology", "framework": "astro", "question": "Does observed market behavior match astro narration expectations?"},
+    # ICT (6 questions)
+    {"id": "ICT_01", "category": "ict", "framework": "ict", "question": "Did price sweep liquidity (buy-side/sell-side) before displacement in trade direction?"},
+    {"id": "ICT_02", "category": "ict", "framework": "ict", "question": "Is there an ICT-style imbalance/FVG with premium-discount context supporting continuation?"},
+    {"id": "ICT_03", "category": "ict", "framework": "ict", "question": "Has price broken through or tested order blocks at current or prior levels?"},
+    {"id": "ICT_04", "category": "ict", "framework": "ict", "question": "Are supply/demand zones acting as magnets (price returning) or rejected (break through)?"},
+    {"id": "ICT_05", "category": "ict", "framework": "ict", "question": "What is the smart money (institutional) positioning signal: accumulation, distribution, or neutral?"},
+    {"id": "ICT_06", "category": "ict", "framework": "ict", "question": "Is current market structure a retracement or continuation pattern from the inducement?"},
+    # CONFLUENCE (4 questions)
+    {"id": "CONF_01", "category": "confluence", "framework": "gann_confluence", "question": "Do geometry, time, structure, and tape all confirm together?"},
+    {"id": "CONF_02", "category": "confluence", "framework": "gann_confluence", "question": "What is the final confluence verdict: BUY, SELL, or WAIT?"},
+    {"id": "CONF_03", "category": "confluence", "framework": "gann_confluence", "question": "Which single component (geometry/time/structure/tape) is weakest?"},
+    {"id": "CONF_04", "category": "confluence", "framework": "gann_confluence", "question": "What probability for BUY, SELL, WAIT given all confluence data?"},
+    # EXECUTION (2 questions)
+    {"id": "EXEC_01", "category": "execution", "framework": "execution", "question": "What are the exact entry, stop, target, and expected hold window?"},
+    {"id": "EXEC_02", "category": "execution", "framework": "execution", "question": "Is projected move sufficient after spread/slippage and risk costs?"},
+    # AI LEARNING (2 questions)
+    {"id": "AI_01", "category": "ai_learning", "framework": "ai", "question": "How similar is this setup to past winning/losing patterns in memory?"},
+    {"id": "AI_02", "category": "ai_learning", "framework": "ai", "question": "Is model confidence calibrated for this regime or drifting?"},
+    # POST-TRADE (2 questions)
+    {"id": "POST_01", "category": "post_trade", "framework": "feedback", "question": "Did realized move match projected direction, magnitude, and time window?"},
+    {"id": "POST_02", "category": "post_trade", "framework": "feedback", "question": "Which concept failed first when a setup was wrong: geometry, time, structure, or tape?"},
+]
+
+
+def _question_bank_payload(
+    category: str | None = None,
+    framework: str | None = None,
+    live_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    cat = str(category or "").strip().lower()
+    fw = str(framework or "").strip().lower()
+
+    rows = _TRADING_GANN_QUESTION_BANK
+    if cat:
+        rows = [q for q in rows if str(q.get("category", "")).lower() == cat]
+    if fw:
+        rows = [q for q in rows if str(q.get("framework", "")).lower() == fw]
+
+    categories = sorted({str(q.get("category")) for q in _TRADING_GANN_QUESTION_BANK})
+    frameworks = sorted({str(q.get("framework")) for q in _TRADING_GANN_QUESTION_BANK})
+
+    # Merge live answers when caller provides a payload
+    answered_rows = rows
+    gann_answers_meta: dict[str, Any] = {}
+    if live_payload is not None:
+        gann_out = _compute_gann_answers(live_payload)
+        answers_by_id: dict[str, dict[str, Any]] = {
+            a["question_id"]: a for a in gann_out.get("gann_questions", [])
+        }
+        answered_rows = [
+            {
+                **q,
+                **(
+                    {
+                        "answer": answers_by_id[q["id"]]["answer"],
+                        "reasoning": answers_by_id[q["id"]]["reasoning"],
+                        "confidence": answers_by_id[q["id"]]["confidence"],
+                    }
+                    if q.get("id") in answers_by_id
+                    else {}
+                ),
+            }
+            for q in rows
+        ]
+        gann_answers_meta = {
+            "gann_questions_verdict": gann_out.get("gann_questions_verdict"),
+            "gann_questions_score": gann_out.get("gann_questions_score"),
+            "gann_questions_total": gann_out.get("gann_questions_total"),
+            "gann_questions_pct": gann_out.get("gann_questions_pct"),
+            "gann_weakest_component": gann_out.get("gann_weakest_component"),
+            "gann_buy_prob": gann_out.get("gann_buy_prob"),
+            "gann_sell_prob": gann_out.get("gann_sell_prob"),
+            "gann_wait_prob": gann_out.get("gann_wait_prob"),
+        }
+
+    result: dict[str, Any] = {
+        "status": "ok",
+        "count": len(answered_rows),
+        "questions": answered_rows,
+        "categories": categories,
+        "frameworks": frameworks,
+        "selected": {
+            "category": cat or None,
+            "framework": fw or None,
+        },
+        "live_answers_included": live_payload is not None,
+    }
+    result.update(gann_answers_meta)
+    return result
 
 
 def _timeframe_seconds(timeframe: str | None) -> int:
@@ -299,6 +441,593 @@ _ORIGINAL_LOAD_MODULE = _load_module
 _ORIGINAL_RUN_FULL_SYSTEM = _run_full_system
 
 
+def _compute_math_questions(payload: dict[str, Any]) -> dict[str, Any]:
+    """
+    Derive MathematicalQuestionChecker inputs from a full_system() payload and
+    return a partial summary dict with math_questions, math_verdict, math_score,
+    math_score_pct, math_passed_ids, math_failed_ids.
+    Falls back gracefully if price data is incomplete.
+    """
+    _EMPTY: dict[str, Any] = {
+        "math_questions": [],
+        "math_verdict": "INSUFFICIENT_DATA",
+        "math_score": 0,
+        "math_score_pct": 0.0,
+        "math_passed_ids": [],
+        "math_failed_ids": [],
+    }
+    try:
+        obs = payload.get("observation") or {}
+        tl = payload.get("trade_levels") or {}
+
+        def _sf(val: Any, default: float = 0.0) -> float:
+            if val is None:
+                return default
+            if isinstance(val, (int, float)):
+                return float(val)
+            if isinstance(val, str):
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return default
+            if isinstance(val, dict):
+                for k in ("value", "score", "amount", "price"):
+                    if k in val:
+                        try:
+                            return float(val[k])
+                        except (ValueError, TypeError):
+                            pass
+            return default
+
+        current_price = _sf(obs.get("signal_start_price") or tl.get("entry"))
+        entry_price = _sf(tl.get("entry") or current_price, current_price)
+        stop_price = _sf(tl.get("stop_loss") or (entry_price - 10.0), entry_price - 10.0)
+        target_price = _sf(tl.get("take_profit") or (entry_price + 20.0), entry_price + 20.0)
+
+        if current_price <= 0 or entry_price <= 0:
+            return _EMPTY
+
+        s_px = _sf(obs.get("signal_start_price") or current_price, current_price)
+        e_px = _sf(obs.get("signal_end_price") or current_price, current_price)
+        if abs(e_px - s_px) > 0:
+            recent_prices = [round(s_px + (e_px - s_px) * i / 4.0, 4) for i in range(5)]
+        else:
+            recent_prices = [current_price] * 5
+
+        swing_low = min(entry_price, stop_price)
+        swing_high = max(entry_price, target_price)
+        pivot_bar = 0
+        current_bar = max(1, int(_sf(obs.get("signal_window_hours"), 1.0)))
+        pivot_price = s_px
+
+        results = MathematicalQuestionChecker.check_all(
+            pivot_price=pivot_price,
+            pivot_bar=pivot_bar,
+            current_bar=current_bar,
+            current_price=current_price,
+            recent_prices=recent_prices,
+            swing_low=swing_low,
+            swing_high=swing_high,
+            entry_price=entry_price,
+            stop_price=stop_price,
+            target_price=target_price,
+        )
+        scoring = MathematicalQuestionChecker.score_setup(results)
+        return {
+            "math_questions": [
+                {
+                    "question_id": r.question_id,
+                    "question": r.question,
+                    "answer": r.answer,
+                    "detail": r.detail,
+                    "confidence": round(r.confidence, 4),
+                }
+                for r in results
+            ],
+            "math_verdict": scoring.get("verdict"),
+            "math_score": scoring.get("score"),
+            "math_score_pct": round(float(scoring.get("pct_pass", 0.0)) * 100.0, 1),
+            "math_passed_ids": scoring.get("passed_ids"),
+            "math_failed_ids": scoring.get("failed_ids"),
+        }
+    except Exception as exc:
+        logging.warning("math_questions computation failed: %s", exc)
+        return {**_EMPTY, "math_verdict": "ERROR"}
+
+
+def _compute_gann_answers(payload: dict[str, Any]) -> dict[str, Any]:
+    """
+    Answer all 52 trading questions in _TRADING_GANN_QUESTION_BANK using the
+    current system payload.  Returns gann_questions list + aggregate stats.
+    Each item: {question_id, answer (bool), reasoning (str), confidence (0..1)}.
+    Falls back gracefully on missing data.
+    """
+
+    def _sf(val: Any, default: float = 0.0) -> float:
+        """Safe float — handles numeric, string, or nested dict values."""
+        if val is None:
+            return default
+        if isinstance(val, (int, float)):
+            return float(val)
+        if isinstance(val, str):
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return default
+        if isinstance(val, dict):
+            for k in ("value", "score", "amount", "price"):
+                if k in val:
+                    try:
+                        return float(val[k])
+                    except (ValueError, TypeError):
+                        pass
+        return default
+
+    try:
+        def _d(val: Any) -> dict:
+            return val if isinstance(val, dict) else {}
+
+        obs = _d(payload.get("observation"))
+        tl = _d(payload.get("trade_levels"))
+        final = _d(payload.get("final"))
+        simple = _d(payload.get("simple"))
+        institutional = _d(payload.get("institutional"))
+        trap_data = _d(payload.get("trap"))
+        signal = str(payload.get("filtered_signal") or "WAIT").upper()
+        confidence_val = _sf(payload.get("confidence"))
+        reliability = _sf((payload.get("decision_trace") or {}).get("reliability_score"))
+
+        gann_proximity = str(obs.get("gann_angle_proximity") or "NONE").upper()
+        gann_nearest_angle = obs.get("gann_nearest_key_angle")
+        confirmation_geom = bool(obs.get("confirmation_geometry"))
+        confirmation_time_f = bool(obs.get("confirmation_time"))
+        confirmation_struct = bool(obs.get("confirmation_structure"))
+        confirmation_tape = bool(obs.get("confirmation_tape_action"))
+        trend = str(final.get("trend") or "").lower()
+        phase = str(final.get("phase") or "").lower()
+        trap = str(trap_data.get("trap") or "").lower()
+        instit_decision = str(institutional.get("institutional_decision") or "").upper()
+        instit_score = _sf(institutional.get("institutional_score"))
+        news_guard = bool(payload.get("news_guard_applied"))
+        gann_confluence = bool(payload.get("gann_confluence_ready"))
+        momentum_runtime = obs.get("physics_momentum_runtime")
+        momentum_runtime = momentum_runtime if isinstance(momentum_runtime, dict) else {}
+        structure_runtime = obs.get("structure_major_runtime")
+        structure_runtime = structure_runtime if isinstance(structure_runtime, dict) else {}
+        numerology_runtime = obs.get("numerology_cycle_runtime")
+        numerology_runtime = numerology_runtime if isinstance(numerology_runtime, dict) else {}
+        gann_degree = obs.get("gann_degree")
+        geom_angle = obs.get("geometry_angle_deg")
+        physics_velocity = obs.get("physics_velocity_price_per_hour")
+        price_time_ratio = obs.get("price_time_ratio")
+        degree_time_ratio = obs.get("degree_time_ratio")
+        projected_move = _sf(obs.get("signal_projected_move"))
+        window_hours = _sf(obs.get("signal_window_hours"))
+        gann_mindset_bias = str(obs.get("gann_mindset_bias") or "").upper()
+        r_ratio = _sf(tl.get("r_ratio"))
+        entry = _sf(tl.get("entry"))
+        stop = _sf(tl.get("stop_loss"))
+        target = _sf(tl.get("take_profit"))
+        learning_profile = _d(payload.get("learning_profile"))
+        ai_model = _d(payload.get("ai_model"))
+        ai_drift = bool(_d(ai_model.get("drift")).get("drift_detected", False))
+        astro = _d(payload.get("astro"))
+        astro_event = _d(astro.get("nearby_event"))
+
+        answers: list[dict[str, Any]] = []
+
+        def _q(qid: str, answer: bool, reasoning: str, conf: float) -> None:
+            answers.append({
+                "question_id": qid,
+                "answer": bool(answer),
+                "reasoning": str(reasoning),
+                "confidence": round(min(1.0, max(0.0, float(conf))), 3),
+            })
+
+        # ── REGIME ───────────────────────────────────────────────────────────
+        regime_type = "trend" if trend in ("up", "down") else ("range" if trap in ("none", "") else "transition")
+        _q("REGIME_01", signal != "WAIT",
+           f"Dominant regime: {regime_type} | signal={signal} | phase={phase}",
+           0.8 if signal != "WAIT" else 0.5)
+        _q("REGIME_02", gann_confluence,
+           f"Gann confluence ready={gann_confluence} | trap={trap}",
+           0.75 if gann_confluence else 0.4)
+
+        # ── RISK ─────────────────────────────────────────────────────────────
+        _q("RISK_01", not news_guard,
+           f"News guard applied={news_guard}",
+           0.95)
+        _q("RISK_02", reliability >= 0.6,
+           f"Reliability score={reliability:.3f} (threshold=0.60)",
+           min(1.0, reliability + 0.1))
+
+        # ── STRUCTURE ────────────────────────────────────────────────────────
+        _q("STRUCT_01", confirmation_struct,
+           f"BOS/CHOCH confirmation_structure={confirmation_struct}",
+           0.85 if confirmation_struct else 0.3)
+        aligned_struct = (trend == "up" and signal == "BUY") or (trend == "down" and signal == "SELL")
+        _q("STRUCT_02", aligned_struct,
+           f"Trend={trend} | signal={signal} | HH/HL or LL/LH aligned={aligned_struct}",
+           0.8 if aligned_struct else 0.35)
+
+        # ── PHYSICS ──────────────────────────────────────────────────────────
+        mom_dir = str(momentum_runtime.get("direction") or momentum_runtime.get("momentum") or "neutral").lower()
+        mom_ok = (mom_dir in ("up", "bullish") and signal == "BUY") or \
+                 (mom_dir in ("down", "bearish") and signal == "SELL")
+        _q("PHYS_01", mom_ok,
+           f"Momentum direction={mom_dir} | signal={signal} → aligned={mom_ok}",
+           0.75 if mom_ok else 0.4)
+
+        vel_val = float(physics_velocity or 0.0)
+        accel_ok = (vel_val > 0 and signal == "BUY") or (vel_val < 0 and signal == "SELL")
+        _q("PHYS_02", accel_ok,
+           f"Physics velocity={physics_velocity} | signal={signal} → accel_ok={accel_ok}",
+           0.7 if accel_ok else 0.4)
+
+        _q("PHYS_03", window_hours > 0,
+           f"Signal window={window_hours:.0f}h → velocity can persist within window",
+           0.7 if window_hours > 4 else 0.5)
+
+        gravity_set = bool(stop and target)
+        _q("PHYS_04", gravity_set,
+           f"Gravity wells: SL={stop} TP={target} → target bands defined",
+           0.9 if gravity_set else 0.2)
+
+        _q("PHYS_05", confirmation_tape,
+           f"Tape action confirmation={confirmation_tape} → onset vs exhaustion",
+           0.8 if confirmation_tape else 0.35)
+
+        move_dir_ok = (projected_move > 0 and signal == "BUY") or (projected_move < 0 and signal == "SELL")
+        _q("PHYS_06", move_dir_ok,
+           f"Projected move={projected_move:.2f} | signal={signal} → direction match={move_dir_ok}",
+           0.75 if move_dir_ok else 0.35)
+
+        _q("PHYS_07", window_hours > 0,
+           f"Natural reversal in ~{window_hours:.0f}h based on signal window oscillation",
+           0.6)
+
+        # ── GANN ─────────────────────────────────────────────────────────────
+        gann_angle_hit = gann_proximity in ("EXACT", "NEAR")
+        _q("GANN_01", gann_angle_hit,
+           f"Gann angle proximity={gann_proximity} | nearest_angle={gann_nearest_angle}",
+           0.9 if gann_proximity == "EXACT" else (0.65 if gann_proximity == "NEAR" else 0.3))
+
+        _q("GANN_02", gann_angle_hit,
+           f"Cardinal angle proximity={gann_proximity}",
+           0.95 if gann_angle_hit else 0.8)
+
+        _q("GANN_03", confirmation_time_f,
+           f"Price=Time confirmation={confirmation_time_f}",
+           0.85 if confirmation_time_f else 0.3)
+
+        _q("GANN_04", gann_nearest_angle is not None,
+           f"Nearest angle={gann_nearest_angle} acts as {'launch' if signal != 'WAIT' else 'rejection'}",
+           0.7 if gann_nearest_angle else 0.3)
+
+        gann_deg_val = float(gann_degree or 0.0)
+        sq9_aligned = gann_deg_val > 0 and (
+            abs(gann_deg_val % 90) < 15 or abs(gann_deg_val % 45) < 8
+        )
+        _q("GANN_05", sq9_aligned,
+           f"Gann degree={gann_deg_val:.1f}° | Square of 9/144 alignment={sq9_aligned}",
+           0.7 if sq9_aligned else 0.35)
+
+        dtr_val = float(degree_time_ratio or 0.0)
+        dtr_ok = degree_time_ratio is not None and 0.8 <= dtr_val <= 1.2
+        _q("GANN_06", dtr_ok,
+           f"Degree-time ratio={degree_time_ratio} | harmonic range=[0.8, 1.2]",
+           0.75 if dtr_ok else 0.4)
+
+        _q("GANN_07", bool(entry and stop and target),
+           f"Swing zones/balance points: entry={entry} stop={stop} target={target}",
+           0.9 if (entry and stop and target) else 0.2)
+
+        conviction_ok = gann_proximity == "EXACT" and confirmation_tape
+        _q("GANN_08", conviction_ok,
+           f"Angle conviction: proximity={gann_proximity} + tape={confirmation_tape}",
+           0.85 if conviction_ok else 0.4)
+
+        quadrant = int(gann_deg_val // 90) + 1 if gann_deg_val > 0 else 0
+        _q("GANN_09", quadrant > 0,
+           f"Active quadrant={quadrant} (degree={gann_deg_val:.1f}°)",
+           0.7 if quadrant > 0 else 0.3)
+
+        _q("GANN_10", bool(target or stop),
+           f"Next reversal target={'TP' if signal in ('BUY', 'SELL') else 'SL'}: {target or stop}",
+           0.75 if (target or stop) else 0.3)
+
+        # ── TIME ─────────────────────────────────────────────────────────────
+        now_ts = int(time.time())
+        sig_start = _to_epoch_seconds(obs.get("signal_start_time"))
+        sig_end = _to_epoch_seconds(obs.get("signal_end_time"))
+        inside_window = bool(sig_start and sig_end and sig_start <= now_ts <= sig_end)
+        _q("TIME_01", inside_window,
+           f"Inside signal window={inside_window} (start={sig_start} end={sig_end})",
+           0.95 if (sig_start and sig_end) else 0.3)
+
+        if sig_start and sig_end and sig_end > sig_start:
+            timing_pct = (now_ts - sig_start) / (sig_end - sig_start)
+            timing_pct = max(0.0, min(1.0, timing_pct))
+            timing_label = "early" if timing_pct < 0.33 else ("on-time" if timing_pct < 0.66 else "late")
+        else:
+            timing_label, timing_pct = "unknown", 0.5
+        _q("TIME_02", timing_label != "late",
+           f"Cycle timing={timing_label} ({timing_pct * 100:.0f}% through window)",
+           0.8 if timing_label == "early" else (0.6 if timing_label == "on-time" else 0.35))
+
+        _q("TIME_03", confirmation_time_f,
+           f"Inflection point approaching: confirmation_time={confirmation_time_f}",
+           0.8 if confirmation_time_f else 0.35)
+
+        _q("TIME_04", window_hours > 0,
+           f"Dominant oscillation period={window_hours:.0f}h",
+           0.8 if window_hours > 0 else 0.2)
+
+        ptr_val = float(price_time_ratio or 0.0)
+        ptr_ok = price_time_ratio is not None and 0.5 <= ptr_val <= 1.5
+        _q("TIME_05", ptr_ok,
+           f"Price-time ratio={price_time_ratio} | squared harmony range=[0.5, 1.5]",
+           0.75 if ptr_ok else 0.4)
+
+        # ── GEOMETRY ────────────────────────────────────────────────────────
+        _q("GEOM_01", confirmation_geom,
+           f"Geometric confirmation={confirmation_geom}",
+           0.85 if confirmation_geom else 0.3)
+
+        geom_angle_val = float(geom_angle or 0.0)
+        proportions_ok = 30.0 <= geom_angle_val <= 70.0
+        _q("GEOM_02", proportions_ok,
+           f"Geometry angle={geom_angle_val:.1f}° | harmonic range=[30, 70]",
+           0.75 if proportions_ok else 0.4)
+
+        _q("GEOM_03", confirmation_geom or bool(physics_velocity),
+           f"Structural axis: geom={confirmation_geom} velocity={physics_velocity}",
+           0.6)
+
+        gann_45_ok = abs(geom_angle_val - 45.0) < 10 if geom_angle_val else False
+        _q("GEOM_04", gann_45_ok,
+           f"1:1 angle (45°): geometry_angle={geom_angle_val:.1f}°",
+           0.8 if gann_45_ok else 0.4)
+
+        # ── NUMEROLOGY ──────────────────────────────────────────────────────
+        num_cycle = str(
+            numerology_runtime.get("cycle") or numerology_runtime.get("phase") or ""
+        ).lower()
+        num_alignment = str(numerology_runtime.get("alignment") or "").lower()
+        num_ok = num_alignment in ("aligned", "harmonic", "yes", "true") or (num_cycle != "")
+        _q("NUM_01", num_ok,
+           f"Numerology cycle={num_cycle} alignment={num_alignment}",
+           0.65 if num_ok else 0.4)
+        _q("NUM_02", num_cycle != "",
+           f"Cycle phase={num_cycle or 'unknown'}",
+           0.7 if num_cycle else 0.3)
+
+        # ── ASTROLOGY ───────────────────────────────────────────────────────
+        has_astro = bool(astro_event.get("event_name"))
+        astro_impact = str(astro_event.get("impact_level") or "").upper()
+        _q("ASTRO_01", has_astro,
+           f"Astro event={astro_event.get('event_name') or 'none'} impact={astro_impact}",
+           0.9 if has_astro else 0.5)
+
+        mindset_match = bool(gann_mindset_bias and gann_mindset_bias == signal)
+        _q("ASTRO_02", mindset_match,
+           f"Gann mindset bias={gann_mindset_bias} vs signal={signal} match={mindset_match}",
+           0.75 if mindset_match else 0.35)
+
+        # ── ICT ─────────────────────────────────────────────────────────────
+        liq_sweep = bool(confirmation_struct and confirmation_tape)
+        _q("ICT_01", liq_sweep,
+           f"Liquidity sweep: struct={confirmation_struct} + tape={confirmation_tape}",
+           0.7 if liq_sweep else 0.35)
+
+        _q("ICT_02", confirmation_geom,
+           f"FVG/imbalance: geometry={confirmation_geom}",
+           0.75 if confirmation_geom else 0.35)
+
+        _q("ICT_03", bool(structure_runtime),
+           f"Order block: structure_runtime present={bool(structure_runtime)}",
+           0.6 if structure_runtime else 0.3)
+
+        _q("ICT_04", bool(entry and stop and target),
+           f"Supply/demand zones: entry={entry} stop={stop} tp={target}",
+           0.85 if (entry and stop and target) else 0.3)
+
+        instit_ok = instit_decision in ("BUY", "SELL") and instit_decision == signal
+        _q("ICT_05", instit_ok,
+           f"Smart money: instit_decision={instit_decision} (score={instit_score:.2f}) vs signal={signal}",
+           0.85 if instit_ok else 0.4)
+
+        _q("ICT_06", confirmation_struct,
+           f"Retracement/continuation via structure={confirmation_struct}",
+           0.75 if confirmation_struct else 0.35)
+
+        # ── CONFLUENCE ──────────────────────────────────────────────────────
+        all_four = confirmation_geom and confirmation_time_f and confirmation_struct and confirmation_tape
+        _q("CONF_01", all_four,
+           f"All 4 confirm: geom={confirmation_geom} time={confirmation_time_f} "
+           f"struct={confirmation_struct} tape={confirmation_tape}",
+           0.95 if all_four else 0.6)
+
+        _q("CONF_02", signal in ("BUY", "SELL"),
+           f"Final confluence verdict: signal={signal}",
+           0.9 if signal in ("BUY", "SELL") else 0.5)
+
+        weakness_map = {
+            "geometry": int(confirmation_geom),
+            "time": int(confirmation_time_f),
+            "structure": int(confirmation_struct),
+            "tape": int(confirmation_tape),
+        }
+        weakest = min(weakness_map, key=lambda k: weakness_map[k])
+        _q("CONF_03", True,
+           f"Weakest component: {weakest}={bool(weakness_map[weakest])}",
+           0.8)
+
+        buy_prob = round(confidence_val * 100.0 if signal == "BUY" else max(0.0, (1.0 - confidence_val) * 30.0), 1)
+        sell_prob = round(confidence_val * 100.0 if signal == "SELL" else max(0.0, (1.0 - confidence_val) * 30.0), 1)
+        wait_prob = round(max(0.0, 100.0 - buy_prob - sell_prob), 1)
+        _q("CONF_04", confidence_val >= 0.5,
+           f"P(BUY)={buy_prob}% P(SELL)={sell_prob}% P(WAIT)={wait_prob}%",
+           confidence_val)
+
+        # ── EXECUTION ───────────────────────────────────────────────────────
+        all_levels = bool(entry and stop and target)
+        _q("EXEC_01", all_levels,
+           f"Entry={entry} SL={stop} TP={target} horizon={window_hours:.0f}h",
+           0.95 if all_levels else 0.2)
+
+        rr_ok = r_ratio >= 2.0
+        _q("EXEC_02", rr_ok,
+           f"R:R={r_ratio:.2f} (required ≥2.0) → sufficient={rr_ok}",
+           0.9 if rr_ok else max(0.1, r_ratio / 4.0))
+
+        # ── AI LEARNING ─────────────────────────────────────────────────────
+        learn_win_rate = float(learning_profile.get("win_rate") or 0.0)
+        _q("AI_01", learn_win_rate > 0,
+           f"Past pattern win rate={learn_win_rate:.2%} | history present={learn_win_rate > 0}",
+           0.7 if learn_win_rate > 0 else 0.3)
+
+        _q("AI_02", not ai_drift,
+           f"Model drift detected={ai_drift} → calibrated={not ai_drift}",
+           0.95 if not ai_drift else 0.4)
+
+        # ── POST-TRADE ──────────────────────────────────────────────────────
+        outcomes = _PREDICTION_TRACKER.load_outcomes()
+        obs_id = str(payload.get("observation_id") or "").strip()
+        matched_outcome = next(
+            (o for o in outcomes if str(o.get("prediction_id") or "").strip() == obs_id),
+            None,
+        ) if obs_id else None
+
+        if matched_outcome:
+            post_01_detail = (
+                f"Outcome recorded: direction={matched_outcome.get('outcome_direction')} "
+                f"was_correct={matched_outcome.get('was_correct')}"
+            )
+        else:
+            post_01_detail = f"No outcome recorded for observation_id={obs_id or 'unknown'}"
+        _q("POST_01", matched_outcome is not None, post_01_detail,
+           0.9 if matched_outcome else 0.1)
+
+        if matched_outcome:
+            was_correct = bool(matched_outcome.get("was_correct"))
+            failed_concept = str(matched_outcome.get("failed_concept") or ("none" if was_correct else "unknown"))
+            _q("POST_02", was_correct,
+               f"Direction matched={was_correct} | failed_concept={failed_concept}",
+               0.9 if was_correct else 0.8)
+        else:
+            _q("POST_02", False,
+               "Post-trade not yet recorded — outcome entry pending",
+               0.1)
+
+        # ── AGGREGATE ───────────────────────────────────────────────────────
+        score = sum(1 for a in answers if a["answer"])
+        total = len(answers)
+        pct = round(score / total * 100.0, 1) if total else 0.0
+        if pct >= 75:
+            gann_verdict = "STRONG"
+        elif pct >= 55:
+            gann_verdict = "ACCEPTABLE"
+        elif pct >= 35:
+            gann_verdict = "WEAK"
+        else:
+            gann_verdict = "FAIL"
+
+        return {
+            "gann_questions": answers,
+            "gann_questions_score": score,
+            "gann_questions_total": total,
+            "gann_questions_pct": pct,
+            "gann_questions_verdict": gann_verdict,
+            "gann_weakest_component": weakest,
+            "gann_buy_prob": buy_prob,
+            "gann_sell_prob": sell_prob,
+            "gann_wait_prob": wait_prob,
+        }
+    except Exception as exc:
+        logging.exception("gann_answers computation failed: %s", exc)
+        return {
+            "gann_questions": [],
+            "gann_questions_score": 0,
+            "gann_questions_total": 52,
+            "gann_questions_pct": 0.0,
+            "gann_questions_verdict": "ERROR",
+            "gann_weakest_component": "unknown",
+            "gann_buy_prob": 0.0,
+            "gann_sell_prob": 0.0,
+            "gann_wait_prob": 100.0,
+        }
+
+
+def _to_epoch_seconds(value: Any) -> int | None:
+    """Best-effort UTC epoch conversion for ISO strings, timestamps, or epoch-like values."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        raw = float(value)
+        if raw > 1e12:  # likely milliseconds
+            raw = raw / 1000.0
+        return int(raw)
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    try:
+        return int(float(text))
+    except ValueError:
+        pass
+
+    try:
+        dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp())
+    except ValueError:
+        return None
+
+
+def _compute_post_trade_review(summary: dict[str, Any]) -> dict[str, Any]:
+    """Flag when post-trade review (POST_01/POST_02) is due and still missing."""
+    observation_id = str(summary.get("observation_id") or "").strip()
+    due_at = _to_epoch_seconds(summary.get("observation_signal_end_time"))
+    now_ts = int(time.time())
+
+    if due_at is None:
+        return {
+            "post_trade_review_required": False,
+            "post_trade_window_closed": False,
+            "post_trade_due_at": None,
+            "post_trade_outcome_recorded": False,
+            "post_trade_due_reason": "missing_signal_end_time",
+        }
+
+    outcomes = _PREDICTION_TRACKER.load_outcomes()
+    outcome_recorded = bool(
+        observation_id
+        and any(str(item.get("prediction_id") or "").strip() == observation_id for item in outcomes)
+    )
+    window_closed = now_ts >= due_at
+    review_required = bool(window_closed and observation_id and not outcome_recorded)
+
+    if review_required:
+        reason = "window_closed_outcome_missing"
+    elif outcome_recorded:
+        reason = "outcome_recorded"
+    elif not observation_id:
+        reason = "missing_observation_id"
+    else:
+        reason = "window_open"
+
+    return {
+        "post_trade_review_required": review_required,
+        "post_trade_window_closed": window_closed,
+        "post_trade_due_at": due_at,
+        "post_trade_outcome_recorded": outcome_recorded,
+        "post_trade_due_reason": reason,
+    }
+
+
 def _compute_summary(
     refresh: bool = False,
     symbol: str = "XAUUSD",
@@ -357,6 +1086,9 @@ def _compute_summary(
             ),
             "timeframe_fallback_reason": payload.get("timeframe_fallback_reason") or alignment.get("timeframe_fallback_reason"),
             "signal": payload.get("filtered_signal"),
+            "signal_original": payload.get("filtered_signal_original"),
+            "gann_signal_candidate": payload.get("gann_signal_candidate"),
+            "gann_confluence_ready": payload.get("gann_confluence_ready"),
             "confidence": payload.get("confidence"),
             "quality": payload.get("quality"),
             "phase": (payload.get("final") or {}).get("phase"),
@@ -387,6 +1119,24 @@ def _compute_summary(
             "observation": payload.get("observation"),
             "observation_trend_start_time": ((payload.get("observation") or {}).get("trend_start_time")),
             "observation_latest_time": ((payload.get("observation") or {}).get("latest_time")),
+            "observation_signal_start_time": ((payload.get("observation") or {}).get("signal_start_time")),
+            "observation_signal_end_time": ((payload.get("observation") or {}).get("signal_end_time")),
+            "observation_signal_start_price": ((payload.get("observation") or {}).get("signal_start_price")),
+            "observation_signal_end_price": ((payload.get("observation") or {}).get("signal_end_price")),
+            "observation_signal_window_hours": ((payload.get("observation") or {}).get("signal_window_hours")),
+            "observation_signal_projected_move": ((payload.get("observation") or {}).get("signal_projected_move")),
+            "observation_signal_projected_move_pct": ((payload.get("observation") or {}).get("signal_projected_move_pct")),
+            "observation_gann_nearest_key_angle": ((payload.get("observation") or {}).get("gann_nearest_key_angle")),
+            "observation_gann_angle_proximity": ((payload.get("observation") or {}).get("gann_angle_proximity")),
+            "observation_confirmation_geometry": ((payload.get("observation") or {}).get("confirmation_geometry")),
+            "observation_confirmation_time": ((payload.get("observation") or {}).get("confirmation_time")),
+            "observation_confirmation_structure": ((payload.get("observation") or {}).get("confirmation_structure")),
+            "observation_confirmation_tape_action": ((payload.get("observation") or {}).get("confirmation_tape_action")),
+            "observation_numerology_cycle_runtime": ((payload.get("observation") or {}).get("numerology_cycle_runtime")),
+            "observation_structure_major_runtime": ((payload.get("observation") or {}).get("structure_major_runtime")),
+            "observation_physics_momentum_runtime": ((payload.get("observation") or {}).get("physics_momentum_runtime")),
+            "observation_gann_mindset_bias": ((payload.get("observation") or {}).get("gann_mindset_bias")),
+            "observation_gann_mindset_narration": ((payload.get("observation") or {}).get("gann_mindset_narration")),
             "observation_news_previous_time": ((payload.get("observation") or {}).get("news_previous_time")),
             "observation_news_next_time": ((payload.get("observation") or {}).get("news_next_time")),
             "observation_gann_degree": ((payload.get("observation") or {}).get("gann_degree")),
@@ -408,6 +1158,7 @@ def _compute_summary(
             "ai_model": payload.get("ai_model"),
             "ai_model_used": bool(((payload.get("ai_model") or {}).get("used_model"))),
             "ai_model_version": ((payload.get("ai_model") or {}).get("version")),
+            "learning_profile": payload.get("learning_profile"),
             "process_timing": payload.get("process_timing"),
             "slowest_process_stage": max(
                 payload.get("process_timing") or [],
@@ -418,6 +1169,9 @@ def _compute_summary(
             "updated_at": int(time.time()),
         }
         summary["reasoning_delta"] = _build_reasoning_delta(summary, previous_for_key)
+        summary.update(_compute_math_questions(payload))
+        summary.update(_compute_gann_answers(payload))
+        summary.update(_compute_post_trade_review(summary))
     except TimeoutError as exc:
         logging.warning("market-causality summary timeout: %s", exc)
         if previous_for_key:
@@ -505,6 +1259,9 @@ def _compute_timeframe_matrix(
             "timeframe": tf,
             "status": summary.get("status"),
             "signal": summary.get("signal"),
+            "signal_original": summary.get("signal_original"),
+            "gann_signal_candidate": summary.get("gann_signal_candidate"),
+            "gann_confluence_ready": summary.get("gann_confluence_ready"),
             "confidence": summary.get("confidence"),
             "quality": summary.get("quality"),
             "requested_timeframe": summary.get("requested_timeframe"),
@@ -528,6 +1285,24 @@ def _compute_timeframe_matrix(
             "observation": summary.get("observation"),
             "observation_trend_start_time": summary.get("observation_trend_start_time"),
             "observation_latest_time": summary.get("observation_latest_time"),
+            "observation_signal_start_time": summary.get("observation_signal_start_time"),
+            "observation_signal_end_time": summary.get("observation_signal_end_time"),
+            "observation_signal_start_price": summary.get("observation_signal_start_price"),
+            "observation_signal_end_price": summary.get("observation_signal_end_price"),
+            "observation_signal_window_hours": summary.get("observation_signal_window_hours"),
+            "observation_signal_projected_move": summary.get("observation_signal_projected_move"),
+            "observation_signal_projected_move_pct": summary.get("observation_signal_projected_move_pct"),
+            "observation_gann_nearest_key_angle": summary.get("observation_gann_nearest_key_angle"),
+            "observation_gann_angle_proximity": summary.get("observation_gann_angle_proximity"),
+            "observation_confirmation_geometry": summary.get("observation_confirmation_geometry"),
+            "observation_confirmation_time": summary.get("observation_confirmation_time"),
+            "observation_confirmation_structure": summary.get("observation_confirmation_structure"),
+            "observation_confirmation_tape_action": summary.get("observation_confirmation_tape_action"),
+            "observation_numerology_cycle_runtime": summary.get("observation_numerology_cycle_runtime"),
+            "observation_structure_major_runtime": summary.get("observation_structure_major_runtime"),
+            "observation_physics_momentum_runtime": summary.get("observation_physics_momentum_runtime"),
+            "observation_gann_mindset_bias": summary.get("observation_gann_mindset_bias"),
+            "observation_gann_mindset_narration": summary.get("observation_gann_mindset_narration"),
             "observation_news_previous_time": summary.get("observation_news_previous_time"),
             "observation_news_next_time": summary.get("observation_news_next_time"),
             "observation_gann_degree": summary.get("observation_gann_degree"),
@@ -537,10 +1312,22 @@ def _compute_timeframe_matrix(
             "global_events_status": summary.get("global_events_status"),
             "elapsed_ms": summary.get("elapsed_ms"),
             "error": summary.get("error"),
+            # Gann 52-question scoring (populated when summary computed successfully)
+            "gann_questions_pct": summary.get("gann_questions_pct"),
+            "gann_questions_verdict": summary.get("gann_questions_verdict"),
+            "gann_questions_score": summary.get("gann_questions_score"),
+            "gann_buy_prob": summary.get("gann_buy_prob"),
+            "gann_sell_prob": summary.get("gann_sell_prob"),
+            "gann_wait_prob": summary.get("gann_wait_prob"),
+            "gann_weakest_component": summary.get("gann_weakest_component"),
         }
 
     by_tf: dict[str, dict[str, Any]] = {}
+    # Use one worker per timeframe so all run concurrently; each worker's
+    # subprocess already has its own _SUMMARY_TIMEOUT_SECONDS cap.
     worker_count = max(1, min(len(_MATRIX_TIMEFRAMES), _MATRIX_MAX_WORKERS))
+    # Wait at most summary_timeout + 15 s for the slowest parallel result.
+    matrix_wait = _SUMMARY_TIMEOUT_SECONDS + 15.0
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
         future_map = {
@@ -555,20 +1342,30 @@ def _compute_timeframe_matrix(
             for tf in _MATRIX_TIMEFRAMES
         }
 
-        for future in concurrent.futures.as_completed(future_map):
-            tf = future_map[future]
-            try:
-                summary = future.result()
-                status = str(summary.get("status") or "").lower()
-                if status in {"ok", "stale_timeout"}:
-                    ok_count += 1
-                by_tf[tf] = _summary_to_row(tf, summary)
-            except Exception as exc:
-                by_tf[tf] = {
-                    "timeframe": tf,
-                    "status": "error",
-                    "error": str(exc),
-                }
+        try:
+            for future in concurrent.futures.as_completed(future_map, timeout=matrix_wait):
+                tf = future_map[future]
+                try:
+                    summary = future.result()
+                    status = str(summary.get("status") or "").lower()
+                    if status in {"ok", "stale_timeout"}:
+                        ok_count += 1
+                    by_tf[tf] = _summary_to_row(tf, summary)
+                except Exception as exc:
+                    by_tf[tf] = {
+                        "timeframe": tf,
+                        "status": "error",
+                        "error": str(exc),
+                    }
+        except concurrent.futures.TimeoutError:
+            # Some timeframes did not finish in time; mark them as timeout.
+            for fut, tf in future_map.items():
+                if tf not in by_tf:
+                    by_tf[tf] = {
+                        "timeframe": tf,
+                        "status": "timeout",
+                        "error": f"matrix_timeout>{matrix_wait:.0f}s",
+                    }
 
     # Preserve canonical timeframe order for stable UI rendering.
     rows = [by_tf.get(tf, {"timeframe": tf, "status": "error", "error": "missing_row"}) for tf in _MATRIX_TIMEFRAMES]
@@ -588,6 +1385,432 @@ def _compute_timeframe_matrix(
         },
         "elapsed_ms": round((time.time() - started_at) * 1000.0, 2),
         "updated_at": int(time.time()),
+    }
+
+
+def _observation_log_csv_path() -> Path:
+    return _repo_root() / "market-causality-lab" / "data" / "observation_logs" / "market_observations.csv"
+
+
+def _build_gann_qa_rows(
+    selected_date: str,
+    symbol: str = "XAUUSD",
+    limit: int = 60,
+    horizon_days: int = 1,
+) -> dict[str, Any]:
+    import pandas as pd
+
+    path = _observation_log_csv_path()
+    horizon_days = max(1, min(int(horizon_days), 30))
+    if not path.exists():
+        return {
+            "status": "ok",
+            "date": selected_date,
+            "symbol": symbol,
+            "rows": [],
+            "summary": {
+                "selected_date": selected_date,
+                "symbol": _normalize_symbol(symbol),
+                "horizon_days": horizon_days,
+                "dominant_signal": "WAIT",
+                "signal_counts": {"BUY": 0, "SELL": 0, "WAIT": 0},
+                "past_present_future": {"past": 0, "present": 0, "future": 0},
+                "overview": "No observation log found for selected date.",
+            },
+            "counts": {"past": 0, "present": 0, "future": 0, "qa_rows": 0},
+            "source": str(path),
+            "note": "observation_log_missing",
+        }
+
+    df = pd.read_csv(path)
+    if df.empty:
+        return {
+            "status": "ok",
+            "date": selected_date,
+            "symbol": symbol,
+            "rows": [],
+            "summary": {
+                "selected_date": selected_date,
+                "symbol": _normalize_symbol(symbol),
+                "horizon_days": horizon_days,
+                "dominant_signal": "WAIT",
+                "signal_counts": {"BUY": 0, "SELL": 0, "WAIT": 0},
+                "past_present_future": {"past": 0, "present": 0, "future": 0},
+                "overview": "Observation log is empty for selected date.",
+            },
+            "counts": {"past": 0, "present": 0, "future": 0, "qa_rows": 0},
+            "source": str(path),
+            "note": "observation_log_empty",
+        }
+
+    symbol_norm = _normalize_symbol(symbol)
+    if "symbol" in df.columns:
+        df = df[df["symbol"].astype(str).str.upper() == symbol_norm]
+
+    if df.empty:
+        return {
+            "status": "ok",
+            "date": selected_date,
+            "symbol": symbol_norm,
+            "rows": [],
+            "summary": {
+                "selected_date": selected_date,
+                "symbol": symbol_norm,
+                "horizon_days": horizon_days,
+                "dominant_signal": "WAIT",
+                "signal_counts": {"BUY": 0, "SELL": 0, "WAIT": 0},
+                "past_present_future": {"past": 0, "present": 0, "future": 0},
+                "overview": "No observations found for selected symbol/date.",
+            },
+            "counts": {"past": 0, "present": 0, "future": 0, "qa_rows": 0},
+            "source": str(path),
+            "note": "symbol_not_found_in_observations",
+        }
+
+    ts_col = None
+    for candidate in ("signal_end_time", "latest_time", "signal_start_time", "recorded_at_utc"):
+        if candidate in df.columns:
+            ts_col = candidate
+            break
+    if ts_col is None:
+        return {
+            "status": "ok",
+            "date": selected_date,
+            "symbol": symbol_norm,
+            "rows": [],
+            "summary": {
+                "selected_date": selected_date,
+                "symbol": symbol_norm,
+                "horizon_days": horizon_days,
+                "dominant_signal": "WAIT",
+                "signal_counts": {"BUY": 0, "SELL": 0, "WAIT": 0},
+                "past_present_future": {"past": 0, "present": 0, "future": 0},
+                "overview": "Time columns are missing in observation log.",
+            },
+            "counts": {"past": 0, "present": 0, "future": 0, "qa_rows": 0},
+            "source": str(path),
+            "note": "time_column_missing",
+        }
+
+    df = df.copy()
+    df["_ts"] = pd.to_datetime(df[ts_col], errors="coerce", utc=True)
+    df = df.dropna(subset=["_ts"])
+    # Sort by recorded_at_utc (most-recently-generated observations last) so that
+    # tail(5) always returns the freshest analysis, not older stale observations.
+    if "recorded_at_utc" in df.columns:
+        df["_recorded"] = pd.to_datetime(df["recorded_at_utc"], errors="coerce", utc=True)
+        df = df.sort_values(["_recorded"], na_position="first")
+    else:
+        df = df.sort_values("_ts")
+    if df.empty:
+        return {
+            "status": "ok",
+            "date": selected_date,
+            "symbol": symbol_norm,
+            "rows": [],
+            "summary": {
+                "selected_date": selected_date,
+                "symbol": symbol_norm,
+                "horizon_days": horizon_days,
+                "dominant_signal": "WAIT",
+                "signal_counts": {"BUY": 0, "SELL": 0, "WAIT": 0},
+                "past_present_future": {"past": 0, "present": 0, "future": 0},
+                "overview": "No valid timestamps found for selected date.",
+            },
+            "counts": {"past": 0, "present": 0, "future": 0, "qa_rows": 0},
+            "source": str(path),
+            "note": "no_valid_timestamps",
+        }
+
+    day = pd.to_datetime(selected_date, errors="coerce", utc=True)
+    if pd.isna(day):
+        day = pd.Timestamp.now(tz="UTC").normalize()
+    day_start = day.normalize()
+    day_end = day_start + pd.Timedelta(days=1)
+
+    past = df[df["_ts"] < day_start].tail(5)
+    present = df[(df["_ts"] >= day_start) & (df["_ts"] < day_end)].tail(5)
+    future = df[df["_ts"] >= day_end].head(5)
+
+    def _scenario_probs(rec: str, geom: str, tconf: str, sconf: str, pconf: str, era: str, horizon: int) -> dict[str, float]:
+        rec_up = str(rec or "WAIT").upper()
+        score = 0.0
+        score += 0.25 if str(geom).upper() == "YES" else 0.0
+        score += 0.25 if str(tconf).upper() == "YES" else 0.0
+        score += 0.25 if str(sconf).upper() == "YES" else 0.0
+        score += 0.25 if str(pconf).upper() == "YES" else 0.0
+
+        # Future answers must be probabilistic with confidence decay.
+        if era == "FUTURE":
+            # Stronger decay as forecast horizon increases.
+            decay = max(0.45, 1.0 - (min(horizon, 30) - 1) * 0.03)
+            score *= decay
+
+        if rec_up == "BUY":
+            p_buy = min(0.85, max(0.35, 0.40 + score * 0.50))
+            p_sell = max(0.05, 0.70 - p_buy)
+        elif rec_up == "SELL":
+            p_sell = min(0.85, max(0.35, 0.40 + score * 0.50))
+            p_buy = max(0.05, 0.70 - p_sell)
+        else:
+            p_buy = max(0.10, 0.20 + score * 0.20)
+            p_sell = max(0.10, 0.20 + score * 0.20)
+
+        p_wait = max(0.05, 1.0 - p_buy - p_sell)
+        total = p_buy + p_sell + p_wait
+        return {
+            "buy": round(p_buy / total, 4),
+            "sell": round(p_sell / total, 4),
+            "wait": round(p_wait / total, 4),
+        }
+
+    def _invalidation_rules(rec: str, s_px: Any, e_px: Any, s_time: Any, e_time: Any) -> list[str]:
+        rec_up = str(rec or "WAIT").upper()
+        try:
+            sp = float(s_px)
+            ep = float(e_px)
+        except Exception:
+            sp = None
+            ep = None
+
+        rules = [
+            f"Window invalid if no directional follow-through by {e_time}.",
+            f"Invalidate if macro/news regime shifts against setup inside {s_time} to {e_time}.",
+        ]
+        if rec_up == "BUY" and sp is not None and ep is not None:
+            rules.append(f"BUY invalidation: sustained trade below anchor price {sp:.4f}.")
+        elif rec_up == "SELL" and sp is not None and ep is not None:
+            rules.append(f"SELL invalidation: sustained trade above anchor price {sp:.4f}.")
+        else:
+            rules.append("WAIT invalidation: confluence upgrade required before execution.")
+        return rules
+
+    def _answer_from_row(row: pd.Series, era: str) -> list[dict[str, Any]]:
+        angle = row.get("gann_nearest_key_angle", "--")
+        # Compute nearest key angle from gann_degree when CSV column is null
+        if angle is None or (isinstance(angle, float) and pd.isna(angle)) or str(angle).strip().lower() in ("--", "nan", "none", ""):
+            raw_degree = None
+            try:
+                raw_degree = float(row.get("gann_degree") or 0)
+            except (TypeError, ValueError):
+                raw_degree = None
+            if raw_degree and raw_degree > 0:
+                _key_angles = [45, 90, 180, 225, 315]
+                angle = min(_key_angles, key=lambda a: min(abs(raw_degree - a), 360 - abs(raw_degree - a)))
+            else:
+                angle = "--"
+        prox = row.get("gann_angle_proximity", "--")
+        # Compute proximity from gann_degree when it is NONE and we have a real angle
+        if str(prox).upper() in ("NONE", "--", "NAN", "NONE") and angle != "--":
+            raw_degree = None
+            try:
+                raw_degree = float(row.get("gann_degree") or 0)
+            except (TypeError, ValueError):
+                raw_degree = None
+            if raw_degree and raw_degree > 0:
+                _diff = min(abs(raw_degree - angle), 360 - abs(raw_degree - angle))
+                prox = "EXACT" if _diff < 5 else "NEAR" if _diff < 15 else "NONE"
+        geom = row.get("confirmation_geometry", "--")
+        tconf = row.get("confirmation_time", "--")
+        sconf = row.get("confirmation_structure", "--")
+        pconf = row.get("confirmation_tape_action", "--")
+        bias = row.get("gann_mindset_bias", "--")
+        rec = row.get("gann_recommended_signal", "WAIT")
+        narr = row.get("gann_mindset_narration", "--")
+        # Replace stale "--deg" placeholder with real computed values
+        if "--deg" in str(narr) and angle != "--":
+            raw_degree = None
+            try:
+                raw_degree = float(row.get("gann_degree") or 0)
+            except (TypeError, ValueError):
+                raw_degree = None
+            if raw_degree and raw_degree > 0:
+                narr = str(narr).replace("near --deg", f"near {angle}deg").replace("(current --deg)", f"(current {raw_degree:.4f}deg)")
+        s_time = row.get("signal_start_time", "--")
+        e_time = row.get("signal_end_time", "--")
+        s_px = row.get("signal_start_price", "--")
+        e_px = row.get("signal_end_price", "--")
+        cycle = row.get("numerology_cycle_runtime", "--")
+        structure = row.get("structure_major_runtime", "--")
+        momentum = row.get("physics_momentum_runtime", "--")
+        move_abs = row.get("signal_projected_move", "--")
+        move_pct = row.get("signal_projected_move_pct", "--")
+
+        # News fields (present in observation CSV columns 39-46)
+        def _nf(val, default="--"):
+            """Return default when val is None, NaN, 'nan', 'none', or empty."""
+            if val is None:
+                return default
+            s = str(val).strip()
+            if s.lower() in ("nan", "none", "nat", ""):
+                return default
+            return s
+
+        news_prev_time = _nf(row.get("news_previous_time"))
+        news_prev_event = _nf(row.get("news_previous_event"))
+        news_prev_impact = _nf(row.get("news_previous_impact"))
+        news_next_time = _nf(row.get("news_next_time"))
+        news_next_event = _nf(row.get("news_next_event"))
+        news_next_impact = _nf(row.get("news_next_impact"))
+
+        if news_prev_event == "--" and news_next_event == "--":
+            news_context = "No news data available"
+        else:
+            news_context = (
+                f"prev: {news_prev_event} [{news_prev_impact}] @{news_prev_time} | "
+                f"next: {news_next_event} [{news_next_impact}] @{news_next_time}"
+            )
+
+        ts = row.get("_ts")
+        ts_txt = ts.isoformat() if hasattr(ts, "isoformat") else "--"
+        px_path = f"{s_px} -> {e_px}"
+        tw = f"{s_time} to {e_time}"
+        answer_mode = "REALIZED" if era == "PAST" else ("LIVE" if era == "PRESENT" else "FORECAST")
+        probs = _scenario_probs(rec, geom, tconf, sconf, pconf, era, horizon_days)
+        invalidations = _invalidation_rules(rec, s_px, e_px, s_time, e_time)
+
+        q1 = "Gann question: Is price at a cardinal angle and should we act now?"
+        a1 = (
+            f"{era}: nearest angle {angle}deg with proximity {prox}; geometry confirmation={geom}. "
+            f"Recommended Gann action={rec}. Time window {tw}; price path {px_path}."
+        )
+        q2 = "Gann question: Is time in phase and is the signal window active?"
+        a2 = (
+            f"{era}: time confirmation={tconf}, cycle={cycle}. "
+            f"Window {tw}, price path {px_path}, projected move {move_abs} ({move_pct}%)."
+        )
+        q3 = "Gann question: Do supporting concepts confirm continuation?"
+        a3 = (
+            f"{era}: structure confirmation={sconf} ({structure}), tape confirmation={pconf} ({momentum}), bias={bias}. "
+            f"Time {tw}, prices {px_path}. Narration: {narr}"
+        )
+        q4 = "ICT question: Is liquidity sweep + displacement/FVG context supporting the same directional bias?"
+        ict_side = "premium-zone continuation" if str(rec).upper() == "SELL" else "discount-to-expansion continuation"
+        a4 = (
+            f"{era}: ICT read uses structure={structure} and momentum={momentum}; inferred context={ict_side}. "
+            f"Anchor time {tw}, anchor prices {px_path}. Suggested signal={str(rec).upper()}."
+        )
+
+        q5 = "News/Event question: Does scheduled news timing conflict with or reinforce the signal window?"
+        a5 = (
+            f"{era} ({answer_mode}): Previous event={news_prev_event} [{news_prev_impact}] at {news_prev_time}. "
+            f"Next scheduled event={news_next_event} [{news_next_impact}] at {news_next_time}. "
+            f"Signal window {tw}. Recommended signal given news context={str(rec).upper()}. "
+            f"{'CAUTION: upcoming high-impact event within window.' if str(news_next_impact).upper() in ('HIGH', 'CRITICAL') else 'No high-impact news override detected.'}"
+        )
+
+        return [
+            {
+                "era": era,
+                "ts": ts_txt,
+                "answer_mode": answer_mode,
+                "question": q1,
+                "answer": a1,
+                "recommended_signal": str(rec).upper(),
+                "scenario_probs": probs,
+                "invalidation_rules": invalidations,
+                "forecast_horizon_days": horizon_days,
+                "news_context": news_context,
+            },
+            {
+                "era": era,
+                "ts": ts_txt,
+                "answer_mode": answer_mode,
+                "question": q2,
+                "answer": a2,
+                "recommended_signal": str(rec).upper(),
+                "scenario_probs": probs,
+                "invalidation_rules": invalidations,
+                "forecast_horizon_days": horizon_days,
+                "news_context": news_context,
+            },
+            {
+                "era": era,
+                "ts": ts_txt,
+                "answer_mode": answer_mode,
+                "question": q3,
+                "answer": a3,
+                "recommended_signal": str(rec).upper(),
+                "scenario_probs": probs,
+                "invalidation_rules": invalidations,
+                "forecast_horizon_days": horizon_days,
+                "news_context": news_context,
+            },
+            {
+                "era": era,
+                "ts": ts_txt,
+                "answer_mode": answer_mode,
+                "question": q4,
+                "answer": a4,
+                "recommended_signal": str(rec).upper(),
+                "scenario_probs": probs,
+                "invalidation_rules": invalidations,
+                "forecast_horizon_days": horizon_days,
+                "news_context": news_context,
+            },
+            {
+                "era": era,
+                "ts": ts_txt,
+                "answer_mode": answer_mode,
+                "question": q5,
+                "answer": a5,
+                "recommended_signal": str(rec).upper(),
+                "scenario_probs": probs,
+                "invalidation_rules": invalidations,
+                "forecast_horizon_days": horizon_days,
+                "news_context": news_context,
+            },
+        ]
+
+    rows: list[dict[str, Any]] = []
+    for _, row in past.iterrows():
+        rows.extend(_answer_from_row(row, "PAST"))
+    for _, row in present.iterrows():
+        rows.extend(_answer_from_row(row, "PRESENT"))
+    for _, row in future.iterrows():
+        rows.extend(_answer_from_row(row, "FUTURE"))
+
+    rows = rows[: max(1, min(int(limit), 300))]
+
+    sig_counts = {"BUY": 0, "SELL": 0, "WAIT": 0}
+    for r in rows:
+        sig = str(r.get("recommended_signal") or "WAIT").upper()
+        if sig not in sig_counts:
+            sig = "WAIT"
+        sig_counts[sig] += 1
+
+    dominant = max(sig_counts.items(), key=lambda kv: kv[1])[0] if rows else "WAIT"
+    summary = {
+        "selected_date": day_start.strftime("%Y-%m-%d"),
+        "symbol": symbol_norm,
+        "horizon_days": horizon_days,
+        "dominant_signal": dominant,
+        "signal_counts": sig_counts,
+        "past_present_future": {
+            "past": int(len(past)),
+            "present": int(len(present)),
+            "future": int(len(future)),
+        },
+        "overview": (
+            f"For {symbol_norm} on {day_start.strftime('%Y-%m-%d')}: dominant suggested signal is {dominant}. "
+            f"Rows built from Past={len(past)}, Present={len(present)}, Future={len(future)} observation slices. "
+            f"Forecast horizon set to +{horizon_days} day(s)."
+        ),
+    }
+
+    return {
+        "status": "ok",
+        "date": day_start.strftime("%Y-%m-%d"),
+        "symbol": symbol_norm,
+        "rows": rows,
+        "summary": summary,
+        "counts": {
+            "past": int(len(past)),
+            "present": int(len(present)),
+            "future": int(len(future)),
+            "qa_rows": int(len(rows)),
+        },
+        "source": str(path),
     }
 
 
@@ -673,37 +1896,94 @@ def _compute_chart(
         live_last_epoch = None
         live_gap_reason = None
         try:
-            fetch_live = getattr(module, "fetch_xauusd", None)
-            if callable(fetch_live) and historical_last_epoch is not None:
-                live_df = fetch_live(count=3)
-                if "time" in live_df.columns and not live_df.empty:
-                    live_df = live_df.sort_values("time")
-                    live_row = live_df.iloc[-1]
-                    live_time = getattr(live_row, "time", None)
-                    if live_time is not None:
-                        live_last_epoch = int(live_time.timestamp())
-                        gap_seconds = int(max(0, live_last_epoch - historical_last_epoch))
-                        live_gap_seconds = gap_seconds
-                        tf_seconds = _timeframe_seconds(applied_timeframe)
-                        if gap_seconds >= max(60, tf_seconds // 2):
-                            o = float(getattr(live_row, "open", getattr(live_row, "close", 0.0)) or 0.0)
-                            h = float(getattr(live_row, "high", getattr(live_row, "close", 0.0)) or 0.0)
-                            l = float(getattr(live_row, "low", getattr(live_row, "close", 0.0)) or 0.0)
-                            c = float(getattr(live_row, "close", 0.0) or 0.0)
-                            v = float(getattr(live_row, "volume", 0.0) or 0.0)
-                            if c > 0.0:
+            if historical_last_epoch is not None:
+                import os as _os
+                from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+                import pandas as _pd
+
+                _gap_est = int(max(0, time.time() - historical_last_epoch))
+                tf_seconds = _timeframe_seconds(applied_timeframe)
+                if _gap_est >= max(60, tf_seconds // 2):
+                    _api_key = str(_os.getenv("DATABENTO_API_KEY", "")).strip()
+                    if not _api_key:
+                        raise RuntimeError("DATABENTO_API_KEY not configured")
+                    import databento as _db
+
+                    _start = _dt.fromtimestamp(historical_last_epoch + 1, tz=_tz.utc)
+                    # Stay 2h behind "now" to avoid Databento available-end errors
+                    _end = _dt.now(_tz.utc) - _td(hours=2)
+                    if _end <= _start:
+                        raise RuntimeError("gap too small or data too fresh for backfill")
+
+                    _tf_norm = str(applied_timeframe).lower().strip()
+                    if _tf_norm in ("1m", "1min", "5m", "15m", "30m"):
+                        _schema, _resample_rule = "ohlcv-1m", None
+                    elif _tf_norm in ("1h",):
+                        _schema, _resample_rule = "ohlcv-1h", None
+                    elif _tf_norm in ("4h",):
+                        _schema, _resample_rule = "ohlcv-1h", "4h"
+                    elif _tf_norm in ("1d", "daily", "day"):
+                        _schema, _resample_rule = "ohlcv-1h", "1D"
+                    else:
+                        _schema, _resample_rule = "ohlcv-1h", None
+
+                    _client = _db.Historical(_api_key)
+                    _raw = _client.timeseries.get_range(
+                        dataset="GLBX.MDP3",
+                        symbols=["GC.c.0"],
+                        stype_in="continuous",
+                        schema=_schema,
+                        start=_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        end=_end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    )
+                    _gap_df = _raw.to_df().reset_index()
+                    _gap_df = _gap_df.rename(columns={"ts_event": "time"})
+                    _gap_df["time"] = _pd.to_datetime(_gap_df["time"], utc=True)
+                    _gap_df = _gap_df[["time", "open", "high", "low", "close", "volume"]].dropna(
+                        subset=["time", "open", "close"]
+                    )
+                    # Scale fixed-point prices if needed
+                    if not _gap_df.empty and float(_gap_df["close"].iloc[0]) > 100000:
+                        for _c in ("open", "high", "low", "close"):
+                            _gap_df[_c] = _gap_df[_c] / 1e9
+                    # Resample to applied_timeframe if needed
+                    if _resample_rule and not _gap_df.empty:
+                        _gap_df = (
+                            _gap_df.set_index("time")
+                            .resample(_resample_rule, closed="left", label="left")
+                            .agg(
+                                open=("open", "first"),
+                                high=("high", "max"),
+                                low=("low", "min"),
+                                close=("close", "last"),
+                                volume=("volume", "sum"),
+                            )
+                            .dropna(subset=["open", "close"])
+                            .reset_index()
+                        )
+                    if not _gap_df.empty:
+                        for _gr in _gap_df.itertuples(index=False):
+                            _t = int(_gr.time.timestamp())
+                            _o = float(_gr.open or 0.0)
+                            _h = float(_gr.high or 0.0)
+                            _l = float(_gr.low or 0.0)
+                            _c = float(_gr.close or 0.0)
+                            _v = float(getattr(_gr, "volume", 0.0) or 0.0)
+                            if _c > 0.0 and _t > historical_last_epoch:
                                 rows.append(
                                     {
-                                        "time": live_last_epoch,
-                                        "open": o,
-                                        "high": h,
-                                        "low": l,
-                                        "close": c,
-                                        "volume": max(0.0, v),
+                                        "time": _t,
+                                        "open": _o,
+                                        "high": _h,
+                                        "low": _l,
+                                        "close": _c,
+                                        "volume": max(0.0, _v),
                                     }
                                 )
-                                live_gap_fill_applied = True
-                                live_gap_reason = "historical_series_stale_live_tail_merged"
+                        live_last_epoch = int(_gap_df["time"].max().timestamp())
+                        live_gap_seconds = int(max(0, live_last_epoch - historical_last_epoch))
+                        live_gap_fill_applied = True
+                        live_gap_reason = f"databento_backfill_{len(_gap_df)}_candles"
         except Exception as exc:
             live_gap_reason = f"live_gap_fill_unavailable: {exc}"
 
@@ -772,11 +2052,103 @@ def market_causality_summary(
     )
 
 
+@router.post("/math_check")
+def market_causality_math_check(payload: dict[str, Any]) -> dict[str, Any]:
+    """Run standalone MATH_01..MATH_15 checks without requiring full summary execution."""
+    out = _compute_math_questions(payload)
+    return {
+        "status": "ok",
+        **out,
+    }
+
+
+@router.post("/gann_questions")
+def market_causality_gann_questions(payload: dict[str, Any]) -> dict[str, Any]:
+    """
+    Answer all 52 _TRADING_GANN_QUESTION_BANK questions from a raw payload.
+
+    Accepts the same payload shape as /summary (observation, trade_levels, etc.).
+    Returns gann_questions list + aggregate scoring without running the full system.
+    """
+    out = _compute_gann_answers(payload)
+    return {"status": "ok", **out}
+
+
+@router.post("/record_outcome")
+def market_causality_record_outcome(payload: dict[str, Any]) -> dict[str, Any]:
+    """Record realized outcome and update learning weights for POST_01/POST_02 lifecycle."""
+    prediction_id = str(payload.get("prediction_id") or payload.get("observation_id") or "").strip()
+    if not prediction_id:
+        return {"status": "error", "error": "prediction_id (or observation_id) is required"}
+
+    outcome_direction = str(payload.get("outcome_direction") or "").strip().upper()
+    if outcome_direction not in {"UP", "DOWN", "SIDEWAYS"}:
+        return {"status": "error", "error": "outcome_direction must be one of: UP, DOWN, SIDEWAYS"}
+
+    try:
+        realized_price = float(payload.get("realized_price"))
+        actual_move_pips = float(payload.get("actual_move_pips"))
+        timeframe_reached = int(payload.get("timeframe_reached"))
+    except (TypeError, ValueError):
+        return {
+            "status": "error",
+            "error": "realized_price, actual_move_pips, timeframe_reached are required numeric fields",
+        }
+
+    existing_prediction = next((p for p in _LEARNING_ENGINE.predictions if p.get("id") == prediction_id), None)
+    if existing_prediction is None:
+        direction = str(payload.get("direction") or payload.get("predicted_direction") or "WAIT").upper()
+        direction = direction if direction in {"BUY", "SELL", "WAIT"} else "WAIT"
+        signals = payload.get("signals") or {}
+        entry_price = float(payload.get("entry_price") or realized_price)
+        stop_price = float(payload.get("stop_price") or (entry_price - 10.0))
+        target_price = float(payload.get("target_price") or (entry_price + 20.0))
+        forecast_horizon_days = int(payload.get("forecast_horizon_days") or 1)
+
+        _LEARNING_ENGINE.record_prediction(
+            prediction_id=prediction_id,
+            direction=direction,
+            confluence_score=float(payload.get("confluence_score") or 0.0),
+            geometry_signal=bool(signals.get("geometry", False)),
+            time_signal=bool(signals.get("time", False)),
+            structure_signal=bool(signals.get("structure", False)),
+            momentum_signal=bool(signals.get("momentum", False)),
+            gann_signal=bool(signals.get("gann", False)),
+            ict_signal=bool(signals.get("ict", False)),
+            confluence_signal=bool(signals.get("confluence", float(payload.get("confluence_score") or 0.0) >= 0.7)),
+            entry_price=entry_price,
+            stop_price=stop_price,
+            target_price=target_price,
+            forecast_horizon_days=forecast_horizon_days,
+        )
+
+    result = _LEARNING_ENGINE.record_outcome(
+        prediction_id=prediction_id,
+        realized_price=realized_price,
+        outcome_direction=outcome_direction,
+        actual_move_pips=actual_move_pips,
+        timeframe_reached=timeframe_reached,
+    )
+
+    if result.get("status") == "error":
+        return {"status": "error", "error": result.get("message")}
+
+    return {
+        "status": "ok",
+        "prediction_id": prediction_id,
+        "accuracy_score": result.get("accuracy_score"),
+        "was_correct": result.get("was_correct"),
+        "learning_update": result.get("learning_update"),
+    }
+
+
 @router.get("/status")
 def market_causality_status() -> dict[str, Any]:
     module_exists = _module_path().exists()
     with _cache_lock:
         cache_keys = sorted(list(_cache_payloads.keys()))
+
+    cal = _LEARNING_ENGINE.get_model_calibration()
 
     return {
         "module_path": str(_module_path()),
@@ -786,6 +2158,13 @@ def market_causality_status() -> dict[str, Any]:
         "summary_timeout_seconds": _SUMMARY_TIMEOUT_SECONDS,
         "cache_entries": len(cache_keys),
         "cache_keys": cache_keys,
+        # Model health summary
+        "model_confidence": cal["model_confidence"],
+        "overall_accuracy": round(cal["overall_accuracy"], 4),
+        "total_outcomes": cal["total_outcomes"],
+        "total_predictions": cal["total_predictions"],
+        "top_signal": max(cal["current_weights"], key=lambda k: cal["current_weights"][k]),
+        "weakest_signal": min(cal["current_weights"], key=lambda k: cal["current_weights"][k]),
     }
 
 
@@ -809,79 +2188,91 @@ def market_causality_chart(
 def market_causality_live_price(
     symbol: str = Query(default="XAUUSD"),
 ) -> dict[str, Any]:
-    """Return the most recent XAUUSD/GC live price.
+    """Return the most recent XAUUSD live spot price.
 
-    Attempts MT5 (via MCL module fetch_xauusd) first, then falls back to
-    Databento Historical API using the last 1-minute bar from GLBX.MDP3.
+    Priority chain (XAUUSD spot first, futures proxy as last resort):
+      1. Maven broker DOM (real-time XAUUSD spot via CDP bridge)
+      2. stooq.com  XAUUSD spot  (free, no API key, ~seconds delay)
+      3. Databento Historical API GC.c.1 (CME Gold futures, ~15 min lag)
     Used by the MCL dashboard for periodic live price polling.
     """
     import pandas as _pd
+    import urllib.request as _urllib_req
 
     symbol = _normalize_symbol(symbol)
     started_at = time.time()
 
-    # --- attempt 1: MCL module fetch_xauusd (MT5-backed or Databento fallback) ---
+    # --- attempt 1: Maven broker DOM spot quote (real-time XAUUSD spot) ---
     try:
-        module = _load_module()
-        fetch_live = getattr(module, "fetch_xauusd", None)
-        if callable(fetch_live):
-            df = fetch_live(count=3)
-            if not df.empty:
-                last = df.iloc[-1]
-                close_price = float(getattr(last, "close", None) or 0.0)
-                raw_ts = getattr(last, "time", None)
-                ts = int(_pd.Timestamp(raw_ts).timestamp()) if raw_ts is not None else None
-                if close_price > 0.0:
-                    return {
-                        "status": "ok",
-                        "symbol": symbol,
-                        "price": round(close_price, 4),
-                        "source": "mt5_or_databento",
-                        "ts": ts,
-                        "elapsed_ms": round((time.time() - started_at) * 1000.0, 2),
-                    }
+        from astroquant.backend.services.runner import get_runner
+        _runner = get_runner()
+        if _runner is not None:
+            _quote = _runner.get_broker_spot_quote("XAUUSD")
+            _price = (_quote or {}).get("price") if isinstance(_quote, dict) else getattr(_quote, "price", None)
+            if _price and float(_price) > 0 and not (_quote or {}).get("stale", True):
+                return {
+                    "status": "ok",
+                    "symbol": symbol,
+                    "price": round(float(_price), 4),
+                    "source": "broker_dom_spot",
+                    "spot": True,
+                    "ts": int(time.time()),
+                    "elapsed_ms": round((time.time() - started_at) * 1000.0, 2),
+                }
     except Exception:
-        pass  # fall through to direct Databento attempt
+        pass  # fall through to stooq
 
-    # --- attempt 2: direct Databento Historical API ---
+    # --- attempt 2: stooq.com XAUUSD spot (free, no key, true OTC spot price) ---
     try:
-        api_key = str(os.getenv("DATABENTO_API_KEY", "")).strip()
-        if not api_key:
-            raise RuntimeError("DATABENTO_API_KEY is not configured")
-        import databento as _db  # type: ignore[import]
-
-        client = _db.Historical(api_key)
-        data = client.timeseries.get_range(
-            dataset="GLBX.MDP3",
-            symbols=["GC.c.0"],
-            stype_in="continuous",
-            schema="ohlcv-1m",
-            start="now-15m",
+        _req = _urllib_req.Request(
+            "https://stooq.com/q/l/?s=xauusd&f=sd2t2ohlcv&h&e=csv",
+            headers={"User-Agent": "Mozilla/5.0"},
         )
-        df = data.to_df()
-        if df.empty:
-            raise RuntimeError("Empty Databento OHLCV response")
+        with _urllib_req.urlopen(_req, timeout=6) as _r:
+            _lines = _r.read().decode().strip().split("\n")
+        # CSV: Symbol,Date,Time,Open,High,Low,Close,Volume
+        if len(_lines) >= 2 and not _lines[1].startswith("N/A"):
+            _fields = _lines[1].split(",")
+            _price = float(_fields[6])             # Close
+            _dt_str = f"{_fields[1]} {_fields[2]}"  # "2026-04-06 04:39:08"
+            _ts = int(_pd.Timestamp(_dt_str).timestamp())
+            if _price > 0:
+                return {
+                    "status": "ok",
+                    "symbol": symbol,
+                    "price": round(_price, 4),
+                    "source": "stooq_xauusd_spot",
+                    "spot": True,
+                    "ts": _ts,
+                    "elapsed_ms": round((time.time() - started_at) * 1000.0, 2),
+                }
+    except Exception:
+        pass  # fall through to Databento futures proxy
 
-        if df.index.name in ("ts_event", "ts_recv") or hasattr(df.index, "tz"):
-            df = df.reset_index()
-
-        close_col = "close" if "close" in df.columns else df.columns[-1]
-        ts_col = next(
-            (c for c in ("ts_event", "ts_recv", "time") if c in df.columns), None
-        )
-        last_row = df.iloc[-1]
-        price = float(last_row[close_col])
-        raw_ts = last_row[ts_col] if ts_col else None
-        ts = int(_pd.Timestamp(raw_ts).timestamp()) if raw_ts is not None else None
-
-        return {
-            "status": "ok",
-            "symbol": symbol,
-            "price": round(price, 4),
-            "source": "databento",
-            "ts": ts,
-            "elapsed_ms": round((time.time() - started_at) * 1000.0, 2),
-        }
+    # --- attempt 3: Databento Historical API (GC.c.1 CME futures, ~15 min lag) ---
+    try:
+        from astroquant.backend.services.databento_utility import fetch_candles_unified
+        candles, _meta = fetch_candles_unified(symbol=symbol, limit=5, minutes=90)
+        if candles:
+            last = candles[-1]
+            price = float(last.get("close") or last.get("open") or 0.0)
+            if price > 0:
+                _raw_ts = last.get("time") or last.get("timestamp") or last.get("t") or last.get("ts")
+                try:
+                    _ts = int(_pd.Timestamp(_raw_ts).timestamp()) if _raw_ts is not None else None
+                except Exception:
+                    _ts = None
+                return {
+                    "status": "ok",
+                    "symbol": symbol,
+                    "price": round(price, 4),
+                    "source": f"databento_futures/{_meta.get('resolved_symbol','GC.c.1')}",
+                    "spot": False,
+                    "fallback": True,
+                    "ts": _ts,
+                    "elapsed_ms": round((time.time() - started_at) * 1000.0, 2),
+                }
+        raise RuntimeError("No candles returned from unified fetch")
     except Exception as exc:
         return {
             "status": "unavailable",
@@ -907,3 +2298,317 @@ def market_causality_timeframe_matrix(
         lookback_years=lookback_years,
         source_mode=source_mode,
     )
+
+
+@router.get("/gann_qa")
+def market_causality_gann_qa(
+    date: str = Query(default=""),
+    symbol: str = Query(default="XAUUSD"),
+    limit: int = Query(default=60, ge=1, le=300),
+    horizon_days: int = Query(default=1, ge=1, le=30),
+) -> dict[str, Any]:
+    """Date-selectable Gann Q&A table generated from observation history (past/present/future)."""
+    selected = date or time.strftime("%Y-%m-%d", time.gmtime())
+    try:
+        return _build_gann_qa_rows(selected_date=selected, symbol=symbol, limit=limit, horizon_days=horizon_days)
+    except Exception as exc:
+        return {
+            "status": "error",
+            "date": selected,
+            "symbol": _normalize_symbol(symbol),
+            "rows": [],
+            "error": str(exc),
+        }
+
+
+@router.get("/question_bank")
+def market_causality_question_bank(
+    category: str = Query(default=""),
+    framework: str = Query(default=""),
+) -> dict[str, Any]:
+    """Comprehensive trading question bank across Gann + supporting concepts + AI learning."""
+    return _question_bank_payload(category=category, framework=framework)
+
+
+@router.get("/weights")
+def market_causality_weights() -> dict[str, Any]:
+    """Return current learned signal weights and model calibration stats."""
+    calibration = _LEARNING_ENGINE.get_model_calibration()
+    return {
+        "status": "ok",
+        "weights": _LEARNING_ENGINE.weights.copy(),
+        "total_predictions": calibration.get("total_predictions", 0),
+        "total_outcomes": calibration.get("total_outcomes", 0),
+        "overall_accuracy": calibration.get("overall_accuracy", 0.0),
+        "model_confidence": calibration.get("model_confidence", "LOW"),
+        "signal_accuracy": calibration.get("signal_accuracy", {}),
+        "accuracy_trend": calibration.get("accuracy_trend", []),
+        "direction_accuracy": calibration.get("direction_accuracy", {}),
+        "learning_message": calibration.get("learning_message", ""),
+        "updated_at": int(time.time()),
+    }
+
+
+@router.get("/history")
+def market_causality_history(limit: int = 50, correct_only: bool = False) -> dict[str, Any]:
+    """Return the last N recorded trade outcomes joined with their prediction data.
+
+    Query params:
+      - limit (int): max rows returned, default 50
+      - correct_only (bool): when true, return only winning outcomes
+    """
+    predictions = _PREDICTION_TRACKER.load_predictions()
+    outcomes = _PREDICTION_TRACKER.load_outcomes()
+
+    pred_by_id: dict[str, Any] = {p["id"]: p for p in predictions}
+
+    rows = []
+    for o in outcomes:
+        pid = o.get("prediction_id", "")
+        pred = pred_by_id.get(pid, {})
+        was_correct = o.get("was_correct", False)
+        if correct_only and not was_correct:
+            continue
+        rows.append({
+            "prediction_id":        pid,
+            "prediction_timestamp": pred.get("prediction_timestamp"),
+            "direction":            pred.get("direction", ""),
+            "confluence_score":     pred.get("confluence_score"),
+            "entry_price":          pred.get("entry_price"),
+            "stop_price":           pred.get("stop_price"),
+            "target_price":         pred.get("target_price"),
+            "realized_price":       o.get("realized_price"),
+            "outcome_direction":    o.get("outcome_direction", ""),
+            "actual_move_pips":     o.get("actual_move_pips"),
+            "timeframe_reached":    o.get("timeframe_reached"),
+            "was_correct":          was_correct,
+            "accuracy_score":       o.get("accuracy_score", 0.0),
+        })
+
+    # Return most-recent first, capped at limit
+    total_available = len(rows)
+    rows = rows[-limit:][::-1]
+    return {
+        "status": "ok",
+        "total": total_available,
+        "returned": len(rows),
+        "correct_only": correct_only,
+        "history": rows,
+    }
+
+
+@router.post("/question_bank")
+def market_causality_question_bank_with_answers(
+    payload: dict[str, Any],
+    category: str = Query(default=""),
+    framework: str = Query(default=""),
+) -> dict[str, Any]:
+    """
+    Question bank merged with live answers from the provided system payload.
+
+    POST body: same shape as /summary payload (observation, trade_levels, final, etc.)
+    Each question row gets answer (bool), reasoning (str), confidence (0..1) injected.
+    Aggregate scoring (verdict, score, pct, weakest) included in the response.
+    """
+    # Coerce FastAPI Query descriptor objects to plain strings when called directly in tests
+    _cat = str(category.default if hasattr(category, "default") else category)
+    _fw  = str(framework.default if hasattr(framework, "default") else framework)
+    return _question_bank_payload(category=_cat, framework=_fw, live_payload=payload)
+
+
+@router.post("/run_batch")
+def market_causality_run_batch(
+    payload: dict[str, Any] = Body(default={}),
+) -> dict[str, Any]:
+    """
+    Trigger a batch backtest replay over all chart data files.
+
+    Optional body fields:
+        dry_run  (bool):  default false — when true, weights are NOT saved.
+        window   (int):   lookback bars (default 12)
+        horizon  (int):   forward bars for outcome (default 24)
+        min_move (float): minimum price move in points to count as a valid
+                          outcome (default 3.0)
+
+    Returns the full batch summary including per-file stats and final weights.
+    """
+    from astroquant.backend.backtest_replay import run_batch_replay  # local import to avoid circular
+
+    dry_run  = bool(payload.get("dry_run", False))
+    window   = int(payload.get("window", 12))
+    horizon  = int(payload.get("horizon", 24))
+    min_move = float(payload.get("min_move", 3.0))
+
+    result = run_batch_replay(
+        window=window,
+        horizon=horizon,
+        min_move=min_move,
+        dry_run=dry_run,
+        tracker_path=str(_PREDICTION_TRACKER.path),
+    )
+
+    # Reload live-engine state so /weights reflects the updated values immediately
+    if not dry_run:
+        persisted = _PREDICTION_TRACKER.load_weights()
+        for k, v in persisted.items():
+            if k in _LEARNING_ENGINE.weights:
+                _LEARNING_ENGINE.weights[k] = v
+        _LEARNING_ENGINE.predictions        = _PREDICTION_TRACKER.load_predictions()
+        _LEARNING_ENGINE.realized_outcomes  = _PREDICTION_TRACKER.load_outcomes()
+
+    return result
+
+
+@router.post("/auto_resolve_pending")
+def market_causality_auto_resolve(
+    symbol: str = Query(default="XAUUSD"),
+) -> dict[str, Any]:
+    """Auto-resolve predictions whose forecast horizon has passed.
+
+    For each recorded prediction that:
+      - has no corresponding outcome yet
+      - whose forecast_horizon_days has elapsed since recorded_at
+
+    … the endpoint fetches the latest live price, infers the realized direction
+    versus the entry price, and records the outcome automatically.
+
+    Returns a summary of how many predictions were resolved.
+    """
+    now_utc = datetime.now(timezone.utc)
+    resolved = []
+    errors: list[str] = []
+
+    # Build set of already-resolved prediction IDs
+    resolved_ids: set[str] = {o.get("prediction_id") for o in _LEARNING_ENGINE.realized_outcomes if o.get("prediction_id")}
+
+    # Gather expired-but-unresolved predictions
+    pending: list[dict[str, Any]] = []
+    for pred in _LEARNING_ENGINE.predictions:
+        pid = pred.get("id")
+        if not pid or pid in resolved_ids:
+            continue
+        recorded_raw = pred.get("recorded_at")
+        if not recorded_raw:
+            continue
+        try:
+            recorded_at = datetime.fromisoformat(str(recorded_raw).replace("Z", "+00:00"))
+            if recorded_at.tzinfo is None:
+                recorded_at = recorded_at.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+        horizon_days = int(pred.get("forecast_horizon_days") or 1)
+        elapsed = (now_utc - recorded_at).total_seconds() / 86400.0
+        if elapsed >= horizon_days:
+            pending.append(pred)
+
+    if not pending:
+        return {"status": "ok", "resolved_count": 0, "message": "No expired unresolved predictions found."}
+
+    # Get current live price once
+    current_price: float | None = None
+    try:
+        price_resp = market_causality_live_price(symbol=symbol)
+        if price_resp.get("status") == "ok":
+            current_price = float(price_resp["price"])
+    except Exception as exc:
+        errors.append(f"price_fetch_error: {exc}")
+
+    if current_price is None:
+        return {
+            "status": "error",
+            "error": "Could not fetch current price for auto-resolution",
+            "errors": errors,
+        }
+
+    for pred in pending:
+        pid = str(pred.get("id"))
+        entry_price = float(pred.get("entry_price") or current_price)
+        try:
+            move = current_price - entry_price
+            pips = abs(round(move, 2))
+            if move > 0.10:
+                direction = "UP"
+            elif move < -0.10:
+                direction = "DOWN"
+            else:
+                direction = "SIDEWAYS"
+
+            elapsed_days = (now_utc - datetime.fromisoformat(
+                str(pred.get("recorded_at")).replace("Z", "+00:00")
+            ).replace(tzinfo=timezone.utc)).total_seconds() / 86400.0
+
+            result = _LEARNING_ENGINE.record_outcome(
+                prediction_id=pid,
+                realized_price=current_price,
+                outcome_direction=direction,
+                actual_move_pips=pips,
+                timeframe_reached=max(1, int(elapsed_days * 24)),
+            )
+            if result.get("status") != "error":
+                resolved.append({
+                    "prediction_id": pid,
+                    "direction": direction,
+                    "entry_price": entry_price,
+                    "current_price": current_price,
+                    "move_pips": pips,
+                    "accuracy_score": result.get("accuracy_score"),
+                    "was_correct": result.get("was_correct"),
+                })
+            else:
+                errors.append(f"{pid}: {result.get('message')}")
+        except Exception as exc:
+            errors.append(f"{pid}: {exc}")
+
+    return {
+        "status": "ok",
+        "resolved_count": len(resolved),
+        "current_price": current_price,
+        "resolved": resolved,
+        "errors": errors if errors else None,
+    }
+
+
+@router.post("/reset_weights")
+def market_causality_reset_weights(
+    payload: dict[str, Any] = Body(default={}),
+) -> dict[str, Any]:
+    """
+    Reset all learning-engine signal weights to their original baseline values.
+
+    Optional body fields:
+        clear_predictions (bool): default false — when true, ALL predictions and
+            outcomes are also wiped (full reset).  Use with caution.
+
+    Returns confirmation with the new weight values.
+    """
+    _baseline: dict[str, float] = {
+        "geometry":  0.88,
+        "time":      0.82,
+        "structure": 0.92,
+        "momentum":  0.85,
+        "gann":      0.80,
+        "ict":       0.78,
+        "confluence": 0.90,
+    }
+
+    clear_predictions = bool(payload.get("clear_predictions", False))
+
+    if clear_predictions:
+        _PREDICTION_TRACKER.clear()           # wipes predictions, outcomes, weights
+        _LEARNING_ENGINE.predictions          = []
+        _LEARNING_ENGINE.realized_outcomes    = []
+
+    # Always persist baseline weights and sync live engine
+    _PREDICTION_TRACKER.save_weights(_baseline)
+    _LEARNING_ENGINE.weights = dict(_baseline)
+
+    msg = "Weights reset to baseline."
+    if clear_predictions:
+        msg = "Weights reset to baseline and all predictions cleared."
+
+    return {
+        "status":               "weights_reset",
+        "weights":              dict(_baseline),
+        "predictions_cleared":  clear_predictions,
+        "message":              msg,
+    }

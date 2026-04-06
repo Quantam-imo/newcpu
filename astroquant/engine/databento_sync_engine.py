@@ -22,7 +22,7 @@ class DatabentoSyncEngine:
     DEFAULT_BRIDGES = {
         "XAUUSD": {
             "futures_alias": "GC",
-            "default_contracts": ["GCJ6", "GCM6", "GCQ6"],
+            "default_contracts": ["GCM6", "GCQ6", "GCZ6"],  # GCJ6 expired April 2026
         },
         "NQ": {
             "futures_alias": "NQ",
@@ -154,7 +154,7 @@ class DatabentoSyncEngine:
         defaults = list(cfg.get("default_contracts") or [])
 
         if symbol == "XAUUSD" and self.last_snapshot.get("GC"):
-            return str(self.last_snapshot["GC"].get("symbol") or (defaults[0] if defaults else "GCJ6"))
+            return str(self.last_snapshot["GC"].get("symbol") or (defaults[0] if defaults else "GCM6"))
         if symbol == "NQ" and self.last_snapshot.get("ES"):
             # If no dedicated NQ snapshot, reuse ES cadence only for timestamping.
             return str(self.last_snapshot["ES"].get("symbol") or (defaults[0] if defaults else "NQH6"))
@@ -206,6 +206,17 @@ class DatabentoSyncEngine:
         current_month = int(now.month)
         current_year = int(now.year)
 
+        # Commodity futures (GC, CL, SI) expire before the delivery month.
+        # By day 5 of month N, that contract is already expired — skip to next.
+        COMMODITY_ROOTS = {"GC", "CL", "SI", "HG", "NG"}
+        if root in COMMODITY_ROOTS and now.day >= 5:
+            start_month = current_month + 1
+            year = current_year + (1 if start_month > 12 else 0)
+            month_cursor = start_month if start_month <= 12 else 1
+        else:
+            year = current_year
+            month_cursor = current_month
+
         month_sequence = []
         for code in cycles:
             month_num = self.MONTH_CODE_TO_MONTH.get(code)
@@ -216,8 +227,6 @@ class DatabentoSyncEngine:
             return list(cfg.get("default_contracts") or [])
 
         picks = []
-        year = current_year
-        month_cursor = current_month
         attempts = 0
         max_needed = max(1, int(max_count))
 
@@ -274,7 +283,7 @@ class DatabentoSyncEngine:
             event_time=futures_timestamp,
         )
 
-    def get_gc_xauusd_snapshot(self, gc_price: Optional[float] = None, gc_source: str = "GCJ6") -> Optional[dict]:
+    def get_gc_xauusd_snapshot(self, gc_price: Optional[float] = None, gc_source: str = "GCM6") -> Optional[dict]:
         """
         Update and return the GC → XAUUSD basis snapshot.
         Uses the latest_price from last GC fetch if gc_price not specified.
@@ -599,7 +608,7 @@ class DatabentoSyncEngine:
         # Auto-update GC→XAUUSD sync model if runner is attached
         if self.gc_xauusd_sync is not None and snapshot.get("GC"):
             gc_price = snapshot["GC"].get("latest_price")
-            gc_symbol = snapshot["GC"].get("symbol", "GCJ6")
+            gc_symbol = snapshot["GC"].get("symbol", "GCM6")
             gc_event_ts = None
             try:
                 iso = snapshot["GC"].get("latest_ts")

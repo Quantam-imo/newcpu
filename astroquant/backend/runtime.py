@@ -195,7 +195,15 @@ def get_runner() -> MultiSymbolRunner:
 	with _runner_lock:
 		if _runner is None:
 			_runner = MultiSymbolRunner(RUNTIME_SYMBOLS)
-			_prime_execution_connection(_runner)
+			# Run broker connection in background so it never blocks server startup.
+			# Playwright/CDP may take 30-90 s when Chrome is cold; the server must
+			# bind and respond to health checks long before that completes.
+			threading.Thread(
+				target=_prime_execution_connection,
+				args=(_runner,),
+				daemon=True,
+				name="aq-prime-broker-connection",
+			).start()
 			_start_prewarm_loop(_runner)
 			_start_broker_watchdog(_runner)
 		return _runner

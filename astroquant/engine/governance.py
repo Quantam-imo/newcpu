@@ -69,6 +69,15 @@ class Governance:
         return total
 
     def validate(self, signal, spread, daily_loss, phase, symbol, session="UNKNOWN"):
+        # ── Market Holiday / Weekend halt ──────────────────────────────────────
+        try:
+            from astroquant.engine.market_calendar import MarketCalendar
+            if not MarketCalendar.is_market_open(symbol):
+                msg = MarketCalendar.format_closure_message(symbol)
+                return False, f"Market closed — {msg}"
+        except Exception:
+            pass  # calendar library unavailable; continue normally
+
         if not self.news.last_fetch or (
             datetime.datetime.now(datetime.UTC) - self.news.last_fetch
         ).seconds > 600:

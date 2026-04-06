@@ -1,31 +1,41 @@
 {
-  "last_update_id": 112229214,
-  "last_report_ts": 1775239118,
-  "last_daemon_health_ts": 1775238259,
-  "last_online_alert_ts": 1775211813,
+  "last_update_id": 112229227,
+  "last_report_ts": 1775496563,
+  "last_daemon_health_ts": 1775496577,
+  "last_online_alert_ts": 1775487490,
   "last_bias": null,
   "last_bias_map": {
-    "XAUUSD": "N/A",
+    "XAUUSD": "NEUTRAL",
     "GC.FUT": "N/A",
-    "NQ.FUT": "N/A"
+    "NQ.FUT": "N/A",
+    "NQ": "NEUTRAL",
+    "EURUSD": "NEUTRAL"
   },
   "last_signal_map": {
     "XAUUSD": "--",
-    "GC.FUT": "--",
-    "NQ.FUT": "--"
+    "GC.FUT": "N/A",
+    "NQ.FUT": "--",
+    "NQ": "--",
+    "EURUSD": "--"
   },
   "last_astro_sig_map": {
-    "XAUUSD": "{\"astro_bias\": null, \"astro_marker\": null, \"harmonic_window\": null, \"reason\": null, \"signal\": null}",
+    "XAUUSD": "{\"astro_bias\": \"--\", \"astro_marker\": \"DISABLED\", \"harmonic_window\": false, \"reason\": \"Astro engine not active\", \"signal\": \"N/A\"}",
     "GC.FUT": "{\"astro_bias\": null, \"astro_marker\": null, \"harmonic_window\": null, \"reason\": null, \"signal\": null}",
-    "NQ.FUT": "{\"astro_bias\": null, \"astro_marker\": null, \"harmonic_window\": null, \"reason\": null, \"signal\": null}"
+    "NQ.FUT": "{\"astro_bias\": null, \"astro_marker\": null, \"harmonic_window\": null, \"reason\": null, \"signal\": null}",
+    "NQ": "{\"astro_bias\": \"--\", \"astro_marker\": \"DISABLED\", \"harmonic_window\": false, \"reason\": \"Astro engine not active\", \"signal\": \"N/A\"}",
+    "EURUSD": "{\"astro_bias\": \"--\", \"astro_marker\": \"DISABLED\", \"harmonic_window\": false, \"reason\": \"Astro engine not active\", \"signal\": \"N/A\"}"
   },
   "last_news_halt": false,
-  "last_news_sig": "[]",
+  "last_news_sig": "[{\"currency\": \"\", \"impact\": \"High\", \"time_utc\": \"2026-04-08T02:00:00+00:00\", \"title\": \"Official Cash Rate\"}, {\"currency\": \"\", \"impact\": \"High\", \"time_utc\": \"2026-04-08T02:00:00+00:00\", \"title\": \"RBNZ Rate Statement\"}, {\"currency\": \"\", \"impact\": \"High\", \"time_utc\": \"2026-04-08T03:00:00+00:00\", \"title\": \"RBNZ Press Conference\"}]",
   "last_trade_key_map": {
     "XAUUSD": "2026-04-02T09:23:42+00:00|XAUUSD|TEST_MODEL|APPROVED|30.0"
   },
-  "last_trade_alert_check_ts": 1775239089,
-  "last_day_start_report_date": "2026-04-03",
+  "last_trade_alert_check_ts": 1775497261,
+  "last_mentor_poll_ts": 1775497273,
+  "last_day_start_report_date": "2026-04-06",
   "last_day_end_report_date": "",
-  "last_daily_summary_date": "2026-04-03"
+  "last_daily_summary_date": "2026-04-06",
+  "last_holiday_eve_alert_date": "",
+  "last_mcl_daily_date": "2026-04-06",
+  "sent_approval_ids": []
 }

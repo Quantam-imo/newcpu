@@ -77,6 +77,15 @@ class ObservationRecorderTests(unittest.TestCase):
             self.assertEqual(written.loc[0, "news_previous_event"], "Fed Statement")
             self.assertEqual(written.loc[0, "news_next_event"], "Nakshatra Shift")
             self.assertEqual(written.loc[0, "trend_start_time"], "2026-01-01T04:00:00")
+            self.assertEqual(written.loc[0, "signal_start_time"], "2026-01-01T04:00:00")
+            self.assertIsNotNone(written.loc[0, "signal_end_time"])
+            self.assertGreater(float(written.loc[0, "signal_window_hours"]), 0.0)
+            self.assertAlmostEqual(float(written.loc[0, "signal_start_price"]), 102.0)
+            self.assertIn(written.loc[0, "confirmation_geometry"], ["YES", "NO"])
+            self.assertIn(written.loc[0, "confirmation_time"], ["YES", "NO"])
+            self.assertIn(written.loc[0, "confirmation_structure"], ["YES", "NO"])
+            self.assertIn(written.loc[0, "confirmation_tape_action"], ["YES", "NO"])
+            self.assertTrue(str(written.loc[0, "gann_mindset_narration"]).strip())
 
     def test_record_observation_appends_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
