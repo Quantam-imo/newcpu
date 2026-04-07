@@ -136,57 +136,43 @@ async def websocket_confluence(websocket: WebSocket, symbol: str):
 # --- WebSocket endpoint: Live chart candles ---
 @router.websocket("/ws/chart_live/{symbol}")
 async def websocket_chart_live(websocket: WebSocket, symbol: str):
-    # Parse schema from query params (default to ohlcv-1s)
+    """Stream candle updates from Redis cache.
+
+    On connect: sends full candle history (up to 80 candles).
+    Then polls every 5 seconds and pushes any new candle (by time key).
+    This avoids opening a new Databento live connection per WS client and
+    works reliably even when Databento live subscription is unavailable.
+    """
     import logging
     await manager.connect(websocket)
     try:
-        # Extract schema from query string
-        schema = None
-        if hasattr(websocket, 'query_params'):
-            schema = websocket.query_params.get('schema')
-        if not schema:
-            # Fallback: parse from raw path
-            import urllib.parse
-            parsed = urllib.parse.urlparse(str(websocket.url))
-            q = urllib.parse.parse_qs(parsed.query)
-            schema = q.get('schema', [None])[0]
-        if not schema:
-            schema = 'ohlcv-1s'
+        # Parse timeframe from schema query param (ohlcv-1m → 1, ohlcv-1s → 1, trades → 1)
+        schema = websocket.query_params.get("schema", "ohlcv-1m")
+        tf = "1"  # default 1-minute; extend later if multi-TF WS needed
 
-        from astroquant.engine.contract_resolver import ContractResolver
-        contract_resolver = ContractResolver()
-        resolved_symbol = contract_resolver.get_cached(symbol)
-        if not resolved_symbol:
-            from astroquant.engine.multi_symbol_runner import MultiSymbolRunner
-            runner = MultiSymbolRunner([symbol])
-            resolved_symbol = runner.resolve_active_feed_symbol(symbol)
-        if not resolved_symbol:
-            resolved_symbol = symbol
+        from astroquant.engine.candle.candle_reader import get_candle_series
 
-        from astroquant.backend.services.databento_live_service import DatabentoLiveService
-        service = DatabentoLiveService()
-        async def send_candle(candle):
-            await websocket.send_json({"candle": candle})
+        # Send initial history
+        candles = get_candle_series(symbol, timeframe=tf, limit=80) or []
+        if candles:
+            await websocket.send_json({"candles": candles})
 
-        # Route based on schema
-        if schema == "ohlcv-1s":
-            await service.stream_ohlcv_1s(resolved_symbol, send_candle)
-        elif schema == "ohlcv-1m":
-            await service.stream_ohlcv_1m(resolved_symbol, send_candle)
-        elif schema == "trades":
-            if hasattr(service, "stream_trades"):
-                await service.stream_trades(resolved_symbol, send_candle)
-            else:
-                await websocket.send_json({"error": "Trades schema not supported yet."})
-        else:
-            await websocket.send_json({"error": f"Unsupported schema: {schema}"})
+        last_time = candles[-1]["time"] if candles else 0
+
+        # Poll Redis for new candles every 5 seconds
+        while True:
+            await asyncio.sleep(5)
+            fresh = get_candle_series(symbol, timeframe=tf, limit=5) or []
+            for c in fresh:
+                if c["time"] > last_time:
+                    last_time = c["time"]
+                    await websocket.send_json({"candle": c})
     except WebSocketDisconnect:
         manager.disconnect(websocket)
         logging.info(f"WebSocket disconnected: /ws/chart_live/{symbol}")
     except Exception as e:
         manager.disconnect(websocket)
         logging.error(f"WebSocket error in /ws/chart_live/{symbol}: {e}")
-        await websocket.send_json({"error": str(e)})
 
 # --- WebSocket endpoint: Chart history (periodic) ---
 @router.websocket("/ws/chart/{symbol}")
