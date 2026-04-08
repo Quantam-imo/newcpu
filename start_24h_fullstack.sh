@@ -247,13 +247,31 @@ except:
   fi
 fi
 
-# Step 6: CF Auto-Unblock
+# Step 6: Live Sync Engine (Databento real-time candle feed → Redis)
+if [ -f "$WORKSPACE/start_live_sync.py" ] && [ -n "$DATABENTO_API_KEY" ]; then
+  log BLUE "Starting Databento live sync engine..."
+  pkill -f "start_live_sync.py" 2>/dev/null || true
+  sleep 1
+  nohup env PYTHONUNBUFFERED=1 python "$WORKSPACE/start_live_sync.py" >> "$LOG_DIR/livesync.log" 2>&1 &
+  sleep 3
+  if pgrep -f "start_live_sync.py" > /dev/null; then
+    log GREEN "✓ Live sync engine running (candles → Redis)"
+  else
+    log YELLOW "⚠ Live sync engine failed to start — check $LOG_DIR/livesync.log"
+  fi
+else
+  if [ -z "$DATABENTO_API_KEY" ]; then
+    log YELLOW "⚠ DATABENTO_API_KEY not set — live sync skipped (chart will use historical fallback)"
+  fi
+fi
+
+# Step 8: CF Auto-Unblock
 log BLUE "Starting Cloudflare challenge auto-unblock..."
 nohup python cloudflare_unblock.py > "$LOG_DIR/cf_unblock.log" 2>&1 &
 sleep 2
 log GREEN "✓ CF unblock monitor started"
 
-# Step 7: Cloudflare Tunnel (optional)
+# Step 9: Cloudflare Tunnel (optional)
 if [ "$NO_TUNNEL" != true ]; then
   log BLUE "Starting Cloudflare Tunnel for remote access..."
   bash start_cloudflare_tunnel.sh 2>&1 | tee -a "$LOG_DIR/fullstack.log" &
@@ -263,7 +281,7 @@ if [ "$NO_TUNNEL" != true ]; then
   log GREEN "✓ Tunnel ready: $TUNNEL_URL"
 fi
 
-# Step 8: NoVPN Connector (optional)
+# Step 10: NoVPN Connector (optional)
 if [ "$NO_NOVPN" != true ]; then
   log BLUE "Starting VNC desktop backend for noVNC..."
   bash start_vnc_desktop.sh 2>&1 | tee -a "$LOG_DIR/fullstack.log" &
@@ -368,7 +386,15 @@ while true; do
       --concurrency=4 \
       > "$LOG_DIR/celery.log" 2>&1 &
   fi
-  
+
+  # Check Live Sync Engine (Databento candle feed)
+  if [ -f "$WORKSPACE/start_live_sync.py" ] && [ -n "$DATABENTO_API_KEY" ]; then
+    if ! pgrep -f "start_live_sync.py" > /dev/null; then
+      log RED "✗ Live sync engine down! Restarting..."
+      nohup env PYTHONUNBUFFERED=1 python "$WORKSPACE/start_live_sync.py" >> "$LOG_DIR/livesync.log" 2>&1 &
+    fi
+  fi
+
   # Check Orchestrator
   ORCH_PIDS="$(pgrep -f "python .*start_astroquant.py|/start_astroquant.py" || true)"
   ORCH_COUNT="$(printf "%s\n" "$ORCH_PIDS" | sed '/^$/d' | wc -l)"

@@ -253,6 +253,10 @@ def get_chart_data(symbol: str = "GC.FUT", timeframe: str = "1", limit: int = 80
 			"signals": [],
 		}
 
+	# Redis candles older than this threshold are treated as a cache miss so the
+	# endpoint falls through to a live Databento fetch (weekdays only).
+	_REDIS_STALE_SECONDS = 600  # 10 minutes
+
 	error_msgs = []
 	if _redis_reachable():
 		try:
@@ -263,6 +267,13 @@ def get_chart_data(symbol: str = "GC.FUT", timeframe: str = "1", limit: int = 80
 	else:
 		candles = []
 		error_msgs.append("Redis unavailable: fast-skip")
+
+	# Discard stale Redis candles so the Databento fetch path is triggered below.
+	if candles:
+		last_candle_age = _candle_age_seconds(candles[-1])
+		if last_candle_age is not None and last_candle_age > _REDIS_STALE_SECONDS:
+			error_msgs.append(f"Redis stale: last candle {int(last_candle_age)}s old — triggering refresh")
+			candles = []
 
 	meta = {"source": "redis", "count": len(candles)} if candles else {}
 

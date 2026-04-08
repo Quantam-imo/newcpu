@@ -1,6 +1,6 @@
 import redis
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 class CandleEngine:
     def __init__(self):
@@ -21,7 +21,15 @@ class CandleEngine:
         self.candles = {}
 
     def get_bucket(self, timestamp, timeframe):
-        dt = datetime.fromisoformat(timestamp)
+        # Handle nanosecond integer timestamps from Databento (ts_event is int ns)
+        ts_str = str(timestamp).strip()
+        if ts_str.lstrip("-").isdigit():
+            ns = int(ts_str)
+            # Databento nanoseconds since epoch (>1e15 means nanoseconds)
+            sec = ns / 1e9 if ns > 1e13 else float(ns)
+            dt = datetime.fromtimestamp(sec, tz=timezone.utc).replace(tzinfo=None)
+        else:
+            dt = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).replace(tzinfo=None)
         minute = (dt.minute // timeframe) * timeframe
         return dt.replace(second=0, microsecond=0, minute=minute)
 
