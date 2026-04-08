@@ -912,9 +912,13 @@ class PlaywrightExecution:
             last_local = self._first_visible_price(
                 page,
                 [
-                    "[data-testid='quotation']",
                     "[data-testid='quotation-last']",
                     "[data-testid='last-price']",
+                    # NOTE: '[data-testid="quotation"]' is intentionally excluded here —
+                    # it matches 14+ watchlist rows (EURUSD, GBPUSD, etc.) and would
+                    # return the first watchlist symbol's price instead of the active
+                    # order-panel instrument. The order-panel fallback below is the
+                    # correct read path for Maven Markets.
                 ],
             )
 

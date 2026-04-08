@@ -122,7 +122,9 @@ class BasisEngine:
         med_full = float(median(full_bps)) if full_bps else 0.0
         deviations = [abs(x - med_full) for x in full_bps]
         mad = float(median(deviations)) if deviations else 0.0
-        robust_sigma = max(1e-9, 1.4826 * mad)
+        # Floor sigma at min_sigma_abs_bps to prevent near-zero MAD
+        # (from tightly-clustered early samples) from producing astronomical z-scores.
+        robust_sigma = max(float(self.min_sigma_abs_bps), 1.4826 * mad)
         zscore = (raw_bps - med_full) / robust_sigma
 
         state["status"] = "LIVE"
