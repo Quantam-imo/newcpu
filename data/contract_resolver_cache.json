@@ -1,11 +1,11 @@
 {
   "XAUUSD": {
     "active_symbol": "GC.c.1",
-    "resolved_at": 1775607425,
-    "last_probe_at": 1775607425,
+    "resolved_at": 1775617874,
+    "last_probe_at": 1775617874,
     "last_status": "LIVE",
-    "sample_count": 75,
-    "attempts": 4441,
+    "sample_count": 139,
+    "attempts": 4469,
     "consecutive_failures": 0,
     "ttl_seconds": 14400,
     "candidates_tried": [
@@ -17,11 +17,11 @@
   },
   "NQ": {
     "active_symbol": "NQ.c.1",
-    "resolved_at": 1775606768,
-    "last_probe_at": 1775606768,
+    "resolved_at": 1775617873,
+    "last_probe_at": 1775617873,
     "last_status": "LIVE",
-    "sample_count": 400,
-    "attempts": 1334,
+    "sample_count": 71,
+    "attempts": 1336,
     "consecutive_failures": 0,
     "ttl_seconds": 14400,
     "candidates_tried": [
@@ -33,11 +33,11 @@
   },
   "EURUSD": {
     "active_symbol": "6E.c.1",
-    "resolved_at": 1775606772,
-    "last_probe_at": 1775606772,
+    "resolved_at": 1775617872,
+    "last_probe_at": 1775617872,
     "last_status": "LIVE",
-    "sample_count": 265,
-    "attempts": 1281,
+    "sample_count": 28,
+    "attempts": 1283,
     "consecutive_failures": 0,
     "ttl_seconds": 14400,
     "candidates_tried": [
@@ -49,11 +49,11 @@
   },
   "US30": {
     "active_symbol": "YM.c.1",
-    "resolved_at": 1775606777,
-    "last_probe_at": 1775606777,
+    "resolved_at": 1775617873,
+    "last_probe_at": 1775617873,
     "last_status": "LIVE",
-    "sample_count": 400,
-    "attempts": 1282,
+    "sample_count": 35,
+    "attempts": 1284,
     "consecutive_failures": 0,
     "ttl_seconds": 14400,
     "candidates_tried": [

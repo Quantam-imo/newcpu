@@ -1,13 +1,21 @@
 [Unit]
-Description=Cloudflare Tunnel for AstroQuant
-After=network.target
+Description=Cloudflare Tunnel for AstroQuant Remote Access
+After=network-online.target astroquant_tradingbot.service
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=__SERVICE_USER__
 WorkingDirectory=__WORKSPACE__
+EnvironmentFile=-__WORKSPACE__/.env
 ExecStart=/usr/local/bin/cloudflared tunnel --url http://localhost:8000
 Restart=always
+RestartSec=10
+StartLimitIntervalSec=120
+StartLimitBurst=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=astroquant-cloudflared
 
 [Install]
 WantedBy=multi-user.target

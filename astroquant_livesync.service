@@ -1,5 +1,5 @@
-ok finish all the testings what we left[Unit]
-Description=AstroQuant Live Sync Engine (Databento → Redis candle feed)
+[Unit]
+Description=AstroQuant Live Sync Engine (Databento candle feed)
 After=network-online.target astroquant_tradingbot.service
 Wants=network-online.target
 
