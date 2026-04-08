@@ -1,17 +1,24 @@
 [Unit]
-Description=Chrome with Remote Debugging for AstroQuant
-After=network.target
+Description=Chrome Remote Debug for AstroQuant (Broker CDP connection)
+After=network-online.target graphical.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=__SERVICE_USER__
 WorkingDirectory=__WORKSPACE__
 EnvironmentFile=-__WORKSPACE__/.env
-Environment=DISPLAY=:99
-ExecStartPre=/bin/bash -c "pgrep -f 'Xvfb :99' || Xvfb :99 -screen 0 1280x900x24 -ac +extension GLX +render -noreset &"
+Environment=PYTHONUNBUFFERED=1
+# On physical CPU with a real desktop, DISPLAY=:0 is set before this unit starts.
+# On headless/server: Xvfb is autostarted inside start_chrome_remote_debug.sh.
 ExecStart=/bin/bash __WORKSPACE__/start_chrome_remote_debug.sh
 Restart=always
-RestartSec=5
+RestartSec=10
+StartLimitIntervalSec=120
+StartLimitBurst=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=astroquant-chrome
 
 [Install]
 WantedBy=multi-user.target

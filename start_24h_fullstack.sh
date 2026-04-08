@@ -91,7 +91,16 @@ echo ""
 
 # Step 1: Redis
 log BLUE "Starting Redis server..."
-redis-server --daemonize yes --logfile "$LOG_DIR/redis.log" 2>/dev/null || true
+# On physical CPU with 32GB RAM: allow up to 4GB for Redis cache with LRU eviction.
+# In codespace/container: use 512mb safe default.
+_AQ_REDIS_MAXMEM="${AQ_REDIS_MAXMEM:-1gb}"
+redis-server --daemonize yes \
+  --logfile "$LOG_DIR/redis.log" \
+  --maxmemory "$_AQ_REDIS_MAXMEM" \
+  --maxmemory-policy allkeys-lru \
+  --save "" \
+  --appendonly no \
+  2>/dev/null || true
 # Retry up to 10 seconds — Redis is fast but daemonize can be slightly delayed
 _redis_ok=false
 for _r in 1 2 3 4 5; do
@@ -122,12 +131,14 @@ cd "$WORKSPACE"
 # Enforce singleton worker across repeated boots/recovery runs.
 pkill -f "celery.*astroquant.backend.tasks.celery_worker" 2>/dev/null || true
 sleep 1
+# Auto-scale: env override, or 2× CPU cores capped at 8 for trading safety.
+_AQ_CELERY_CONCUR="${CELERY_CONCURRENCY:-$(python3 -c "import os; print(min(8, max(4, (os.cpu_count() or 4) * 2)))" 2>/dev/null || echo 4)}"
 nohup celery -A astroquant.backend.tasks.celery_worker:celery_app worker \
   --loglevel=info \
   --logfile="$LOG_DIR/celery.log" \
   --pidfile="$LOG_DIR/celery.pid" \
   --pool=threads \
-  --concurrency=4 \
+  --concurrency="$_AQ_CELERY_CONCUR" \
   > "$LOG_DIR/celery.log" 2>&1 &
 
 sleep 3
@@ -159,12 +170,17 @@ cd "$WORKSPACE"
 # Enforce singleton backend across repeated boots/recovery runs.
 pkill -f "uvicorn.*astroquant.backend.main:app" 2>/dev/null || true
 sleep 1
+# Auto-scale workers: use env override, or detect CPU cores (capped at 4 for trading stability).
+_AQ_WORKERS="${FASTAPI_WORKERS:-$(python3 -c "import os; print(min(4, max(2, os.cpu_count() or 2)))" 2>/dev/null || echo 2)}"
+_AQ_LOG_LEVEL="${FASTAPI_LOG_LEVEL:-warning}"
 nohup python -m uvicorn astroquant.backend.main:app \
   --host 0.0.0.0 \
   --port 8000 \
-  --log-level info \
+  --workers "$_AQ_WORKERS" \
+  --log-level "$_AQ_LOG_LEVEL" \
   > "$LOG_DIR/backend.log" 2>&1 &
 echo $! > "$LOG_DIR/backend.pid"
+log GREEN "✓ Backend starting with $_AQ_WORKERS workers"
 
 # Retry up to 45 seconds — cold boot takes longer than 6s
 _backend_ok=false
@@ -378,12 +394,13 @@ while true; do
   if ! pgrep -f "celery.*worker" > /dev/null; then
     log RED "✗ Celery down! Restarting..."
     cd "$WORKSPACE"
+    _AQ_CELERY_CONCUR="${CELERY_CONCURRENCY:-$(python3 -c "import os; print(min(8, max(4, (os.cpu_count() or 4) * 2)))" 2>/dev/null || echo 4)}"
     nohup celery -A astroquant.backend.tasks.celery_worker:celery_app worker \
       --loglevel=info \
       --logfile="$LOG_DIR/celery.log" \
       --pidfile="$LOG_DIR/celery.pid" \
       --pool=threads \
-      --concurrency=4 \
+      --concurrency="$_AQ_CELERY_CONCUR" \
       > "$LOG_DIR/celery.log" 2>&1 &
   fi
 
@@ -420,10 +437,12 @@ while true; do
     pkill -9 -f "uvicorn.*astroquant.backend.main:app" 2>/dev/null || true
     sleep 2
     cd "$WORKSPACE"
+    _AQ_WORKERS="${FASTAPI_WORKERS:-$(python3 -c "import os; print(min(4, max(2, os.cpu_count() or 2)))" 2>/dev/null || echo 2)}"
     nohup python -m uvicorn astroquant.backend.main:app \
       --host 0.0.0.0 \
       --port 8000 \
-      --log-level info \
+      --workers "$_AQ_WORKERS" \
+      --log-level "${FASTAPI_LOG_LEVEL:-warning}" \
       > "$LOG_DIR/backend.log" 2>&1 &
     echo $! > "$LOG_DIR/backend.pid"
     sleep 3
@@ -432,10 +451,12 @@ while true; do
     pkill -9 -f "uvicorn.*main:app" 2>/dev/null || true
     sleep 2
     cd "$WORKSPACE"
+    _AQ_WORKERS="${FASTAPI_WORKERS:-$(python3 -c "import os; print(min(4, max(2, os.cpu_count() or 2)))" 2>/dev/null || echo 2)}"
     nohup python -m uvicorn astroquant.backend.main:app \
       --host 0.0.0.0 \
       --port 8000 \
-      --log-level info \
+      --workers "$_AQ_WORKERS" \
+      --log-level "${FASTAPI_LOG_LEVEL:-warning}" \
       > "$LOG_DIR/backend.log" 2>&1 &
     echo $! > "$LOG_DIR/backend.pid"
     sleep 3
@@ -447,11 +468,11 @@ while true; do
       log YELLOW "⚠ Chrome not responding — restarting..."
       pkill -f "chrome.*remote-debugging-port=9222" 2>/dev/null || true
       sleep 1
-      DISPLAY=:1 \
+      DISPLAY="${DISPLAY:-${AQ_XVFB_DISPLAY:-:99}}" \
       AQ_WORKSPACE="$WORKSPACE" \
       AQ_API_BASE="http://127.0.0.1:8000" \
       AQ_CHROME_PROFILE_DIR="$DATA_DIR/browser_session/chrome-profile" \
-      AQ_XVFB_DISPLAY=:1 \
+      AQ_XVFB_DISPLAY="${AQ_XVFB_DISPLAY:-:99}" \
       AQ_USE_XVFB=true \
       nohup bash "$WORKSPACE/start_chrome_remote_debug.sh" >> "$LOG_DIR/chrome.log" 2>&1 &
     fi

@@ -1,14 +1,23 @@
-[Unit]
-Description=AstroQuant Live Sync Engine
-After=network.target astroquant_tradingbot.service
+ok finish all the testings what we left[Unit]
+Description=AstroQuant Live Sync Engine (Databento → Redis candle feed)
+After=network-online.target astroquant_tradingbot.service
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=__SERVICE_USER__
 WorkingDirectory=__WORKSPACE__
+EnvironmentFile=-__WORKSPACE__/.env
+Environment=PYTHONPATH=__WORKSPACE__
+Environment=PYTHONUNBUFFERED=1
 ExecStart=__WORKSPACE__/.venv/bin/python3 __WORKSPACE__/start_live_sync.py
 Restart=always
-Environment=PYTHONUNBUFFERED=1
+RestartSec=10
+StartLimitIntervalSec=120
+StartLimitBurst=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=astroquant-livesync
 
 [Install]
 WantedBy=multi-user.target

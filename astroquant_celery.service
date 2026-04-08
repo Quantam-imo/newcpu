@@ -1,14 +1,22 @@
 [Unit]
 Description=AstroQuant Celery Worker
-After=network.target astroquant_tradingbot.service
+After=network-online.target redis.service astroquant_tradingbot.service
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=__SERVICE_USER__
 WorkingDirectory=__WORKSPACE__
-ExecStart=__WORKSPACE__/.venv/bin/celery -A astroquant.backend.tasks.celery_worker worker --loglevel=info
-Restart=always
+EnvironmentFile=-__WORKSPACE__/.env
+Environment=PYTHONPATH=__WORKSPACE__
 Environment=PYTHONUNBUFFERED=1
+LimitNOFILE=65536
+ExecStart=__WORKSPACE__/.venv/bin/celery -A astroquant.backend.tasks.celery_worker worker --loglevel=info --pool=threads --concurrency=${CELERY_CONCURRENCY:-8}
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=astroquant-celery
 
 [Install]
 WantedBy=multi-user.target

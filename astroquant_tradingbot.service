@@ -1,19 +1,29 @@
 [Unit]
 Description=AstroQuant Full Stack Trading Service
-After=network.target
+After=network-online.target redis.service
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=__SERVICE_USER__
 WorkingDirectory=__WORKSPACE__
+EnvironmentFile=-__WORKSPACE__/.env
 Environment=PYTHONPATH=__WORKSPACE__
 Environment=PYTHONUNBUFFERED=1
-# Optional NoVPN binary path on CPU. If not present, startup skips NoVPN cleanly.
 Environment=NOVPN_EXECUTABLE=__WORKSPACE__/tools/novpn/novpn
+# Open-files limit for 32GB machine — allows large candle cache + many connections
+LimitNOFILE=65536
+LimitNPROC=4096
 ExecStart=/bin/bash __WORKSPACE__/start_24h_fullstack.sh
 ExecStop=/bin/bash __WORKSPACE__/stop_24h_fullstack.sh
 Restart=always
-RestartSec=5
+RestartSec=10
+StartLimitIntervalSec=120
+StartLimitBurst=5
+# Log to journal; readable with: journalctl -u astroquant_tradingbot -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=astroquant
 
 [Install]
 WantedBy=multi-user.target
