@@ -467,6 +467,160 @@
         .gann-q-head { font-size: 11px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
         .gann-q-detail { font-size: 11px; color: var(--muted); }
 
+        /* ── Gann 360° Calendar ── */
+        .gann360-layout {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 20px;
+            align-items: start;
+        }
+        @media (max-width: 700px) {
+            .gann360-layout { grid-template-columns: 1fr; }
+        }
+        .gann360-wheel-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+        #gann360Canvas {
+            border-radius: 50%;
+            background: #060b14;
+            border: 1px solid var(--border-strong);
+            box-shadow: 0 0 20px rgba(56,189,248,0.1);
+        }
+        .gann360-live-badge {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .gann360-stat {
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 14px;
+            text-align: center;
+            min-width: 80px;
+        }
+        .gann360-stat .k { font-size: 10px; color: var(--muted); margin-bottom: 3px; }
+        .gann360-stat .v { font-size: 15px; font-weight: 700; color: var(--accent); }
+        .gann360-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        .gann360-table th {
+            background: var(--surface-alt);
+            color: var(--muted);
+            font-weight: 600;
+            padding: 7px 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-strong);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+        .gann360-table td {
+            padding: 7px 10px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text);
+        }
+        .gann360-table tr:hover td { background: var(--surface-alt); }
+        .gann360-table td.angle-col { color: var(--accent); font-weight: 600; }
+        .gann360-table td.price-col { font-weight: 700; color: #fcd34d; }
+        .gann360-table td.current-row td { background: rgba(56,189,248,0.08); }
+        .gann360-table tr.near-row td { background: rgba(56,189,248,0.07); border-left: 3px solid var(--accent); }
+        .deg-badge {
+            display: inline-block;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .deg-badge.above { background: rgba(16,185,129,0.15); color: #10b981; }
+        .deg-badge.below { background: rgba(248,113,113,0.12); color: #f87171; }
+        .deg-badge.near  { background: rgba(245,158,11,0.15); color: var(--warning); }
+        /* Gann 360 Monthly Calendar */
+        .gann-cal-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 4px;
+            margin-top: 8px;
+        }
+        .gann-cal-cell {
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            padding: 6px 4px;
+            text-align: center;
+            min-height: 52px;
+            font-size: 11px;
+        }
+        .gann-cal-cell.day-header { background: none; border: none; font-weight: 700; color: var(--muted); min-height: 0; padding: 3px; font-size: 10px; }
+        .gann-cal-cell.empty { background: transparent; border-color: transparent; }
+        .gann-cal-cell.today { border-color: var(--accent); background: rgba(56,189,248,0.07); }
+        .gann-cal-cell.key-angle { border-color: var(--warning); }
+        .gann-cal-cell .cal-date { font-weight: 700; color: var(--text); margin-bottom: 3px; }
+        .gann-cal-cell .cal-angle { font-size: 10px; color: var(--accent); }
+        .gann-cal-cell .cal-price { font-size: 10px; color: #fcd34d; font-weight: 600; }
+        .gann-cal-cell .cal-sq9  { font-size: 9px; color: var(--muted); }
+        .gann-cal-nav { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
+        .gann-cal-nav button { padding: 4px 12px; font-size: 12px; }
+        .gann-cal-nav span { font-size: 13px; font-weight: 600; color: var(--text); min-width: 130px; text-align: center; }
+
+        /* ── Astro Module ─────────────────────────────────────────────────── */
+        .astro-module { margin-top: 24px; border-top: 1px solid var(--border); padding-top: 18px; }
+        .astro-module-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 14px; letter-spacing: .3px; }
+        .astro-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        @media (max-width: 700px) { .astro-grid { grid-template-columns: 1fr; } }
+        .astro-card { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+        .astro-card-title { font-size: 10px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 10px; }
+        /* Moon phase */
+        .moon-phase-row { display: flex; align-items: center; gap: 10px; }
+        .moon-phase-icon { font-size: 32px; line-height: 1; }
+        .moon-phase-name { font-size: 15px; font-weight: 700; color: #fcd34d; }
+        .moon-phase-angle { font-size: 11px; color: var(--muted); margin-top: 2px; }
+        /* Planets grid */
+        .planet-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+        .planet-pill { background: rgba(56,189,248,0.07); border: 1px solid var(--border); border-radius: 6px;
+                       padding: 5px 4px; text-align: center; }
+        .planet-pill .p-sym { font-size: 14px; line-height: 1; }
+        .planet-pill .p-name { font-size: 9px; color: var(--muted); margin: 2px 0; }
+        .planet-pill .p-deg { font-size: 10px; font-weight: 700; color: var(--accent); }
+        .planet-pill.retro { border-color: #f87171; }
+        .planet-pill .p-retro { font-size: 9px; color: #f87171; }
+        /* Aspects */
+        .aspect-list { display: flex; flex-direction: column; gap: 5px; max-height: 160px; overflow-y: auto; }
+        .aspect-row { display: flex; align-items: center; gap: 8px; font-size: 11px; padding: 4px 6px;
+                      background: rgba(255,255,255,0.03); border-radius: 5px; }
+        .aspect-badge { font-size: 9px; padding: 2px 6px; border-radius: 3px; font-weight: 700; min-width: 70px; text-align: center; }
+        .aspect-badge.CONJUNCTION { background: rgba(16,185,129,0.2); color: #10b981; }
+        .aspect-badge.TRINE       { background: rgba(56,189,248,0.2);  color: #38bdf8; }
+        .aspect-badge.SEXTILE     { background: rgba(56,189,248,0.1);  color: #7dd3fc; }
+        .aspect-badge.SQUARE      { background: rgba(248,113,113,0.2); color: #f87171; }
+        .aspect-badge.OPPOSITION  { background: rgba(245,158,11,0.15); color: var(--warning); }
+        /* Gann-planet alignments */
+        .align-list { display: flex; flex-direction: column; gap: 4px; }
+        .align-row { display: flex; gap: 8px; align-items: center; font-size: 11px; padding: 4px 6px;
+                     background: rgba(245,158,11,0.05); border-left: 2px solid var(--warning); border-radius: 4px; }
+        .align-planet { width: 60px; color: var(--accent); font-weight: 600; text-transform: capitalize; }
+        .align-gann   { color: var(--warning); font-weight: 700; min-width: 38px; }
+        .align-orb    { color: var(--muted); font-size: 10px; }
+        /* Astro signal badge */
+        .astro-signal-wrap { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+        .astro-sig-badge { font-size: 13px; font-weight: 700; padding: 4px 14px; border-radius: 6px; }
+        .astro-sig-badge.BUY     { background: rgba(16,185,129,0.18); color: #10b981; border: 1px solid #10b981; }
+        .astro-sig-badge.SELL    { background: rgba(248,113,113,0.15); color: #f87171; border: 1px solid #f87171; }
+        .astro-sig-badge.NEUTRAL { background: rgba(107,114,128,0.15); color: #9ca3af; border: 1px solid #374151; }
+        /* Cal moon markers */
+        .gann-cal-cell.full-moon  { border-color: #fcd34d; }
+        .gann-cal-cell.new-moon   { border-color: #818cf8; }
+        .cal-moon-label { font-size: 8px; font-weight: 700; }
+        .cal-moon-label.full { color: #fcd34d; }
+        .cal-moon-label.new  { color: #818cf8; }
+        /* ── End Astro Module ───────────────────────────────────────────── */
+
         .ai-badge {
             display: inline-block;
             background: linear-gradient(135deg, rgba(56, 189, 248, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%);
@@ -1349,6 +1503,148 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            <!-- Gann 360° Calendar -->
+            <div class="section" id="gann360Section">
+                <div class="section-title">🔵 Gann 360° Degree Wheel &amp; Calendar</div>
+
+                <!-- Live price ticker -->
+                <div style="display:flex;gap:12px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+                    <span style="font-size:12px;color:var(--muted);">Live Price</span>
+                    <span id="gann360Price" style="font-size:18px;font-weight:700;color:#fcd34d;">--</span>
+                    <span id="gann360Degree" style="font-size:13px;color:var(--accent);">--°</span>
+                    <span id="gann360Bias" style="font-size:12px;padding:3px 8px;background:var(--surface-alt);border:1px solid var(--border);border-radius:4px;">--</span>
+                    <span id="gann360WsStatus" style="font-size:10px;color:var(--muted);">● connecting...</span>
+                </div>
+
+                <div class="gann360-layout">
+                    <!-- Left: Wheel canvas -->
+                    <div class="gann360-wheel-wrap">
+                        <canvas id="gann360Canvas" width="300" height="300"></canvas>
+                        <div class="gann360-live-badge">
+                            <div class="gann360-stat">
+                                <div class="k">Degree</div>
+                                <div class="v" id="g360StatDeg">--°</div>
+                            </div>
+                            <div class="gann360-stat">
+                                <div class="k">SQ9 Level</div>
+                                <div class="v" id="g360StatSq9">--</div>
+                            </div>
+                            <div class="gann360-stat">
+                                <div class="k">SQ9 Bias</div>
+                                <div class="v" id="g360StatBias">--</div>
+                            </div>
+                            <div class="gann360-stat">
+                                <div class="k">Spiral θ</div>
+                                <div class="v" id="g360StatTheta">--</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Key angle price levels table -->
+                    <div>
+                        <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Key Gann Angles — Price Levels</div>
+                        <div style="overflow-x:auto;">
+                            <table class="gann360-table" id="gann360LevelsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Angle</th>
+                                        <th>Level</th>
+                                        <th>Distance</th>
+                                        <th>Position</th>
+                                        <th>Harmonic</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="gann360LevelsTbody">
+                                    <tr><td colspan="5" style="color:var(--muted);font-size:11px;">Loading Gann levels...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Monthly Gann 360 Calendar -->
+                <div style="margin-top:24px;">
+                    <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;">📅 Gann 360° Monthly Calendar — Key Angle Dates</div>
+                    <div class="gann-cal-nav">
+                        <button onclick="gann360CalPrev()">◀</button>
+                        <span id="gann360CalTitle">--</span>
+                        <button onclick="gann360CalNext()">▶</button>
+                        <span style="font-size:11px;color:var(--muted);margin-left:6px;">🟡 = key angle date (45°/90°/180°/270°/360°)</span>
+                    </div>
+                    <div class="gann-cal-grid" id="gann360CalGrid">
+                        <div class="gann-cal-cell day-header">Sun</div>
+                        <div class="gann-cal-cell day-header">Mon</div>
+                        <div class="gann-cal-cell day-header">Tue</div>
+                        <div class="gann-cal-cell day-header">Wed</div>
+                        <div class="gann-cal-cell day-header">Thu</div>
+                        <div class="gann-cal-cell day-header">Fri</div>
+                        <div class="gann-cal-cell day-header">Sat</div>
+                    </div>
+                </div>
+
+                <!-- ── Astrology Module ─────────────────────────── -->
+                <div class="astro-module">
+                    <div class="astro-module-title">🪐 Planetary Astrology Integration</div>
+
+                    <!-- Top row: moon + astro signal -->
+                    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+                        <div class="moon-phase-row">
+                            <span class="moon-phase-icon" id="astroMoonIcon">🌕</span>
+                            <div>
+                                <div class="moon-phase-name" id="astroMoonPhase">--</div>
+                                <div class="moon-phase-angle" id="astroMoonAngle">--° Sun-Moon</div>
+                            </div>
+                        </div>
+                        <div class="astro-signal-wrap">
+                            <span style="font-size:11px;color:var(--muted);">Astro Signal:</span>
+                            <span class="astro-sig-badge NEUTRAL" id="astroSignalBadge">--</span>
+                        </div>
+                        <span id="astroWsStatus" style="font-size:10px;color:var(--muted);margin-left:auto;">● waiting...</span>
+                    </div>
+
+                    <div class="astro-grid">
+                        <!-- Planet positions -->
+                        <div class="astro-card">
+                            <div class="astro-card-title">🌍 Live Planet Positions</div>
+                            <div class="planet-grid" id="astroPlanetGrid">
+                                <div class="planet-pill"><div class="p-sym">☀️</div><div class="p-name">Sun</div><div class="p-deg" id="pp-sun">--°</div></div>
+                                <div class="planet-pill"><div class="p-sym">🌙</div><div class="p-name">Moon</div><div class="p-deg" id="pp-moon">--°</div></div>
+                                <div class="planet-pill"><div class="p-sym">☿</div><div class="p-name">Mercury</div><div class="p-deg" id="pp-mercury">--°</div><div class="p-retro" id="pr-mercury"></div></div>
+                                <div class="planet-pill"><div class="p-sym">♀</div><div class="p-name">Venus</div><div class="p-deg" id="pp-venus">--°</div><div class="p-retro" id="pr-venus"></div></div>
+                                <div class="planet-pill"><div class="p-sym">♂</div><div class="p-name">Mars</div><div class="p-deg" id="pp-mars">--°</div><div class="p-retro" id="pr-mars"></div></div>
+                                <div class="planet-pill"><div class="p-sym">♃</div><div class="p-name">Jupiter</div><div class="p-deg" id="pp-jupiter">--°</div><div class="p-retro" id="pr-jupiter"></div></div>
+                                <div class="planet-pill"><div class="p-sym">♄</div><div class="p-name">Saturn</div><div class="p-deg" id="pp-saturn">--°</div><div class="p-retro" id="pr-saturn"></div></div>
+                            </div>
+                        </div>
+
+                        <!-- Active aspects -->
+                        <div class="astro-card">
+                            <div class="astro-card-title">⚡ Active Planetary Aspects</div>
+                            <div class="aspect-list" id="astroAspectList">
+                                <div style="font-size:11px;color:var(--muted);">Loading aspects...</div>
+                            </div>
+                        </div>
+
+                        <!-- Gann-planet alignments -->
+                        <div class="astro-card">
+                            <div class="astro-card-title">🔗 Planet–Gann Angle Alignments</div>
+                            <div class="align-list" id="astroAlignList">
+                                <div style="font-size:11px;color:var(--muted);">Checking alignments...</div>
+                            </div>
+                        </div>
+
+                        <!-- Upcoming moon events -->
+                        <div class="astro-card">
+                            <div class="astro-card-title">📅 Upcoming Moon Events (30 days)</div>
+                            <div class="align-list" id="astroMoonEvents">
+                                <div style="font-size:11px;color:var(--muted);">Loading...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- ── End Astrology Module ──────────────────────── -->
             </div>
 
             <!-- Gann Deep Q&A (Date Selectable) -->
@@ -2243,6 +2539,9 @@
             document.getElementById("cardDTR").textContent = 
                 data.observation_degree_time_ratio != null ? String(data.observation_degree_time_ratio) : "--";
 
+            // Apply Gann 360 data from summary
+            if (window._applyGann360FromSummary) window._applyGann360FromSummary(data);
+
             // AI Model Info
             if (data.ai_model_used) {
                 const aiSection = document.getElementById("aiModelSection");
@@ -2397,6 +2696,415 @@
                     ? `${String(data.slowest_process_stage.name).replaceAll("_", " ")} (${data.slowest_process_stage.elapsed_ms}ms)`
                     : "--";
         }
+
+        // ── Gann 360° Calendar ──────────────────────────────────────────────
+        (function () {
+            let _g360Ws = null;
+            let _g360Price = 0;
+            let _g360Degree = 0;
+            let _g360Sq9 = {};
+            let _g360Spiral = {};
+            let _g360CalYear = new Date().getFullYear();
+            let _g360CalMonth = new Date().getMonth();
+            let _g360CalRendered = 0;
+            let _g360Astro = {};  // cached astro data from WS
+            let _g360MoonEvents = [];  // upcoming moon events
+
+            const KEY_ANGLES = [0, 45, 90, 135, 180, 225, 270, 315, 360];
+            const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+            // Planet symbols and colors for wheel overlay
+            const PLANET_META = {
+                sun:     { sym: "☀", color: "#fcd34d" },
+                moon:    { sym: "☽", color: "#e2e8f0" },
+                mercury: { sym: "☿", color: "#a78bfa" },
+                venus:   { sym: "♀", color: "#f9a8d4" },
+                mars:    { sym: "♂", color: "#f87171" },
+                jupiter: { sym: "♃", color: "#fb923c" },
+                saturn:  { sym: "♄", color: "#86efac" },
+            };
+
+            function gann360PriceAtAngle(basePrice, angle) {
+                const root = Math.sqrt(basePrice);
+                const step = angle / 360;
+                const nextRoot = root + step;
+                return Math.round(nextRoot * nextRoot * 100) / 100;
+            }
+
+            function gann360AngleFromPrice(price) {
+                return (price % 360);
+            }
+
+            function drawGann360Wheel(price, degree, planets) {
+                const canvas = document.getElementById("gann360Canvas");
+                if (!canvas) return;
+                const ctx = canvas.getContext("2d");
+                const cx = 150, cy = 150, R = 130;
+                ctx.clearRect(0, 0, 300, 300);
+
+                const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+                bg.addColorStop(0, "#0c1827");
+                bg.addColorStop(1, "#060b14");
+                ctx.fillStyle = bg;
+                ctx.beginPath(); ctx.arc(cx, cy, R + 10, 0, Math.PI * 2); ctx.fill();
+
+                ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+                ctx.strokeStyle = "#1b2a43"; ctx.lineWidth = 1.5; ctx.stroke();
+
+                for (let i = 0; i < 8; i++) {
+                    const a = (i * 45 - 90) * Math.PI / 180;
+                    ctx.beginPath();
+                    ctx.moveTo(cx + 20 * Math.cos(a), cy + 20 * Math.sin(a));
+                    ctx.lineTo(cx + R * Math.cos(a), cy + R * Math.sin(a));
+                    ctx.strokeStyle = i % 2 === 0 ? "#2a3b59" : "#1b2a43";
+                    ctx.lineWidth = i % 2 === 0 ? 1 : 0.5;
+                    ctx.stroke();
+
+                    const labelAngle = i * 45;
+                    const lx = cx + (R - 16) * Math.cos(a);
+                    const ly = cy + (R - 16) * Math.sin(a);
+                    ctx.fillStyle = "#38bdf8";
+                    ctx.font = "bold 9px Inter, Arial";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText(labelAngle + "°", lx, ly);
+                }
+
+                for (let i = 0; i < 24; i++) {
+                    const a = (i * 15 - 90) * Math.PI / 180;
+                    const inner = R - (i % 3 === 0 ? 8 : 4);
+                    ctx.beginPath();
+                    ctx.moveTo(cx + inner * Math.cos(a), cy + inner * Math.sin(a));
+                    ctx.lineTo(cx + R * Math.cos(a), cy + R * Math.sin(a));
+                    ctx.strokeStyle = "#2a3b59"; ctx.lineWidth = 0.8; ctx.stroke();
+                }
+
+                // ── Planet overlays on outer ring ──
+                if (planets && typeof planets === "object") {
+                    Object.entries(planets).forEach(([name, lon]) => {
+                        const meta = PLANET_META[name];
+                        if (!meta) return;
+                        const pa = (lon - 90) * Math.PI / 180;
+                        const pr = R - 6;  // just inside the outer ring
+                        const px = cx + pr * Math.cos(pa);
+                        const py = cy + pr * Math.sin(pa);
+                        // Draw dot
+                        ctx.beginPath();
+                        ctx.arc(px, py, 5, 0, Math.PI * 2);
+                        ctx.fillStyle = meta.color;
+                        ctx.fill();
+                        // Draw symbol
+                        ctx.fillStyle = meta.color;
+                        ctx.font = "bold 8px Arial";
+                        ctx.textAlign = "center";
+                        ctx.textBaseline = "middle";
+                        ctx.fillText(meta.sym, px, py);
+                    });
+                }
+
+                ctx.beginPath(); ctx.arc(cx, cy, 20, 0, Math.PI * 2);
+                ctx.strokeStyle = "#1b2a43"; ctx.lineWidth = 1; ctx.stroke();
+
+                const needleAngle = (degree - 90) * Math.PI / 180;
+                const grad = ctx.createLinearGradient(cx, cy, cx + R * 0.85 * Math.cos(needleAngle), cy + R * 0.85 * Math.sin(needleAngle));
+                grad.addColorStop(0, "#fcd34d");
+                grad.addColorStop(1, "#f59e0b");
+                ctx.beginPath();
+                ctx.moveTo(cx + 12 * Math.cos(needleAngle + Math.PI), cy + 12 * Math.sin(needleAngle + Math.PI));
+                ctx.lineTo(cx + R * 0.82 * Math.cos(needleAngle), cy + R * 0.82 * Math.sin(needleAngle));
+                ctx.strokeStyle = grad; ctx.lineWidth = 2.5;
+                ctx.lineCap = "round"; ctx.stroke();
+
+                ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+                ctx.fillStyle = "#38bdf8"; ctx.fill();
+
+                ctx.fillStyle = "#dbe6f4";
+                ctx.font = "bold 11px Inter, Arial";
+                ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                ctx.fillText(price > 0 ? price.toFixed(1) : "--", cx, cy + 30);
+                ctx.fillStyle = "#38bdf8";
+                ctx.font = "bold 10px Inter, Arial";
+                ctx.fillText(degree.toFixed(1) + "°", cx, cy + 44);
+            }
+
+            function updateGann360Levels(price, degree, sq9) {
+                const tbody = document.getElementById("gann360LevelsTbody");
+                if (!tbody || price <= 0) return;
+
+                const rows = KEY_ANGLES.slice(0, 8).map(angle => {
+                    const level = gann360PriceAtAngle(price, angle);
+                    const dist = Math.abs(price - level);
+                    const pct = (dist / price * 100).toFixed(2);
+                    const isNear = dist < price * 0.005;
+                    const pos = level > price ? "above" : level < price ? "below" : "near";
+                    const posLabel = isNear ? "near" : pos;
+                    return { angle, level, dist: pct, posLabel, isNear };
+                });
+
+                tbody.innerHTML = rows.map(r => `
+                    <tr class="${r.isNear ? 'near-row' : ''}">
+                        <td class="angle-col">${r.angle}°</td>
+                        <td class="price-col">${r.level.toFixed(2)}</td>
+                        <td>${r.dist}%</td>
+                        <td><span class="deg-badge ${r.posLabel}">${r.posLabel.toUpperCase()}</span></td>
+                        <td style="font-size:10px;color:var(--muted);">${(r.angle % 90 === 0) ? 'Cardinal' : (r.angle % 45 === 0 ? 'Primary' : 'Minor')}</td>
+                    </tr>
+                `).join("");
+
+                const _setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+                _setText("g360StatDeg", degree.toFixed(1) + "°");
+                _setText("g360StatSq9", sq9.level ? sq9.level.toFixed(2) : "--");
+                _setText("g360StatBias", sq9.bias || "--");
+            }
+
+            // Resolve moon event dates to { "YYYY-MM-DD": "Full Moon"|"New Moon" }
+            function _moonEventMap(moonEvents) {
+                const map = {};
+                (moonEvents || []).forEach(ev => { map[ev.date] = ev.event; });
+                return map;
+            }
+
+            function renderGann360Cal(year, month, price, moonEvents) {
+                const calTitle = document.getElementById("gann360CalTitle");
+                if (calTitle) calTitle.textContent = `${MONTHS[month]} ${year}`;
+
+                const grid = document.getElementById("gann360CalGrid");
+                if (!grid) return;
+
+                grid.innerHTML = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
+                    .map(d => `<div class="gann-cal-cell day-header">${d}</div>`).join("");
+
+                const moonMap = _moonEventMap(moonEvents || _g360MoonEvents);
+                const today = new Date();
+                const firstDay = new Date(year, month, 1).getDay();
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+                const pad = (n) => String(n).padStart(2, "0");
+
+                for (let i = 0; i < firstDay; i++) {
+                    grid.insertAdjacentHTML("beforeend", `<div class="gann-cal-cell empty"></div>`);
+                }
+
+                for (let d = 1; d <= daysInMonth; d++) {
+                    const date = new Date(year, month, d);
+                    const dateStr = `${year}-${pad(month + 1)}-${pad(d)}`;
+                    const isToday = date.toDateString() === today.toDateString();
+                    const dayOfYear = Math.floor((date - new Date(year, 0, 0)) / 86400000);
+                    const dayAngle = (dayOfYear * (360 / 365)) % 360;
+                    const isKeyAngle = KEY_ANGLES.slice(0, 8).some(a => Math.abs(dayAngle - a) < 4);
+                    const projPrice = price > 0 ? gann360PriceAtAngle(price, dayAngle) : 0;
+                    const moonEvent = moonMap[dateStr];
+                    const moonCls = moonEvent === "Full Moon" ? "full-moon" : moonEvent === "New Moon" ? "new-moon" : "";
+                    const moonLabel = moonEvent === "Full Moon"
+                        ? `<div class="cal-moon-label full">🌕 Full</div>`
+                        : moonEvent === "New Moon"
+                        ? `<div class="cal-moon-label new">🌑 New</div>`
+                        : "";
+
+                    grid.insertAdjacentHTML("beforeend", `
+                        <div class="gann-cal-cell ${isToday ? 'today' : ''} ${isKeyAngle ? 'key-angle' : ''} ${moonCls}">
+                            <div class="cal-date">${d}</div>
+                            <div class="cal-angle">${dayAngle.toFixed(0)}°</div>
+                            ${price > 0 ? `<div class="cal-price">${projPrice.toFixed(0)}</div>` : ""}
+                            ${isKeyAngle ? `<div class="cal-sq9" style="color:var(--warning);">⚡</div>` : ""}
+                            ${moonLabel}
+                        </div>
+                    `);
+                }
+            }
+
+            // ── Moon phase icon helper ──
+            const MOON_ICONS = {
+                "New Moon": "🌑", "Waxing Crescent": "🌒", "First Quarter": "🌓",
+                "Waxing Gibbous": "🌔", "Full Moon": "🌕", "Waning Gibbous": "🌖",
+                "Last Quarter": "🌗", "Waning Crescent": "🌘",
+            };
+
+            // ── Update astrology panel ──
+            function updateAstroPanel(astro) {
+                if (!astro || astro.error) return;
+                const _setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+                const _setHtml = (id, v) => { const el = document.getElementById(id); if (el) el.innerHTML = v; };
+
+                // Moon phase
+                const phase = astro.moon_phase || "--";
+                _setText("astroMoonPhase", phase);
+                _setText("astroMoonIcon", MOON_ICONS[phase] || "🌙");
+                _setText("astroMoonAngle", astro.moon_phase_angle != null
+                    ? `${astro.moon_phase_angle.toFixed(1)}° Sun–Moon` : "--");
+
+                // Astro signal badge
+                const sigBadge = document.getElementById("astroSignalBadge");
+                if (sigBadge) {
+                    const sig = astro.astro_signal || "NEUTRAL";
+                    sigBadge.textContent = sig;
+                    sigBadge.className = `astro-sig-badge ${sig}`;
+                }
+
+                // Planet pills
+                const positions = astro.positions || {};
+                const retrograde = astro.retrograde || {};
+                Object.entries(positions).forEach(([name, lon]) => {
+                    const degEl = document.getElementById(`pp-${name}`);
+                    const retroEl = document.getElementById(`pr-${name}`);
+                    const pill = degEl ? degEl.closest(".planet-pill") : null;
+                    if (degEl) degEl.textContent = `${lon.toFixed(1)}°`;
+                    if (retroEl) retroEl.textContent = retrograde[name] ? "℞ Retro" : "";
+                    if (pill) pill.classList.toggle("retro", !!retrograde[name]);
+                });
+
+                // Aspects list
+                const aspects = astro.aspects || [];
+                if (aspects.length === 0) {
+                    _setHtml("astroAspectList", `<div style="font-size:11px;color:var(--muted);">No major aspects active</div>`);
+                } else {
+                    _setHtml("astroAspectList", aspects.map(a => `
+                        <div class="aspect-row">
+                            <span class="aspect-badge ${a.aspect}">${a.aspect}</span>
+                            <span style="text-transform:capitalize;color:var(--text);">${a.p1}</span>
+                            <span style="color:var(--muted);">–</span>
+                            <span style="text-transform:capitalize;color:var(--text);">${a.p2}</span>
+                            <span style="color:var(--muted);margin-left:auto;">${a.orb.toFixed(1)}° orb</span>
+                        </div>
+                    `).join(""));
+                }
+
+                // Gann-planet alignments
+                const aligns = astro.gann_alignments || [];
+                if (aligns.length === 0) {
+                    _setHtml("astroAlignList", `<div style="font-size:11px;color:var(--muted);">No planet near Gann key angles</div>`);
+                } else {
+                    _setHtml("astroAlignList", aligns.map(a => `
+                        <div class="align-row">
+                            <span class="align-planet">${(PLANET_META[a.planet] || {}).sym || ""} ${a.planet}</span>
+                            <span class="align-gann">${a.gann_angle}°</span>
+                            <span style="color:var(--text);">${a.planet_lon.toFixed(1)}°</span>
+                            <span class="align-orb">orb ${a.orb.toFixed(1)}°</span>
+                        </div>
+                    `).join(""));
+                }
+
+                // Upcoming moon events
+                const mevents = astro.moon_events || [];
+                if (mevents.length === 0) {
+                    _setHtml("astroMoonEvents", `<div style="font-size:11px;color:var(--muted);">No New/Full Moon in 30 days</div>`);
+                } else {
+                    _setHtml("astroMoonEvents", mevents.map(ev => `
+                        <div class="align-row">
+                            <span style="font-size:14px;">${ev.event === "Full Moon" ? "🌕" : "🌑"}</span>
+                            <span style="font-weight:600;color:${ev.event === "Full Moon" ? '#fcd34d' : '#818cf8'};">${ev.event}</span>
+                            <span style="color:var(--muted);margin-left:auto;">${ev.date}</span>
+                        </div>
+                    `).join(""));
+                }
+
+                // Store moon events for calendar and re-render if needed
+                if (mevents.length) {
+                    _g360MoonEvents = mevents;
+                }
+            }
+
+            window.gann360CalPrev = function () {
+                _g360CalMonth--;
+                if (_g360CalMonth < 0) { _g360CalMonth = 11; _g360CalYear--; }
+                renderGann360Cal(_g360CalYear, _g360CalMonth, _g360Price);
+            };
+            window.gann360CalNext = function () {
+                _g360CalMonth++;
+                if (_g360CalMonth > 11) { _g360CalMonth = 0; _g360CalYear++; }
+                renderGann360Cal(_g360CalYear, _g360CalMonth, _g360Price);
+            };
+
+            function connectGann360Ws(symbol) {
+                const proto = location.protocol === "https:" ? "wss" : "ws";
+                const wsUrl = `${proto}://${location.host}/ws/gann/${encodeURIComponent(symbol)}`;
+                const statusEl = document.getElementById("gann360WsStatus");
+                const astroStatusEl = document.getElementById("astroWsStatus");
+
+                function setStatus(msg, color) {
+                    if (statusEl) { statusEl.textContent = msg; statusEl.style.color = color; }
+                    if (astroStatusEl) { astroStatusEl.textContent = msg; astroStatusEl.style.color = color; }
+                }
+
+                if (_g360Ws) { try { _g360Ws.close(); } catch(e){} }
+
+                setStatus("● connecting...", "#6b7280");
+                _g360Ws = new WebSocket(wsUrl);
+
+                _g360Ws.onopen = () => setStatus("● live", "#10b981");
+
+                _g360Ws.onmessage = (e) => {
+                    try {
+                        const data = JSON.parse(e.data);
+                        if (data.error) return;
+
+                        const price = parseFloat(data.price) || 0;
+                        const gann = data.gann || {};
+                        const degree = parseFloat(gann.degree) || gann360AngleFromPrice(price);
+                        const sq9 = gann.square_of_9 || {};
+                        const spiral = gann.spiral || {};
+                        const astro = data.astro || {};
+
+                        _g360Price = price;
+                        _g360Degree = degree;
+                        _g360Sq9 = sq9;
+                        _g360Spiral = spiral;
+                        if (astro && !astro.error) _g360Astro = astro;
+
+                        const _setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+                        _setText("gann360Price", price > 0 ? price.toFixed(2) : "--");
+                        _setText("gann360Degree", degree.toFixed(1) + "°");
+                        _setText("gann360Bias", sq9.bias || "--");
+                        _setText("g360StatTheta", spiral.theta != null ? spiral.theta.toFixed(2) : "--");
+
+                        drawGann360Wheel(price, degree, astro.positions);
+                        updateGann360Levels(price, degree, sq9);
+                        updateAstroPanel(astro);
+
+                        if (!_g360CalRendered || (Date.now() - _g360CalRendered > 60000)) {
+                            renderGann360Cal(_g360CalYear, _g360CalMonth, price, astro.moon_events);
+                            _g360CalRendered = Date.now();
+                        }
+                    } catch(err) { console.warn("gann360 parse error", err); }
+                };
+
+                _g360Ws.onerror = () => setStatus("● error", "#f87171");
+                _g360Ws.onclose = () => {
+                    setStatus("● reconnecting...", "#f59e0b");
+                    setTimeout(() => connectGann360Ws(symbol), 5000);
+                };
+            }
+
+            window._applyGann360FromSummary = function(data) {
+                const deg = parseFloat(data.observation_gann_degree) || 0;
+                const price = parseFloat((data.trade_levels || {}).entry || 0);
+                if (deg && !_g360Price) {
+                    _g360Degree = deg;
+                    drawGann360Wheel(price, deg, (_g360Astro || {}).positions);
+                }
+            };
+
+            renderGann360Cal(_g360CalYear, _g360CalMonth, 0);
+            drawGann360Wheel(0, 0, null);
+
+            // Also fetch astro data immediately via REST to populate astro panel fast
+            fetch("/api/astro/live").then(r => r.json()).then(astro => {
+                updateAstroPanel(astro);
+                _g360Astro = astro;
+                _g360MoonEvents = astro.moon_events || [];
+                renderGann360Cal(_g360CalYear, _g360CalMonth, _g360Price, astro.moon_events);
+            }).catch(() => {});
+
+            const _g360Symbol = (document.getElementById("symbolInput") || {}).value || DEFAULT_SYMBOL;
+            connectGann360Ws(_g360Symbol);
+
+            const _g360SymbolInput = document.getElementById("symbolInput");
+            if (_g360SymbolInput) {
+                _g360SymbolInput.addEventListener("change", () => {
+                    connectGann360Ws(_g360SymbolInput.value || DEFAULT_SYMBOL);
+                });
+            }
+        })();
+        // ── End Gann 360° Calendar ───────────────────────────────────────────
 
         document.getElementById("loadBtn").addEventListener("click", () => loadAnalysis(false));
         document.getElementById("refreshBtn").addEventListener("click", () => loadAnalysis(true));

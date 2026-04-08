@@ -347,6 +347,11 @@ def root():
     return RedirectResponse(url="/frontend/", status_code=307)
 
 
+@app.get("/admin")
+def admin_redirect():
+    return RedirectResponse(url="/frontend/admin.html", status_code=307)
+
+
 @app.get("/market_causality_dashboard")
 def market_causality_dashboard():
     """
