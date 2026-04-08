@@ -87,4 +87,24 @@ if [[ -f "$UNATTENDED_PREFLIGHT_SCRIPT" ]]; then
   fi
 fi
 
+# 6. Auto-attach Playwright to Maven tab so basis/offset calculations begin immediately
+if [[ "$DISABLE_BROKER_AUTO_OPEN" != "true" ]]; then
+  echo "Attaching Playwright to Maven broker tab (broker_bridge/recover)..."
+  _rr=$(curl -s --max-time 25 -X POST "http://127.0.0.1:8000/status/broker_bridge/recover?force_reconnect=true" 2>/dev/null || echo "")
+  _br=$(echo "$_rr" | "$PYTHON_BIN" -c "
+import json,sys
+try:
+  d=json.load(sys.stdin)
+  print('yes' if d.get('bridge',{}).get('bridge_ready') else 'no')
+except:
+  print('no')
+" 2>/dev/null || echo "no")
+  if [[ "$_br" == "yes" ]]; then
+    echo "✓ Maven broker bridge ready — XAUUSD quote + offset calculation live"
+  else
+    echo "⚠ Broker bridge not fully ready. If Maven requires login/Cloudflare challenge, complete it in the browser tab, then run:"
+    echo "  curl -X POST http://127.0.0.1:8000/status/broker_bridge/recover"
+  fi
+fi
+
 echo "All services launched."

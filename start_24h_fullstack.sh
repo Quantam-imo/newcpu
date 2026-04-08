@@ -164,7 +164,9 @@ nohup python -m uvicorn astroquant.backend.main:app \
   --port 8000 \
   --log-level info \
   > "$LOG_DIR/backend.log" 2>&1 &
+echo $! > "$LOG_DIR/backend.pid"
 
+# Retry up to 45 seconds — cold boot takes longer than 6s
 _backend_ok=false
 for _i in 1 2 3 4 5 6 7 8 9; do
   sleep 5
@@ -187,19 +189,61 @@ if [ "$NO_CHROME" != true ]; then
   pkill -f "start_chrome_remote_debug.sh" 2>/dev/null || true
   pkill -f "chrome.*remote-debugging-port=9222" 2>/dev/null || true
 
-  DISPLAY=:1 \
+  # Use display from env (defaults to :99 for Xvfb / virtual); on physical CPU
+  # with a real desktop DISPLAY=:0 is already set and start_chrome_remote_debug.sh
+  # will detect it and skip Xvfb automatically.
+  _CHROME_DISPLAY="${DISPLAY:-${AQ_XVFB_DISPLAY:-:99}}"
+
+  _CHROME_DISPLAY="$_CHROME_DISPLAY" \
   AQ_WORKSPACE="$WORKSPACE" \
   AQ_API_BASE="http://127.0.0.1:8000" \
   AQ_CHROME_PROFILE_DIR="$DATA_DIR/browser_session/chrome-profile" \
-  AQ_XVFB_DISPLAY=:1 \
+  AQ_XVFB_DISPLAY="${AQ_XVFB_DISPLAY:-:99}" \
   AQ_USE_XVFB=true \
   nohup bash "$WORKSPACE/start_chrome_remote_debug.sh" > "$LOG_DIR/chrome.log" 2>&1 &
-  
-  sleep 6
-  if curl -s http://127.0.0.1:9222/json/version > /dev/null 2>&1; then
+
+  # Wait for Chrome CDP to become reachable
+  _cdp_ready=false
+  for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    if curl -s --max-time 2 http://127.0.0.1:9222/json/version > /dev/null 2>&1; then
+      _cdp_ready=true; break
+    fi
+    sleep 1
+  done
+
+  if [ "$_cdp_ready" = true ]; then
     log GREEN "✓ Chrome CDP listening on port 9222"
+    # Attach Playwright to Maven tab and calibrate selectors automatically.
+    # On physical CPU this ensures the broker bridge is ready without manual steps.
+    log BLUE "Attaching Playwright to Maven broker tab..."
+    sleep 3
+    _recover_resp=$(curl -s --max-time 30 -X POST \
+      "http://127.0.0.1:8000/status/broker_bridge/recover?force_reconnect=true" 2>/dev/null || echo "")
+    _bridge_ready=$(echo "$_recover_resp" | python3 -c "
+import json,sys
+try:
+    d=json.load(sys.stdin)
+    print('yes' if d.get('bridge',{}).get('bridge_ready') else 'no')
+except:
+    print('no')
+" 2>/dev/null || echo "no")
+    if [ "$_bridge_ready" = "yes" ]; then
+      log GREEN "✓ Maven broker bridge ready (quote + order panel live)"
+    else
+      _panel_reason=$(echo "$_recover_resp" | python3 -c "
+import json,sys
+try:
+    d=json.load(sys.stdin)
+    print((d.get('bridge',{}).get('order_panel') or {}).get('reason','unknown'))
+except:
+    print('unavailable')
+" 2>/dev/null || echo "unavailable")
+      log YELLOW "⚠ Broker bridge not fully ready yet (reason: $_panel_reason)"
+      log YELLOW "  If Maven needs login/Cloudflare challenge, complete it in the broker tab"
+      log YELLOW "  then run: curl -X POST http://127.0.0.1:8000/status/broker_bridge/recover"
+    fi
   else
-    log YELLOW "⚠ Chrome may not be responding yet"
+    log YELLOW "⚠ Chrome may not be responding yet — broker bridge will attach on first trade tick"
   fi
 fi
 
@@ -342,18 +386,48 @@ while true; do
     sleep 3
   fi
   
-  # Check Backend
-  if !ds  qbacke
-   Co)url -s http://127.0.0.1:9222/json/version > /dev/null 2>&1; then
+  # Check Backend — detect down OR duplicate instances
+  BACKEND_PIDS="$(pgrep -f "uvicorn.*astroquant.backend.main:app" || true)"
+  BACKEND_COUNT="$(printf "%s\n" "$BACKEND_PIDS" | sed '/^$/d' | wc -l)"
+  if [ "$BACKEND_COUNT" -gt 1 ]; then
+    log RED "✗ Backend duplicate instances detected ($BACKEND_COUNT). Restarting singleton..."
+    pkill -9 -f "uvicorn.*astroquant.backend.main:app" 2>/dev/null || true
+    sleep 2
+    cd "$WORKSPACE"
+    nohup python -m uvicorn astroquant.backend.main:app \
+      --host 0.0.0.0 \
+      --port 8000 \
+      --log-level info \
+      > "$LOG_DIR/backend.log" 2>&1 &
+    echo $! > "$LOG_DIR/backend.pid"
+    sleep 3
+  elif ! curl -s http://127.0.0.1:8000/status > /dev/null 2>&1; then
+    log RED "✗ Backend down! Restarting..."
+    pkill -9 -f "uvicorn.*main:app" 2>/dev/null || true
+    sleep 2
+    cd "$WORKSPACE"
+    nohup python -m uvicorn astroquant.backend.main:app \
+      --host 0.0.0.0 \
+      --port 8000 \
+      --log-level info \
+      > "$LOG_DIR/backend.log" 2>&1 &
+    echo $! > "$LOG_DIR/backend.pid"
+    sleep 3
+  fi
+  
+  # Check Chrome (optional)
+  if [ "$NO_CHROME" != true ]; then
+    if ! curl -s http://127.0.0.1:9222/json/version > /dev/null 2>&1; then
       log YELLOW "⚠ Chrome not responding — restarting..."
-      pki-f "chrome.*remote-debu222" 2>/dev/null || true
+      pkill -f "chrome.*remote-debugging-port=9222" 2>/dev/null || true
       sleep 1
       DISPLAY=:1 \
       AQ_WORKSPACE="$WORKSPACE" \
       AQ_API_BASE="http://127.0.0.1:8000" \
       AQ_CHROME_PROFILE_DIR="$DATA_DIR/browser_session/chrome-profile" \
       AQ_XVFB_DISPLAY=:1 \
-      AQ_USE_XVFB=true \hrome_remote_debug.sh" >> "$LOG_DIR/chrome.log" 2>&1 &
+      AQ_USE_XVFB=true \
+      nohup bash "$WORKSPACE/start_chrome_remote_debug.sh" >> "$LOG_DIR/chrome.log" 2>&1 &
     fi
   fi
 
