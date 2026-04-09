@@ -593,6 +593,110 @@ def test_lunar_live_state() -> TestResult:
     return result
 
 
+# ── Law of Vibration: Node Engine Tests ──────────────────────────────────────
+
+def test_gann_node_classification() -> TestResult:
+    result = TestResult("GANN", "Gann Node Classification (Lesson 2)")
+    try:
+        from astroquant.engine.gann.gann_node_engine import compute_node
+
+        # TIME + PRICE aligned → MEDIUM node
+        # Price degree near 90° and time_fraction near 0.333
+        # price_to_gann_degree(p) = (√p % 1) × 360.  To get ~90°: √p%1 = 0.25 → p ≈ (n.25)²
+        # Use 1590.0625 → √1590.0625 = 39.875... % 1 = 0.875 → 315°. Try 1252.5625 → √≈35.39 %1=0.39 → 140°
+        # Simplest: pass price_degree check by setting planets.saturn to 90.0 and time close to 0.33
+        n_medium = compute_node(2500.0, 0.333, {"saturn": 90.2, "jupiter": 135.0}, "swing")
+        n_noise  = compute_node(2500.0, 0.85,  {},  "swing")   # price only, time far from node
+
+        ok = (
+            n_medium.node_type in ("MAJOR", "MEDIUM", "MINOR_TIME")  # time aligned
+            and n_noise.node_type in ("NOISE", "NONE")               # not at time node
+            and isinstance(n_medium.active, bool)
+            and 0.0 <= n_medium.price_degree < 360.0
+        )
+        result.passed = ok
+        result.message = (f"medium={n_medium.node_type} noise={n_noise.node_type} "
+                          f"deg={n_medium.price_degree:.1f}° time_aligned={n_medium.time_aligned}")
+    except Exception as e:
+        result.message = f"Error: {e}"
+    assert result.passed, result.message
+    return result
+
+
+def test_gann_node_noise_rule() -> TestResult:
+    result = TestResult("GANN", "Node Rule: Price Alone = Noise")
+    try:
+        from astroquant.engine.gann.gann_node_engine import compute_node, GANN_KEY_ANGLES, price_to_gann_degree
+        import math
+        # Construct price that lands exactly on 90° Gann key and time far from node
+        # (√p % 1) × 360 = 90 → √p = n + 0.25 → p = (n + 0.25)² for some integer n
+        target_price = (10 + 0.25) ** 2  # 105.0625 → degree = 90°
+        deg = price_to_gann_degree(target_price)
+        # Use time_fraction = 0.85 (far from all TIME_NODE_FRACTIONS)
+        node = compute_node(target_price, 0.85, {}, "swing")
+        # price should be aligned (near 90°), time should NOT be aligned → NOISE
+        is_noise_or_none = node.node_type in ("NOISE", "NONE")
+        result.passed = is_noise_or_none and node.price_aligned and not node.active
+        result.message = (f"price={target_price} deg={deg:.1f}° node_type={node.node_type} "
+                          f"price_aligned={node.price_aligned} active={node.active}")
+    except Exception as e:
+        result.message = f"Error: {e}"
+    assert result.passed, result.message
+    return result
+
+
+def test_gann_369_phases() -> TestResult:
+    result = TestResult("GANN", "3-6-9 Phase Assignment (Lesson 2)")
+    try:
+        from astroquant.engine.gann.gann_369_engine import compute_369
+        # T₀=14.765 → Tₛ=29.53
+        # Phase 3 boundary: 0 → Tₛ/6 = 4.92d  | Phase 6: 4.92→14.765d | Phase 9: 14.765→29.53d
+        cases = [
+            (0.5,   3),   # INITIATION
+            (3.0,   3),
+            (5.0,   6),   # EXPANSION
+            (12.0,  6),
+            (15.0,  9),   # COMPLETION
+            (25.0,  9),
+        ]
+        failures = []
+        for d, expected in cases:
+            s = compute_369(d, base_cycle="lunar_phase")
+            if s.phase_369 != expected:
+                failures.append(f"elapsed={d} expected={expected} got={s.phase_369}")
+        result.passed = len(failures) == 0
+        result.message = "All 6 phase cases correct" if result.passed else f"Failures: {failures}"
+    except Exception as e:
+        result.message = f"Error: {e}"
+    assert result.passed, result.message
+    return result
+
+
+def test_gann_369_formula() -> TestResult:
+    result = TestResult("GANN", "Tₛ = T₀ × 2 Formula")
+    try:
+        from astroquant.engine.gann.gann_369_engine import compute_369, BASE_CYCLES_DAYS
+        # Verify Ts = T0 × 2 for all standard cycles
+        failures = []
+        for name, T0 in BASE_CYCLES_DAYS.items():
+            s = compute_369(0.1, base_cycle=name)
+            expected_Ts = T0 * 2
+            if abs(s.Ts - expected_Ts) > 0.001:
+                failures.append(f"{name}: Ts={s.Ts} expected={expected_Ts}")
+        # Verify digital root of 9 → 9
+        from astroquant.engine.gann.gann_369_engine import digital_root
+        nines = [9, 18, 27, 36, 45, 81, 99, 108, 369]
+        bad = [n for n in nines if digital_root(n) != 9]
+        if bad:
+            failures.append(f"digital_root not 9 for: {bad}")
+        result.passed = len(failures) == 0
+        result.message = "Tₛ=2T₀ verified + 9-reduction correct" if result.passed else str(failures)
+    except Exception as e:
+        result.message = f"Error: {e}"
+    assert result.passed, result.message
+    return result
+
+
 # ============================================================================
 # MAIN TEST RUNNER
 # ============================================================================
@@ -617,6 +721,11 @@ def run_all_tests() -> List[TestResult]:
         test_lunar_expansion_score,
         test_lunar_gann_angle,
         test_lunar_live_state,
+        # Law of Vibration: Node + 3-6-9 Tests (Gann Lesson 2)
+        test_gann_node_classification,
+        test_gann_node_noise_rule,
+        test_gann_369_phases,
+        test_gann_369_formula,
         
         # Astrology Tests
         test_astrology_planets,

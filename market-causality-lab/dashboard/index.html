@@ -663,6 +663,76 @@
         .lunar-wax-indicator .wax-label.waning  { color: #818cf8; }
         /* ── End Lunar Expansion Engine ─────────────────────────────────── */
 
+        /* ── Law of Vibration: Node + 3-6-9 Engine ─────────────────────── */
+        .vibration-module { margin-top: 28px; border-top: 1px solid var(--border); padding-top: 18px; }
+        .vibration-module-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 14px; }
+        .vibration-layout { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+        @media (max-width: 900px) { .vibration-layout { grid-template-columns: 1fr 1fr; } }
+        @media (max-width: 600px) { .vibration-layout { grid-template-columns: 1fr; } }
+
+        /* Node card */
+        .node-card { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+        .node-card.MAJOR  { border-color: #10b981; box-shadow: 0 0 12px rgba(16,185,129,.2); }
+        .node-card.MEDIUM { border-color: #38bdf8; box-shadow: 0 0 8px rgba(56,189,248,.15); }
+        .node-card.MINOR_TIME { border-color: #f59e0b; }
+        .node-card.NOISE  { border-color: #374151; opacity: .7; }
+        .node-badge {
+            display: inline-block; padding: 3px 12px; border-radius: 14px;
+            font-size: 11px; font-weight: 700; letter-spacing: .5px; margin-bottom: 10px;
+        }
+        .node-badge.MAJOR  { background: rgba(16,185,129,.2);  color: #10b981; border: 1px solid #10b981; }
+        .node-badge.MEDIUM { background: rgba(56,189,248,.15); color: #38bdf8; border: 1px solid #38bdf8; }
+        .node-badge.MINOR_TIME { background: rgba(245,158,11,.15); color: #fbbf24; border: 1px solid #f59e0b; }
+        .node-badge.NOISE  { background: rgba(107,114,128,.12); color: #9ca3af; border: 1px solid #374151; }
+        .node-badge.NONE   { background: rgba(107,114,128,.10); color: #6b7280; border: 1px solid #1e293b; }
+        .node-rule { font-size: 10px; color: var(--muted); font-style: italic; line-height: 1.5; margin-top: 8px;
+            padding: 7px 10px; border-radius: 6px; background: rgba(255,255,255,.03); border-left: 2px solid var(--border); }
+        .node-align-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+        .align-pill { padding: 2px 9px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+        .align-pill.on  { background: rgba(16,185,129,.15); color: #10b981; border: 1px solid #10b981; }
+        .align-pill.off { background: rgba(107,114,128,.10); color: #6b7280; border: 1px solid #1e293b; }
+
+        /* 3-6-9 card */
+        .cycle369-card { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+        .phase-369-number { font-size: 56px; font-weight: 900; line-height: 1; margin-bottom: 2px; }
+        .phase-369-number.p3 { color: #818cf8; text-shadow: 0 0 20px rgba(129,140,248,.4); }
+        .phase-369-number.p6 { color: #38bdf8; text-shadow: 0 0 20px rgba(56,189,248,.4); }
+        .phase-369-number.p9 { color: #fcd34d; text-shadow: 0 0 20px rgba(252,211,77,.4); }
+        .market-state-badge {
+            display: inline-block; padding: 3px 12px; border-radius: 12px;
+            font-size: 11px; font-weight: 700; letter-spacing: .5px;
+        }
+        .market-state-badge.RISE    { background: rgba(16,185,129,.15);  color: #10b981; border: 1px solid #10b981; }
+        .market-state-badge.BALANCE { background: rgba(56,189,248,.12);  color: #38bdf8; border: 1px solid #38bdf8; }
+        .market-state-badge.RELEASE { background: rgba(248,113,113,.12); color: #f87171; border: 1px solid #ef4444; }
+        .cycle-progress-bar { height: 5px; border-radius: 3px; background: var(--border); margin: 8px 0; overflow: hidden; }
+        .cycle-progress-fill { height: 100%; border-radius: 3px; transition: width .6s ease; }
+        .cycle-progress-fill.p3 { background: linear-gradient(90deg, #818cf8, #38bdf8); }
+        .cycle-progress-fill.p6 { background: linear-gradient(90deg, #38bdf8, #fcd34d); }
+        .cycle-progress-fill.p9 { background: linear-gradient(90deg, #fcd34d, #f87171); }
+        .reversal-warning { padding: 6px 10px; border-radius: 6px; background: rgba(248,113,113,.12);
+            border: 1px solid #ef4444; font-size: 10px; font-weight: 700; color: #f87171;
+            display: none; margin-top: 8px; }
+        .reversal-warning.show { display: block; }
+        .chakra-note { font-size: 10px; color: var(--muted); margin-top: 8px; font-style: italic; line-height: 1.4; }
+
+        /* Vibration card */
+        .vibration-card { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+        .vib-stat { display: flex; justify-content: space-between; align-items: center;
+            padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,.04); }
+        .vib-stat:last-child { border-bottom: none; }
+        .vib-key { font-size: 10px; color: var(--muted); }
+        .vib-val { font-size: 12px; font-weight: 700; color: var(--accent); }
+        .vib-val.resonant { color: #10b981; }
+        .vib-val.dr369 { color: #fcd34d; }
+        .nine-seal { text-align: center; margin-top: 10px; font-size: 28px; }
+        .asc-row { padding: 6px 10px; border-radius: 6px; background: rgba(56,189,248,.06);
+            border: 1px solid rgba(56,189,248,.2); margin-top: 8px; }
+        .asc-label { font-size: 9px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); }
+        .asc-deg { font-size: 14px; font-weight: 700; color: var(--accent); }
+        .asc-timer { font-size: 10px; color: #fbbf24; margin-top: 2px; }
+        /* ── End Law of Vibration ────────────────────────────────────────── */
+
         .ai-badge {
             display: inline-block;
             background: linear-gradient(135deg, rgba(56, 189, 248, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%);
@@ -1760,6 +1830,143 @@
                     </div>
                 </div>
                 <!-- ── End Lunar Expansion Engine ────────────────── -->
+
+                <!-- ── Law of Vibration: Node + 3-6-9 Engine ──── -->
+                <div class="vibration-module" id="vibrationModule">
+                    <div class="vibration-module-title">
+                        🔯 Gann Astro Lesson 2 — Law of Vibration
+                        <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:8px; font-style:italic;">
+                            Nodes = pressure points · TIME hits node → MOVE · PRICE alone → NOISE · Spiral governs expansion
+                        </span>
+                        <span id="vibRefreshBadge" style="font-size:9px;color:var(--muted);float:right;">● refreshing...</span>
+                    </div>
+
+                    <div class="vibration-layout">
+
+                        <!-- Card 1: Node Signal -->
+                        <div class="node-card" id="nodeCard">
+                            <div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:6px;">Gann Node Signal</div>
+                            <div id="nodeBadge" class="node-badge NONE">NONE</div>
+
+                            <div class="node-align-row">
+                                <div class="align-pill off" id="nodeTimeAlignPill">⏱ TIME</div>
+                                <div class="align-pill off" id="nodePriceAlignPill">📐 PRICE</div>
+                                <div class="align-pill off" id="nodePlanetAlignPill">🪐 PLANET</div>
+                            </div>
+
+                            <div style="margin:8px 0;">
+                                <div style="font-size:10px;color:var(--muted);">Price Degree</div>
+                                <div style="font-size:18px;font-weight:700;color:#fcd34d;" id="nodePriceDegree">--°</div>
+                                <div style="font-size:10px;color:var(--muted);" id="nodeKeyAngle">Key: --° (orb --°)</div>
+                            </div>
+
+                            <div style="display:flex;gap:12px;margin:8px 0;flex-wrap:wrap;">
+                                <div>
+                                    <div style="font-size:9px;color:var(--muted);">Time Fraction</div>
+                                    <div style="font-size:13px;font-weight:700;color:var(--accent);" id="nodeTimeFraction">--</div>
+                                </div>
+                                <div>
+                                    <div style="font-size:9px;color:var(--muted);">Time Node Orb</div>
+                                    <div style="font-size:13px;font-weight:700;color:var(--accent);" id="nodeTimeOrb">--</div>
+                                </div>
+                                <div>
+                                    <div style="font-size:9px;color:var(--muted);">Governor</div>
+                                    <div style="font-size:11px;font-weight:600;color:#f59e0b;" id="nodeGovernor">--</div>
+                                </div>
+                            </div>
+
+                            <div class="node-rule" id="nodeRule">Loading node rule...</div>
+                        </div>
+
+                        <!-- Card 2: 3-6-9 Time Harmonic -->
+                        <div class="cycle369-card">
+                            <div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:4px;">
+                                3-6-9 Time Harmonic · Tₛ = T₀ × 2
+                            </div>
+
+                            <div class="phase-369-number p9" id="phase369Number">9</div>
+                            <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;" id="phase369Label">COMPLETION</div>
+                            <div class="market-state-badge RELEASE" id="marketStateBadge">RELEASE</div>
+
+                            <div class="cycle-progress-bar" style="margin-top:10px;">
+                                <div class="cycle-progress-fill p9" id="cycle369Fill" style="width:0%"></div>
+                            </div>
+                            <div style="font-size:9px;color:var(--muted);margin-bottom:6px;" id="cycle369Progress">-- % through Tₛ</div>
+
+                            <div style="display:flex;gap:12px;flex-wrap:wrap;margin:8px 0;">
+                                <div>
+                                    <div style="font-size:9px;color:var(--muted);">T₀ (base)</div>
+                                    <div style="font-size:12px;font-weight:700;color:var(--accent);" id="cycle369T0">--d</div>
+                                </div>
+                                <div>
+                                    <div style="font-size:9px;color:var(--muted);">Tₛ (swing)</div>
+                                    <div style="font-size:12px;font-weight:700;color:var(--accent);" id="cycle369Ts">--d</div>
+                                </div>
+                                <div>
+                                    <div style="font-size:9px;color:var(--muted);">Days left</div>
+                                    <div style="font-size:12px;font-weight:700;color:#fbbf24;" id="cycle369DaysLeft">--</div>
+                                </div>
+                                <div>
+                                    <div style="font-size:9px;color:var(--muted);">9-resonance</div>
+                                    <div style="font-size:12px;font-weight:700;" id="cycle369NineRes">--</div>
+                                </div>
+                            </div>
+
+                            <div class="reversal-warning" id="reversalWarning">
+                                ⚠️ CYCLE 9 — REVERSAL IMMINENT — Reduce positions
+                            </div>
+
+                            <div class="chakra-note" id="cycle369Chakra">--</div>
+                        </div>
+
+                        <!-- Card 3: Vibration + Ascendant -->
+                        <div class="vibration-card">
+                            <div style="font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:10px;">
+                                Price Vibration · Ascendant
+                            </div>
+
+                            <div class="vib-stat">
+                                <span class="vib-key">√ Price (vibration root)</span>
+                                <span class="vib-val" id="vibRoot">--</span>
+                            </div>
+                            <div class="vib-stat">
+                                <span class="vib-key">Resonance number</span>
+                                <span class="vib-val" id="vibResonance">--</span>
+                            </div>
+                            <div class="vib-stat">
+                                <span class="vib-key">Resonance orb</span>
+                                <span class="vib-val" id="vibResonanceOrb">--</span>
+                            </div>
+                            <div class="vib-stat">
+                                <span class="vib-key">Digital root</span>
+                                <span class="vib-val" id="vibDigitalRoot">--</span>
+                            </div>
+                            <div class="vib-stat">
+                                <span class="vib-key">3-6-9 chakra freq</span>
+                                <span class="vib-val" id="vibChakra369">--</span>
+                            </div>
+
+                            <!-- Ascendant -->
+                            <div class="asc-row" style="margin-top:12px;">
+                                <div class="asc-label">Ascendant (intraday ruler)</div>
+                                <div class="asc-deg" id="ascDegree">--°</div>
+                                <div class="asc-timer" id="ascTimer">-- min to next key angle (--°)</div>
+                                <div style="font-size:9px;color:var(--muted);margin-top:2px;">
+                                    ~1° per 4 min · 360° per 24h
+                                </div>
+                            </div>
+
+                            <div class="nine-seal" id="nineSeal">🔯</div>
+                        </div>
+
+                    </div>
+
+                    <!-- Vibration lesson note -->
+                    <div class="lunar-lesson-note" id="vibLessonNote" style="margin-top:12px;">
+                        Loading Law of Vibration context...
+                    </div>
+                </div>
+                <!-- ── End Law of Vibration ───────────────────────── -->
             </div>
 
             <!-- Gann Deep Q&A (Date Selectable) -->
@@ -3443,6 +3650,169 @@
             setInterval(fetchAndUpdateLunar, 60_000);
         })();
         // ── End Lunar Expansion Engine ───────────────────────────────────────
+
+        // ── Law of Vibration: Node + 3-6-9 Engine ────────────────────────────
+        (function initVibrationEngine() {
+            const NODE_COLORS = {
+                MAJOR:      "#10b981",
+                MEDIUM:     "#38bdf8",
+                MINOR_TIME: "#f59e0b",
+                NOISE:      "#6b7280",
+                NONE:       "#374151",
+            };
+            const MARKET_STATE_COLORS = {
+                RISE:    "#10b981",
+                BALANCE: "#38bdf8",
+                RELEASE: "#f87171",
+            };
+            const PHASE_CLASS = { 3: "p3", 6: "p6", 9: "p9" };
+
+            function _t(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+            function _s(id, prop, val) { const el = document.getElementById(id); if (el) el.style[prop] = val; }
+            function _cls(id, cls) { const el = document.getElementById(id); if (el) el.className = cls; }
+
+            function updateNodeCard(d) {
+                const nt = d.node_type || "NONE";
+                const card = document.getElementById("nodeCard");
+                if (card) card.className = `node-card ${nt}`;
+
+                const badge = document.getElementById("nodeBadge");
+                if (badge) {
+                    badge.textContent = nt.replace(/_/g, " ");
+                    badge.className = `node-badge ${nt}`;
+                }
+
+                // Alignment pills
+                const setPill = (id, on) => {
+                    const el = document.getElementById(id);
+                    if (el) el.className = `align-pill ${on ? "on" : "off"}`;
+                };
+                setPill("nodeTimeAlignPill",   d.time_aligned);
+                setPill("nodePriceAlignPill",  d.price_aligned);
+                setPill("nodePlanetAlignPill", d.planet_aligned);
+
+                _t("nodePriceDegree", d.price_degree != null ? `${d.price_degree.toFixed(1)}°` : "--°");
+                _t("nodeKeyAngle", d.nearest_key_angle != null
+                    ? `Key: ${d.nearest_key_angle}° (orb ${d.price_angle_orb}°)` : "--");
+                _t("nodeTimeFraction", d.time_fraction != null ? d.time_fraction.toFixed(3) : "--");
+                _t("nodeTimeOrb", d.time_node_orb != null ? d.time_node_orb.toFixed(3) : "--");
+                _t("nodeGovernor", d.planetary_governor || "--");
+                _t("nodeRule", d.node_rule || "...");
+            }
+
+            function update369Card(d) {
+                const phase = d.phase_369 || 9;
+                const pClass = PHASE_CLASS[phase] || "p9";
+                const numEl = document.getElementById("phase369Number");
+                if (numEl) {
+                    numEl.textContent = phase;
+                    numEl.className = `phase-369-number ${pClass}`;
+                }
+                _t("phase369Label", d.phase_label || "--");
+
+                const ms = d.market_state || "RELEASE";
+                const msBadge = document.getElementById("marketStateBadge");
+                if (msBadge) {
+                    msBadge.textContent = ms;
+                    msBadge.className = `market-state-badge ${ms}`;
+                }
+
+                const pct = d.progress != null ? Math.round(d.progress * 100) : 0;
+                _t("cycle369Progress", `${pct}% through Tₛ`);
+                const fill = document.getElementById("cycle369Fill");
+                if (fill) {
+                    fill.style.width = `${pct}%`;
+                    fill.className = `cycle-progress-fill ${pClass}`;
+                }
+
+                _t("cycle369T0",    d.confluence?.total_cycles != null ? "--" : (d.progress != null ? "14.77d" : "--"));
+                _t("cycle369Ts",    d.confluence?.total_cycles != null ? "--" : "29.53d");
+                _t("cycle369DaysLeft", d.bars_to_completion != null ? `${d.bars_to_completion}d` : "--");
+
+                const nineResEl = document.getElementById("cycle369NineRes");
+                if (nineResEl) {
+                    const nr = d.nine_resonance;
+                    nineResEl.textContent = nr ? "✅ YES" : "—";
+                    nineResEl.style.color = nr ? "#fcd34d" : "#6b7280";
+                }
+
+                const rw = document.getElementById("reversalWarning");
+                if (rw) rw.className = `reversal-warning ${d.reversal_imminent ? "show" : ""}`;
+
+                _t("cycle369Chakra", d.phase_chakra ? `☯ ${d.phase_chakra}` : "--");
+            }
+
+            function updateVibCard(d) {
+                const rootEl = document.getElementById("vibRoot");
+                if (rootEl) {
+                    rootEl.textContent = d.price_root != null ? d.price_root.toFixed(3) : "--";
+                    rootEl.className = `vib-val${d.resonance_active ? " resonant" : ""}`;
+                }
+                _t("vibResonance", d.vibration_resonance != null ? `${d.vibration_resonance}` : "--");
+                _t("vibResonanceOrb", d.resonance_orb != null ? d.resonance_orb.toFixed(4) : "--");
+
+                const drEl = document.getElementById("vibDigitalRoot");
+                if (drEl) {
+                    drEl.textContent = d.digital_root != null ? d.digital_root : "--";
+                    drEl.className = `vib-val${d.digital_root_369 ? " dr369" : ""}`;
+                }
+
+                const chEl = document.getElementById("vibChakra369");
+                if (chEl) {
+                    const c = d.chakra_369;
+                    chEl.textContent = c != null ? `${c} (${c === 3 ? "Creation" : c === 6 ? "Reception" : "Transmission"})` : "—";
+                    chEl.style.color = c === 9 ? "#fcd34d" : c === 6 ? "#38bdf8" : c === 3 ? "#818cf8" : "var(--muted)";
+                }
+
+                const sealEl = document.getElementById("nineSeal");
+                if (sealEl) {
+                    if (d.digital_root === 9 || d.nine_resonance) {
+                        sealEl.textContent = "🔯 NINE — cycle seal active";
+                        sealEl.style.fontSize = "12px";
+                        sealEl.style.color = "#fcd34d";
+                    } else {
+                        sealEl.textContent = "🔯";
+                        sealEl.style.fontSize = "28px";
+                        sealEl.style.color = "var(--muted)";
+                    }
+                }
+
+                // Ascendant
+                _t("ascDegree", d.ascendant_degree != null ? `${d.ascendant_degree.toFixed(1)}°` : "--°");
+                _t("ascTimer", d.asc_mins_to_key != null
+                    ? `${d.asc_mins_to_key} min to next key angle (${d.asc_next_key}°)`
+                    : "-- min to next key angle");
+            }
+
+            function updateVibrationUI(d) {
+                if (d.error) {
+                    _t("vibLessonNote", `Error: ${d.error}`);
+                    return;
+                }
+                updateNodeCard(d);
+                update369Card(d);
+                updateVibCard(d);
+                _t("vibLessonNote", d.lesson_note_369 || "--");
+                _t("vibRefreshBadge", "● live");
+            }
+
+            async function fetchAndUpdateVibration() {
+                try {
+                    const res = await fetch("/api/astro/nodes");
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const d = await res.json();
+                    updateVibrationUI(d);
+                } catch(e) {
+                    console.warn("Vibration fetch error:", e);
+                    const rb = document.getElementById("vibRefreshBadge");
+                    if (rb) rb.textContent = "● error";
+                }
+            }
+
+            fetchAndUpdateVibration();
+            setInterval(fetchAndUpdateVibration, 30_000);  // 30s refresh (nodes change faster)
+        })();
+        // ── End Law of Vibration ─────────────────────────────────────────────
 
         document.getElementById("loadBtn").addEventListener("click", () => loadAnalysis(false));
         document.getElementById("refreshBtn").addEventListener("click", () => loadAnalysis(true));

@@ -227,6 +227,130 @@ async def lunar_phase():
     return JSONResponse(_get_lunar_phase_data())
 
 
+# ── Node Engine cache ─────────────────────────────────────────────────────────
+_node_cache: dict = {"state": None, "ts": 0.0}
+_NODE_CACHE_TTL = 30.0
+
+
+def _get_node_data(price: Optional[float] = None, timeframe: str = "swing") -> dict:
+    """Compute or return cached Gann Node state (Lesson 2)."""
+    global _node_cache
+    now_ts = _time.time()
+    if now_ts - _node_cache["ts"] < _NODE_CACHE_TTL and _node_cache["state"] and price is None:
+        return _node_cache["state"]
+
+    try:
+        from astroquant.engine.gann.gann_node_engine import (
+            compute_node, compute_ascendant_state, price_vibration_frequency
+        )
+        from astroquant.engine.gann.gann_369_engine import (
+            compute_369_from_newmoon, build_369_summary, BASE_CYCLES_DAYS
+        )
+
+        # Get price from Redis if not provided
+        if price is None:
+            try:
+                from astroquant.engine.candle.candle_reader import get_latest_candle
+                _c = get_latest_candle("XAUUSD", 1)
+                price = float(_c["close"]) if _c else 4800.0
+            except Exception:
+                price = 4800.0
+
+        # Compute 3-6-9 states for multiple base cycles
+        states = {}
+        for cycle_name in ("lunar_phase", "weekly", "28_day"):
+            try:
+                states[cycle_name] = compute_369_from_newmoon(base_cycle=cycle_name)
+            except Exception:
+                pass
+
+        primary_state = states.get("lunar_phase") or list(states.values())[0] if states else None
+        time_fraction = primary_state.progress if primary_state else 0.5
+
+        # Planetary positions for node detection
+        astro = _get_astro_live_data()
+        planetary_positions = astro.get("positions", {})
+
+        node = compute_node(price, time_fraction, planetary_positions, timeframe)
+        asc = compute_ascendant_state()
+        vib = price_vibration_frequency(price)
+        summary = build_369_summary(states) if states else {}
+
+        payload = {
+            # Node
+            "node_type":           node.node_type,
+            "node_active":         node.active,
+            "time_aligned":        node.time_aligned,
+            "price_aligned":       node.price_aligned,
+            "planet_aligned":      node.planet_aligned,
+            "price":               node.price,
+            "price_degree":        node.price_degree,
+            "nearest_key_angle":   node.nearest_key_angle,
+            "price_angle_orb":     node.price_angle_orb,
+            "time_fraction":       node.time_fraction,
+            "nearest_time_node":   node.nearest_time_node,
+            "time_node_orb":       node.time_node_orb,
+            "aligning_planets":    node.aligning_planets,
+            "planetary_governor":  node.planetary_governor,
+            "node_message":        node.message,
+            "node_rule":           node.rule,
+            # 3-6-9
+            "phase_369":           primary_state.phase_369 if primary_state else None,
+            "phase_label":         primary_state.phase_label if primary_state else None,
+            "phase_chakra":        primary_state.phase_chakra if primary_state else None,
+            "market_state":        primary_state.market_state if primary_state else None,
+            "progress":            primary_state.progress if primary_state else None,
+            "bars_to_completion":  primary_state.bars_to_completion if primary_state else None,
+            "vibration_harmonic":  primary_state.vibration_harmonic if primary_state else None,
+            "nine_resonance":      primary_state.nine_resonance if primary_state else None,
+            "reversal_imminent":   primary_state.reversal_imminent if primary_state else None,
+            "lesson_note_369":     primary_state.lesson_note if primary_state else None,
+            "confluence":          summary,
+            # Ascendant (intraday)
+            "ascendant_degree":    asc.degree,
+            "asc_mins_to_90":      asc.minutes_to_next_90,
+            "asc_mins_to_key":     asc.minutes_to_next_key,
+            "asc_next_key":        asc.next_key_angle,
+            # Vibration
+            "price_root":          vib["root"],
+            "vibration_resonance": vib["resonance_number"],
+            "resonance_orb":       vib["resonance_orb"],
+            "resonance_active":    vib["resonance_active"],
+            "digital_root":        vib["digital_root"],
+            "digital_root_369":    vib["digital_root_369"],
+            "chakra_369":          vib["chakra_369"],
+            "timestamp":           node.timestamp,
+        }
+
+        _node_cache["state"] = payload
+        _node_cache["ts"] = now_ts
+        return payload
+
+    except Exception as exc:
+        logger.error(f"Node engine error: {exc}")
+        return {"error": str(exc)}
+
+
+@router.get("/api/astro/nodes")
+async def gann_nodes(price: Optional[float] = None, timeframe: str = "swing"):
+    """Gann Lesson 2 — Law of Vibration: Node Engine.
+
+    Nodes = pressure points (NOT price levels).
+    TIME + PRICE convergence = MOVE. PRICE alone = NOISE.
+
+    Returns:
+    - node_type: MAJOR / MEDIUM / MINOR_TIME / NOISE / NONE
+    - node_active: True when trading-grade node is active
+    - node_rule: plain-English Gann rule for current state
+    - phase_369: 3 (initiation) / 6 (expansion) / 9 (completion)
+    - market_state: RISE / BALANCE / RELEASE
+    - reversal_imminent: True when phase_369 = 9
+    - ascendant_degree + asc_mins_to_key (intraday timing)
+    - vibration data (digital root, chakra 3-6-9, resonance)
+    """
+    return JSONResponse(_get_node_data(price, timeframe))
+
+
 class GannConnectionManager:
     """Manages WebSocket connections for Gann updates"""
     
