@@ -1275,9 +1275,14 @@ def _auto_record_prediction(summary: dict[str, Any]) -> None:
     Only records directional signals (BUY / SELL) — never WAIT.
     De-duplicates on observation_id so each fresh signal is only recorded once.
     """
-    signal = str(summary.get("signal") or "").upper()
-    if signal not in ("BUY", "SELL"):
-        return
+    _raw_signal = str(summary.get("signal") or "").upper()
+    # Normalise "STRONG BUY" → "BUY", "STRONG SELL" → "SELL", etc.
+    if "BUY" in _raw_signal:
+        signal = "BUY"
+    elif "SELL" in _raw_signal:
+        signal = "SELL"
+    else:
+        return  # WAIT / NEUTRAL — nothing to record
 
     # Build a stable prediction_id from the observation so we don't duplicate
     obs_id = str(summary.get("observation_id") or "")
@@ -1321,19 +1326,44 @@ def _auto_record_prediction(summary: dict[str, Any]) -> None:
     confluence_score = confidence_raw / 100.0 if confidence_raw > 1.0 else confidence_raw
 
     # Signal boolean flags from observation confirmations + system outputs
-    geometry_signal  = bool(obs.get("confirmation_geometry"))
-    time_signal      = bool(obs.get("confirmation_time"))
-    structure_signal = bool(obs.get("confirmation_structure"))
+    def _yes(v: Any) -> bool:
+        """'YES' → True, 'NO'/None/False → False."""
+        return str(v or "").strip().upper() == "YES"
+
+    geometry_signal  = _yes(obs.get("confirmation_geometry"))
+    time_signal      = _yes(obs.get("confirmation_time"))
+    structure_signal = _yes(obs.get("confirmation_structure"))
+
+    # physics_momentum_runtime may be a string ("NEUTRAL") or a dict — handle both
+    _mom_raw = obs.get("physics_momentum_runtime")
+    if isinstance(_mom_raw, dict):
+        _mom_dir = str(_mom_raw.get("direction") or "").lower()
+    else:
+        _mom_dir = str(_mom_raw or "").lower()
     momentum_signal  = bool(
-        str((obs.get("physics_momentum_runtime") or {}).get("direction") or "").lower()
-        in ("up", "bullish") and signal == "BUY"
-        or
-        str((obs.get("physics_momentum_runtime") or {}).get("direction") or "").lower()
-        in ("down", "bearish") and signal == "SELL"
+        (_mom_dir in ("up", "bullish") and signal == "BUY")
+        or (_mom_dir in ("down", "bearish") and signal == "SELL")
     )
+
     gann_signal      = bool(summary.get("gann_confluence_ready"))
-    ict_signal       = _sf(summary.get("institutional_score"), 0.0) > 0.55
-    confluence_signal = bool(summary.get("math_verdict") in ("PASS", "HIGH_CONFIDENCE"))
+
+    # institutional_score may be a dict {'BUY': N, 'SELL': N} or a float
+    _inst_raw = summary.get("institutional_score")
+    if isinstance(_inst_raw, dict):
+        _buy_votes  = int(_inst_raw.get("BUY", 0))
+        _sell_votes = int(_inst_raw.get("SELL", 0))
+        ict_signal  = (_buy_votes > _sell_votes) if signal == "BUY" else (_sell_votes > _buy_votes)
+    else:
+        ict_signal  = _sf(_inst_raw, 0.0) > 0.55
+
+    # confluence: use reliability_score + quality as proxy (math_verdict not always present)
+    _reliability = _sf(summary.get("reliability_score"), 0.0)
+    _quality     = str(summary.get("quality") or "").upper()
+    confluence_signal = bool(
+        summary.get("math_verdict") in ("PASS", "HIGH_CONFIDENCE")
+        or _reliability >= 0.8
+        or _quality in ("STRONG", "HIGH", "EXCELLENT")
+    )
 
     # Forecast horizon from signal window hours (default 1 day)
     window_hours = _sf(summary.get("observation_signal_window_hours"), 24.0)
