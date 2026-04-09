@@ -993,6 +993,60 @@
             color: var(--danger);
         }
 
+        .overlay-btn {
+            font-size: 11px;
+            padding: 3px 9px;
+            border-radius: 5px;
+            border: 1px solid rgba(255,255,255,0.15);
+            background: rgba(255,255,255,0.05);
+            color: var(--muted);
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s, color 0.15s;
+        }
+        .overlay-btn.active {
+            background: rgba(99,102,241,0.25);
+            border-color: rgba(99,102,241,0.6);
+            color: #c7d2fe;
+        }
+        .overlay-btn:hover { background: rgba(99,102,241,0.35); color: #e0e7ff; }
+
+        .absorption-bar-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .absorption-bar-label {
+            width: 90px;
+            font-size: 12px;
+            color: var(--muted);
+            text-align: right;
+            flex-shrink: 0;
+        }
+        .absorption-bar-track {
+            flex: 1;
+            background: rgba(255,255,255,0.07);
+            border-radius: 4px;
+            height: 14px;
+            overflow: hidden;
+        }
+        .absorption-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.4s ease;
+        }
+        .absorption-bar-pct {
+            font-size: 12px;
+            color: var(--text);
+            width: 40px;
+            text-align: right;
+        }
+        .absorption-bar-trades {
+            font-size: 10px;
+            color: var(--muted);
+            width: 50px;
+        }
+
         .matrix-shell {
             background: var(--surface);
             border: 1px solid var(--border);
@@ -1267,8 +1321,32 @@
                     <span id="chartLiveTag" style="color:#fcd34d;display:none;">&#9679; LIVE</span>
                 </div>
             </div>
+            <!-- Overlay toggle buttons -->
+            <div id="overlayToolbar" style="display:flex;gap:6px;flex-wrap:wrap;padding:6px 10px 0;border-top:1px solid rgba(255,255,255,0.07);">
+                <button class="overlay-btn active" id="btn-cycles"    onclick="toggleOverlay('cycles')"   title="Gann cycle markers at 30/45/90/180/360-bar intervals">⟳ Cycles</button>
+                <button class="overlay-btn active" id="btn-lunar"     onclick="toggleOverlay('lunar')"    title="New Moon and Full Moon events">🌙 Lunar</button>
+                <button class="overlay-btn active" id="btn-patterns"  onclick="toggleOverlay('patterns')" title="Auto-identified swing highs/lows and BOS/CHOCH structure breaks">📍 Patterns</button>
+                <button class="overlay-btn active" id="btn-prediction"onclick="toggleOverlay('prediction')"title="Gann angle + P(t) price projection (30 bars forward)">🔮 Prediction</button>
+                <button class="overlay-btn active" id="btn-gann"      onclick="toggleOverlay('gann')"     title="1×1, 2×1, 1×2 Gann angle lines from last swing low">📐 Gann Angles</button>
+                <button class="overlay-btn" id="btn-reload-overlays"  onclick="reloadOverlays()"          title="Re-fetch overlay data from server" style="margin-left:auto;background:rgba(99,102,241,0.2);border-color:rgba(99,102,241,0.5);">↺ Reload</button>
+            </div>
             <div id="mclChart" class="chart-wrap"></div>
             <div id="mclChartStatus" class="chart-status">Loading chart data...</div>
+        </div>
+
+        <!-- AI Model Absorption Panel -->
+        <div class="chart-shell" id="aiAbsorptionPanel" style="margin-top:12px;">
+            <div class="chart-head">
+                <div class="chart-title">🤖 AI Model Absorption</div>
+                <div class="chart-meta">
+                    <span id="absorptionLearningState" style="font-weight:600;">--</span>
+                    <span id="absorptionTotalPreds" style="color:var(--muted);">-- predictions</span>
+                    <span id="absorptionTopModel" style="color:#a78bfa;">Best: --</span>
+                </div>
+            </div>
+            <div id="aiAbsorptionBody" style="padding:12px 16px;">
+                <div style="color:var(--muted);font-size:13px;">Loading AI absorption data...</div>
+            </div>
         </div>
 
         <div id="content" style="display:none;">
@@ -2750,6 +2828,9 @@
             if (mclCandlesSeries) {
                 mclCandlesSeries.setData(normalized);
                 mclChart.timeScale().fitContent();
+                // Load cycle / pattern / prediction overlays after candles render
+                loadChartOverlays(symbol, timeframe).catch(() => {});
+                loadAiAbsorption().catch(() => {});
             }
 
             if (normalized.length > 1) {
@@ -2784,6 +2865,228 @@
                 statusEl.className = "chart-status";
                 statusEl.textContent = `Loaded ${normalized.length} candles (${depth})${fallback}${gapFill}${lastBar}`;
             }
+        }
+
+        // ── Overlay System ─────────────────────────────────────────────────────
+        // Overlay toggle state
+        const _overlayState = { cycles: true, lunar: true, patterns: true, prediction: true, gann: true };
+
+        // LW-Charts series references for remove/re-add on toggle
+        let _predictionSeries  = null;
+        let _gannAngleSeries   = [];   // array — one per Gann angle
+        let _overlayData       = null; // cached server response
+
+        // All chart markers pooled by category
+        let _markersCycles   = [];
+        let _markersLunar    = [];
+        let _markersPatterns = [];
+
+        function _refreshMarkers() {
+            if (!mclCandlesSeries) return;
+            const all = [
+                ...(_overlayState.cycles   ? _markersCycles   : []),
+                ...(_overlayState.lunar    ? _markersLunar    : []),
+                ...(_overlayState.patterns ? _markersPatterns : []),
+            ].sort((a, b) => a.time - b.time);
+            try { mclCandlesSeries.setMarkers(all); } catch (_) {}
+        }
+
+        function _applyPredictionSeries(zone) {
+            // Remove existing
+            if (_predictionSeries) {
+                try { mclChart.removeSeries(_predictionSeries); } catch (_) {}
+                _predictionSeries = null;
+            }
+            if (!_overlayState.prediction || !zone || !zone.length || !mclChart) return;
+            try {
+                if (typeof LightweightCharts.LineSeries !== "undefined") {
+                    _predictionSeries = mclChart.addSeries(LightweightCharts.LineSeries, {
+                        color: "#fbbf24",
+                        lineWidth: 2,
+                        lineStyle: 1,  // Dashed
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                        title: "P(t)",
+                    });
+                } else {
+                    _predictionSeries = mclChart.addLineSeries({
+                        color: "#fbbf24",
+                        lineWidth: 2,
+                        lineStyle: 1,
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                        title: "P(t)",
+                    });
+                }
+                _predictionSeries.setData(zone.map(p => ({ time: p.time, value: p.value })));
+            } catch (_err) {}
+        }
+
+        function _applyGannAngleSeries(angles) {
+            // Remove existing lines
+            _gannAngleSeries.forEach(s => { try { mclChart.removeSeries(s); } catch (_) {} });
+            _gannAngleSeries = [];
+            if (!_overlayState.gann || !angles || !angles.length || !mclChart) return;
+            const COLORS = { "1×1": "#fbbf24", "2×1": "#10b981", "1×2": "#f472b6" };
+            angles.forEach(angle => {
+                try {
+                    let s;
+                    if (typeof LightweightCharts.LineSeries !== "undefined") {
+                        s = mclChart.addSeries(LightweightCharts.LineSeries, {
+                            color: COLORS[angle.label] || "#a78bfa",
+                            lineWidth: 1,
+                            lineStyle: 2,  // Dotted
+                            priceLineVisible: false,
+                            lastValueVisible: false,
+                            title: angle.label,
+                        });
+                    } else {
+                        s = mclChart.addLineSeries({
+                            color: COLORS[angle.label] || "#a78bfa",
+                            lineWidth: 1,
+                            lineStyle: 2,
+                            priceLineVisible: false,
+                            lastValueVisible: false,
+                            title: angle.label,
+                        });
+                    }
+                    s.setData(angle.points.map(p => ({ time: p.time, value: p.value })));
+                    _gannAngleSeries.push(s);
+                } catch (_err) {}
+            });
+        }
+
+        async function loadChartOverlays(symbol, timeframe) {
+            if (!mclChart) return;
+            const params = new URLSearchParams({
+                symbol: symbol || "XAUUSD",
+                timeframe: timeframe || "1d",
+                lookback_years: String(DEFAULT_LOOKBACK_YEARS),
+                limit: String(_chartLimitForTimeframe(timeframe || "1d")),
+            });
+            try {
+                const resp = await fetch(`${API_BASE}/market_causality/chart/overlays?${params}`);
+                if (!resp.ok) return;
+                const data = await resp.json();
+                if (data.status !== "ok") return;
+                _overlayData = data;
+
+                // Build marker arrays
+                _markersCycles = (data.gann_cycles || []).map(e => ({
+                    time: e.time,
+                    position: e.position || "belowBar",
+                    color: e.color || "#38bdf8",
+                    shape: e.shape || "circle",
+                    text: e.label || "",
+                    size: e.cycle >= 180 ? 2 : 1,
+                }));
+                _markersLunar = (data.lunar_events || []).map(e => ({
+                    time: e.time,
+                    position: e.position || "aboveBar",
+                    color: e.color || "#fcd34d",
+                    shape: e.shape || "circle",
+                    text: e.label || "",
+                    size: 1,
+                }));
+                _markersPatterns = (data.auto_patterns || []).map(e => ({
+                    time: e.time,
+                    position: e.position || "aboveBar",
+                    color: e.color || "#22c55e",
+                    shape: e.shape || "circle",
+                    text: e.label || "",
+                    size: 1,
+                }));
+
+                _refreshMarkers();
+                _applyPredictionSeries(data.prediction_zone || []);
+                _applyGannAngleSeries(data.gann_angles || []);
+
+                // Update status
+                const meta = data.meta || {};
+                const statusEl = document.getElementById("mclChartStatus");
+                if (statusEl) {
+                    const prev = statusEl.textContent;
+                    const overlayInfo = ` | cycles:${(data.gann_cycles||[]).length} lunar:${(data.lunar_events||[]).length} patterns:${(data.auto_patterns||[]).length} proj:${(data.prediction_zone||[]).length}bars`;
+                    statusEl.textContent = prev.includes("cycles:") ?
+                        prev.replace(/\s*\|.*$/, "") + overlayInfo :
+                        prev + overlayInfo;
+                }
+            } catch (_err) { /* overlays are non-critical */ }
+        }
+
+        function toggleOverlay(name) {
+            _overlayState[name] = !_overlayState[name];
+            const btn = document.getElementById(`btn-${name}`);
+            if (btn) btn.classList.toggle("active", _overlayState[name]);
+            _refreshMarkers();
+            if (name === "prediction" && _overlayData) _applyPredictionSeries(_overlayData.prediction_zone || []);
+            if (name === "gann"       && _overlayData) _applyGannAngleSeries(_overlayData.gann_angles || []);
+        }
+
+        function reloadOverlays() {
+            const symbol    = (document.getElementById("symbolInput")?.value.trim().toUpperCase()) || "XAUUSD";
+            const timeframe = document.getElementById("timeframeSelect")?.value || "1d";
+            loadChartOverlays(symbol, timeframe).catch(() => {});
+        }
+
+        // ── AI Absorption Panel ────────────────────────────────────────────────
+        async function loadAiAbsorption() {
+            try {
+                const resp = await fetch(`${API_BASE}/market_causality/chart/ai-absorption`);
+                if (!resp.ok) return;
+                const data = await resp.json();
+                if (data.status !== "ok") return;
+
+                const stateEl  = document.getElementById("absorptionLearningState");
+                const predsEl  = document.getElementById("absorptionTotalPreds");
+                const topEl    = document.getElementById("absorptionTopModel");
+                const bodyEl   = document.getElementById("aiAbsorptionBody");
+
+                const stateColors = { CALIBRATED: "#10b981", LEARNING: "#fbbf24", ABSORBING: "#60a5fa", DEGRADED: "#ef4444", UNKNOWN: "#6b7280" };
+                if (stateEl) {
+                    stateEl.textContent = data.learning_state || "--";
+                    stateEl.style.color = stateColors[data.learning_state] || "#999";
+                }
+                if (predsEl) predsEl.textContent = `${data.total_predictions || 0} predictions`;
+                if (topEl)   topEl.textContent  = `Best: ${data.top_model || "--"}`;
+
+                if (bodyEl) {
+                    const winRates = data.model_win_rates || {};
+                    const models   = Object.keys(winRates);
+                    if (!models.length) {
+                        bodyEl.innerHTML = '<div style="color:var(--muted);font-size:13px;">No model data yet — predictions will be recorded as MCL is used.</div>';
+                        return;
+                    }
+
+                    const sortedModels = models.sort((a, b) => (winRates[b] ?? 0) - (winRates[a] ?? 0));
+                    const BAR_COLORS = ["#10b981","#22c55e","#fbbf24","#f59e0b","#f472b6","#a78bfa","#60a5fa","#38bdf8","#ef4444","#6b7280"];
+
+                    const rows = sortedModels.map((model, i) => {
+                        const wr = winRates[model];
+                        const pct = wr != null ? Math.round(wr * 100) : null;
+                        const bar = pct != null ? pct : 0;
+                        const color = BAR_COLORS[i % BAR_COLORS.length];
+                        const label = model.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+                        const valText = pct != null ? `${pct}%` : "<span style='color:#555'>--</span>";
+                        return `<div class="absorption-bar-row">
+                            <div class="absorption-bar-label">${label}</div>
+                            <div class="absorption-bar-track">
+                                <div class="absorption-bar-fill" style="width:${bar}%;background:${color};"></div>
+                            </div>
+                            <div class="absorption-bar-pct">${valText}</div>
+                        </div>`;
+                    }).join("");
+
+                    const cal = data.calibration_score != null ? Math.round(data.calibration_score * 100) + "%" : "--";
+                    const align = data.cycle_alignment ? `<span style="color:#a78bfa">Dominant cycle: ${data.cycle_alignment}</span>` : "";
+                    const absorptionMsg = `<div style="padding:8px 0 4px;font-size:11px;color:var(--muted);">
+                        Overall calibration: <strong style="color:var(--text)">${cal}</strong>
+                        &nbsp;|&nbsp;${align}
+                    </div>`;
+
+                    bodyEl.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">${rows}</div>${absorptionMsg}`;
+                }
+            } catch (_err) { /* non-critical */ }
         }
 
         function showMessage(message, type = "info") {
@@ -4189,6 +4492,7 @@
             const chartTitle = document.getElementById("chartTitle");
             if (chartTitle) chartTitle.textContent = `${symbol} Market Structure Chart`;
             // Destroy chart so ensureChart() recreates it cleanly for the new timeframe
+            _predictionSeries = null; _gannAngleSeries = []; _overlayData = null; _markersCycles = []; _markersLunar = []; _markersPatterns = [];
             if (mclChart) { try { mclChart.remove(); } catch (_) {} mclChart = null; mclCandlesSeries = null; _livePriceLine = null; }
             loadChart(symbol, tf).catch((err) => {
                 const statusEl = document.getElementById("mclChartStatus");
@@ -4205,6 +4509,7 @@
             const tf = document.getElementById("timeframeSelect").value || DEFAULT_TIMEFRAME;
             const chartTitle = document.getElementById("chartTitle");
             if (chartTitle) chartTitle.textContent = `${symbol} Market Structure Chart`;
+            _predictionSeries = null; _gannAngleSeries = []; _overlayData = null; _markersCycles = []; _markersLunar = []; _markersPatterns = [];
             if (mclChart) { try { mclChart.remove(); } catch (_) {} mclChart = null; mclCandlesSeries = null; _livePriceLine = null; }
             loadChart(symbol, tf).catch(() => {});
         });

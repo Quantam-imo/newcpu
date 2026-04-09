@@ -720,3 +720,77 @@ def test_market_causality_status_module_loaded_toggles_after_summary(monkeypatch
     after = client.get("/market_causality/status")
     assert after.status_code == 200
     assert after.json().get("module_loaded") is True
+
+
+# ── Overlay endpoint tests ────────────────────────────────────────────────────
+
+def test_chart_overlays_returns_required_keys():
+    """GET /market_causality/chart/overlays must return all required top-level keys."""
+    client = TestClient(app)
+    resp = client.get(
+        "/market_causality/chart/overlays",
+        params={"symbol": "XAUUSD", "timeframe": "1d", "lookback_years": 1, "limit": 1000},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("status") == "ok"
+    for key in ("gann_cycles", "lunar_events", "auto_patterns", "prediction_zone", "gann_angles", "meta"):
+        assert key in data, f"Missing key: {key}"
+
+
+def test_chart_overlays_gann_cycles_structure():
+    """Each Gann cycle event must have time, label, color, shape, cycle fields."""
+    client = TestClient(app)
+    resp = client.get(
+        "/market_causality/chart/overlays",
+        params={"symbol": "XAUUSD", "timeframe": "1d", "lookback_years": 1, "limit": 1000},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    cycles = data.get("gann_cycles", [])
+    # There should be at least some gann cycle marks in 1 year of daily data
+    assert isinstance(cycles, list)
+    if cycles:
+        first = cycles[0]
+        for field in ("time", "label", "color", "shape", "cycle"):
+            assert field in first, f"Gann cycle missing field: {field}"
+        # Cycle number must be one of the defined values
+        assert first["cycle"] in (30, 45, 90, 120, 180, 360, 720)
+
+
+def test_chart_overlays_prediction_zone_is_forward():
+    """Prediction zone must have 30 entries all with times after the last historical candle."""
+    client = TestClient(app)
+    # First get the last candle time
+    chart_resp = client.get(
+        "/market_causality/chart",
+        params={"symbol": "XAUUSD", "timeframe": "1d", "lookback_years": 1, "limit": 1000},
+    )
+    assert chart_resp.status_code == 200
+    candles = chart_resp.json().get("candles", [])
+
+    resp = client.get(
+        "/market_causality/chart/overlays",
+        params={"symbol": "XAUUSD", "timeframe": "1d", "lookback_years": 1, "limit": 1000},
+    )
+    assert resp.status_code == 200
+    zone = resp.json().get("prediction_zone", [])
+
+    if candles and zone:
+        last_candle_time = max(c["time"] for c in candles)
+        for point in zone:
+            assert point["time"] > last_candle_time, "Prediction point is before last candle"
+        assert len(zone) == 30
+
+
+def test_chart_ai_absorption_returns_required_keys():
+    """GET /market_causality/chart/ai-absorption must return learning_state, model_win_rates, etc."""
+    client = TestClient(app)
+    resp = client.get("/market_causality/chart/ai-absorption")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("status") == "ok"
+    for key in ("model_win_rates", "learning_state", "total_predictions", "calibration_score", "top_model"):
+        assert key in data, f"Missing key: {key}"
+    assert data["learning_state"] in ("ABSORBING", "LEARNING", "CALIBRATED", "DEGRADED", "UNKNOWN")
+    assert isinstance(data["model_win_rates"], dict)

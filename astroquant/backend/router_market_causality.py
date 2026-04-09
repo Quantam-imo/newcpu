@@ -2612,3 +2612,397 @@ def market_causality_reset_weights(
         "predictions_cleared":  clear_predictions,
         "message":              msg,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Chart Overlays — Cycles · Lunar Events · Auto-Pattern Identification
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/chart/overlays")
+def chart_overlays(
+    symbol: str = Query(default="XAUUSD"),
+    timeframe: str = Query(default="1d"),
+    lookback_years: int = Query(default=25, ge=1, le=100),
+    limit: int = Query(default=12000, ge=100, le=50000),
+) -> dict[str, Any]:
+    """
+    Returns overlay data for the MCL chart:
+
+    1. **gann_cycles**  — bar-index multiples of 30/45/90/180/360 with their angle labels
+    2. **lunar_events** — New Moon / Full Moon dates over the full history window
+    3. **auto_patterns** — auto-identified swing highs/lows, structure breaks (BOS/CHOCH)
+    4. **prediction_zone** — Gann angle + P(t) projected price for next 30 calendar days
+    5. **gann_angles**  — 1×1, 2×1, 0.5×1 price lines projected from key swing low
+    """
+    import math as _math
+
+    # ── 1. Pull candle data ────────────────────────────────────────────────
+    chart = _compute_chart(symbol=symbol, timeframe=timeframe,
+                            lookback_years=lookback_years, limit=limit)
+    candles = chart.get("candles", [])
+    if not candles:
+        return {"status": "ok", "gann_cycles": [], "lunar_events": [],
+                "auto_patterns": [], "prediction_zone": [], "gann_angles": [],
+                "meta": {"swing_highs_found": 0, "swing_lows_found": 0,
+                         "lunar_events_found": 0, "bos_count": 0}}
+
+    # Sort by time
+    candles = sorted(candles, key=lambda c: c["time"])
+
+    # ── 2. Gann cycle markers (bar multiples of key cycles) ────────────────
+    GANN_CYCLES = [
+        (30,  "30°",  "#38bdf8", "circle"),
+        (45,  "45°",  "#fbbf24", "square"),
+        (90,  "90°",  "#a78bfa", "square"),
+        (180, "180°", "#f472b6", "arrowDown"),
+        (360, "🔵360°", "#10b981", "arrowDown"),
+        (720, "🔵720°", "#22d3ee", "arrowDown"),
+    ]
+    gann_cycles = []
+    for idx, candle in enumerate(candles):
+        bar_num = idx + 1
+        for cycle, label, color, shape in GANN_CYCLES:
+            if bar_num % cycle == 0:
+                gann_cycles.append({
+                    "time": candle["time"],
+                    "label": label,
+                    "color": color,
+                    "shape": shape,
+                    "position": "belowBar",
+                    "cycle": cycle,
+                })
+
+    # ── 3. Lunar events (New Moon / Full Moon) ─────────────────────────────
+    # Known New Moon reference: 2026-03-29 UTC
+    _NEW_MOON_EPOCH = 1774828800  # 2026-03-29 00:00 UTC
+    _LUNAR_PERIOD = 29.53058 * 86400  # seconds
+
+    first_ts = candles[0]["time"]
+    last_ts = candles[-1]["time"]
+
+    # Walk backward from reference to find New Moon before chart start
+    ref = _NEW_MOON_EPOCH
+    while ref > first_ts:
+        ref -= _LUNAR_PERIOD
+    while ref < first_ts:
+        ref += _LUNAR_PERIOD
+
+    # Build a set of candle timestamps (seconds) for fast lookup
+    candle_times = sorted(c["time"] for c in candles)
+
+    def _nearest_candle_time(target_ts):
+        """Snap a lunar event timestamp to the nearest candle bar."""
+        import bisect
+        idx = bisect.bisect_left(candle_times, int(target_ts))
+        if idx >= len(candle_times):
+            return candle_times[-1]
+        if idx == 0:
+            return candle_times[0]
+        before = candle_times[idx - 1]
+        after = candle_times[idx]
+        return before if abs(before - target_ts) <= abs(after - target_ts) else after
+
+    lunar_events = []
+    t = ref
+    half = _LUNAR_PERIOD / 2
+    while t <= last_ts + _LUNAR_PERIOD:
+        # New Moon
+        nm_ts = _nearest_candle_time(t)
+        if first_ts <= nm_ts <= last_ts:
+            lunar_events.append({
+                "time": int(nm_ts),
+                "label": "🌑NM",
+                "color": "#94a3b8",
+                "shape": "circle",
+                "position": "aboveBar",
+                "type": "new_moon",
+            })
+        # Full Moon (half period later)
+        fm_ts = _nearest_candle_time(t + half)
+        if first_ts <= fm_ts <= last_ts:
+            lunar_events.append({
+                "time": int(fm_ts),
+                "label": "🌕FM",
+                "color": "#fcd34d",
+                "shape": "circle",
+                "position": "aboveBar",
+                "type": "full_moon",
+            })
+        t += _LUNAR_PERIOD
+
+    # ── 4. Auto-pattern identification — Swing H/L + BOS/CHOCH ───────────
+    # Rolling window pivot detection: swing high = highest of N bars each side
+    SWING_N = 5   # pivot bars each side
+    auto_patterns = []
+
+    closes = [c["close"] for c in candles]
+    highs  = [c["high"]  for c in candles]
+    lows   = [c["low"]   for c in candles]
+    times  = [c["time"]  for c in candles]
+
+    swing_highs = []  # (idx, price, time)
+    swing_lows  = []
+
+    for i in range(SWING_N, len(candles) - SWING_N):
+        window_h = highs[i - SWING_N: i + SWING_N + 1]
+        window_l = lows[i - SWING_N: i + SWING_N + 1]
+        if highs[i] == max(window_h):
+            swing_highs.append((i, highs[i], times[i]))
+        if lows[i] == min(window_l):
+            swing_lows.append((i, lows[i], times[i]))
+
+    # Emit top-N swing marks (keep density manageable — every 30 bars min)
+    last_sh = -999
+    for idx, price, ts in swing_highs:
+        if idx - last_sh >= 30:
+            auto_patterns.append({
+                "time": ts,
+                "label": "▲",
+                "color": "#22c55e",
+                "shape": "arrowUp",
+                "position": "aboveBar",
+                "type": "swing_high",
+                "price": price,
+            })
+            last_sh = idx
+
+    last_sl = -999
+    for idx, price, ts in swing_lows:
+        if idx - last_sl >= 30:
+            auto_patterns.append({
+                "time": ts,
+                "label": "▼",
+                "color": "#ef4444",
+                "shape": "arrowDown",
+                "position": "belowBar",
+                "type": "swing_low",
+                "price": price,
+            })
+            last_sl = idx
+
+    # BOS/CHOCH: detect when price breaks above prior swing high (BOS bullish)
+    # or breaks below prior swing low (BOS bearish) — simplified 1-pass scan
+    sh_list = [(i, p, t) for i, p, t in swing_highs]
+    sl_list = [(i, p, t) for i, p, t in swing_lows]
+
+    last_bos = -999
+    for i in range(len(candles)):
+        if i - last_bos < 20:
+            continue
+        # BOS Bullish: close > prior swing high
+        prior_sh = next((p for idx, p, _ in reversed(sh_list) if idx < i - 2), None)
+        if prior_sh and closes[i] > prior_sh:
+            auto_patterns.append({
+                "time": times[i],
+                "label": "BOS↑",
+                "color": "#10b981",
+                "shape": "arrowUp",
+                "position": "belowBar",
+                "type": "bos_bull",
+                "price": closes[i],
+            })
+            last_bos = i
+            continue
+        # BOS Bearish: close < prior swing low
+        prior_sl = next((p for idx, p, _ in reversed(sl_list) if idx < i - 2), None)
+        if prior_sl and closes[i] < prior_sl:
+            auto_patterns.append({
+                "time": times[i],
+                "label": "BOS↓",
+                "color": "#ef4444",
+                "shape": "arrowDown",
+                "position": "aboveBar",
+                "type": "bos_bear",
+                "price": closes[i],
+            })
+            last_bos = i
+
+    # ── 5. Prediction zone — Gann angle + P(t) projection ─────────────────
+    # Project 30 calendar days forward from last candle
+    prediction_zone = []
+    try:
+        from astroquant.engine.gann.gann_astro_timing_engine import price_time_vibration, ORBITAL_PERIODS
+
+        last_candle = candles[-1]
+        base_price = float(last_candle["close"])
+        base_time = int(last_candle["time"])
+
+        # Determine bar interval in seconds
+        if len(candles) >= 2:
+            dts = [candles[i+1]["time"] - candles[i]["time"]
+                   for i in range(max(0, len(candles)-20), len(candles)-1)
+                   if candles[i+1]["time"] > candles[i]["time"]]
+            bar_secs = int(sum(dts) / len(dts)) if dts else 86400
+        else:
+            bar_secs = 86400
+
+        # 1×1 Gann angle: 1 price unit per time unit (normalised to daily)
+        ppu = base_price * 0.001   # ~0.1% per bar as Gann 1×1 daily
+        R   = base_price * 0.05    # 5% amplitude for P(t) resonance
+        T   = ORBITAL_PERIODS.get("saturn", 10759.0)   # Saturn major cycle
+        Z   = base_price * 0.02
+
+        N_BARS = 30
+        for n in range(1, N_BARS + 1):
+            future_time = base_time + n * bar_secs
+            days_out = (n * bar_secs) / 86400.0
+            vibration = price_time_vibration(
+                t=days_out, R=R, T_days=T, phi_deg=0.0, Z=Z,
+                theta_deg_per_day=0.033, planet="saturn"
+            )
+            # Gann 1×1 component + vibrational correction
+            gann_proj = base_price + n * ppu + vibration
+            prediction_zone.append({
+                "time": int(future_time),
+                "value": round(gann_proj, 4),
+                "type": "prediction",
+            })
+    except Exception as _exc:
+        logger.debug("Prediction zone compute failed: %s", _exc)
+
+    # ── 6. Gann angle lines from last major swing low ──────────────────────
+    gann_angles = []
+    try:
+        if sl_list:
+            anchor_idx, anchor_price, anchor_time = sl_list[-1]  # last swing low
+            ppu_day = anchor_price * 0.001  # normalised per-bar move
+            bar_span = max(1, (last_ts - anchor_time) // max(1, bar_secs))
+            current_bar = bar_span
+
+            for ratio, label, color in [
+                (1.0, "1×1", "#fbbf24"),
+                (2.0, "2×1", "#10b981"),
+                (0.5, "1×2", "#f472b6"),
+            ]:
+                # Line from anchor → end of history
+                gann_angles.append({
+                    "label": label,
+                    "color": color,
+                    "points": [
+                        {"time": int(anchor_time), "value": round(anchor_price, 4)},
+                        {"time": int(last_ts),     "value": round(anchor_price + ratio * ppu_day * current_bar, 4)},
+                    ],
+                })
+    except Exception as _exc:
+        logger.debug("Gann angle lines compute failed: %s", _exc)
+
+    return {
+        "status": "ok",
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "total_candles": len(candles),
+        "gann_cycles": gann_cycles,
+        "lunar_events": lunar_events,
+        "auto_patterns": auto_patterns,
+        "prediction_zone": prediction_zone,
+        "gann_angles": gann_angles,
+        "meta": {
+            "swing_highs_found": len(swing_highs),
+            "swing_lows_found":  len(swing_lows),
+            "lunar_events_found": len(lunar_events),
+            "bos_count": sum(1 for p in auto_patterns if p["type"].startswith("bos")),
+        },
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AI Model Absorption — model win rates, weights, learning state
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/chart/ai-absorption")
+def chart_ai_absorption() -> dict[str, Any]:
+    """
+    Returns the live AI model absorption state for display on the MCL chart:
+
+    - **model_weights**: current learned weights per sub-engine
+    - **win_rates**: rolling 30-trade win rate per model
+    - **total_predictions**: overall prediction count
+    - **calibration_score**: overall reliability 0–1
+    - **learning_state**: ABSORBING | CALIBRATED | DEGRADED
+    - **top_model**: highest-confidence sub-engine right now
+    - **cycle_alignment**: which Gann/planetary cycle has highest recent impact
+    """
+    try:
+        calibration = _LEARNING_ENGINE.get_model_calibration()
+        weights = _LEARNING_ENGINE.weights
+        predictions = _PREDICTION_TRACKER.load_predictions()
+        outcomes = _PREDICTION_TRACKER.load_outcomes()
+
+        # Build per-model win rates from outcomes
+        model_stats: dict[str, dict] = {}
+        for outcome in outcomes:
+            pid = outcome.get("prediction_id", "")
+            pred = next((p for p in predictions if p.get("id") == pid), {})
+            for key in ("gann_score", "ict_score", "astro_score", "math_score",
+                        "structure_score", "momentum_score", "regime_score"):
+                model = key.replace("_score", "")
+                if model not in model_stats:
+                    model_stats[model] = {"wins": 0, "total": 0}
+                score = float(pred.get(key) or 0.5)
+                correct = outcome.get("realized_outcome") in ("win", "correct", True, 1)
+                # Weight by score: if score > 0.6 count trades for this model
+                if score > 0.55:
+                    model_stats[model]["total"] += 1
+                    if correct:
+                        model_stats[model]["wins"] += 1
+
+        model_win_rates = {}
+        for m, s in model_stats.items():
+            if s["total"] >= 5:
+                model_win_rates[m] = round(s["wins"] / s["total"], 3)
+            else:
+                model_win_rates[m] = None  # insufficient data
+
+        # Also include weight-engine win rates from prediction_tracker weights
+        for key, w in (weights or {}).items():
+            m = key.replace("_score", "").replace("_weight", "")
+            if m not in model_win_rates:
+                model_win_rates[m] = round(min(1.0, float(w)), 3) if w else None
+
+        total_preds = calibration.get("total_predictions", 0)
+        cal_score = calibration.get("overall_accuracy") or 0.0
+
+        # Determine learning state
+        if total_preds < 20:
+            learning_state = "ABSORBING"
+        elif float(cal_score) >= 0.60:
+            learning_state = "CALIBRATED"
+        elif float(cal_score) >= 0.45:
+            learning_state = "LEARNING"
+        else:
+            learning_state = "DEGRADED"
+
+        # Top model
+        valid = {m: v for m, v in model_win_rates.items() if v is not None}
+        top_model = max(valid, key=lambda m: valid[m]) if valid else "gann"
+
+        # Which recent Gann cycle has most signal activity in last 90 predictions
+        recent = [p for p in sorted(predictions, key=lambda x: x.get("recorded_at", 0))[-90:]]
+        cycle_hits: dict[str, int] = {}
+        for p in recent:
+            g = str(p.get("gann_cycle", "") or p.get("cycle_phase", "") or "")
+            if g:
+                cycle_hits[g] = cycle_hits.get(g, 0) + 1
+        cycle_alignment = max(cycle_hits, key=cycle_hits.get) if cycle_hits else "lunar_phase"
+
+        return {
+            "status": "ok",
+            "model_weights": weights,
+            "model_win_rates": model_win_rates,
+            "total_predictions": total_preds,
+            "calibration_score": round(float(cal_score), 3),
+            "learning_state": learning_state,
+            "top_model": top_model,
+            "cycle_alignment": cycle_alignment,
+            "last_updated": int(time.time()),
+        }
+    except Exception as exc:
+        logger.error("AI absorption endpoint error: %s", exc)
+        return {
+            "status": "error",
+            "error": str(exc),
+            "model_weights": {},
+            "model_win_rates": {},
+            "learning_state": "UNKNOWN",
+            "calibration_score": 0.0,
+        }
