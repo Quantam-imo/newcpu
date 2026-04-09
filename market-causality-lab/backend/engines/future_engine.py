@@ -57,9 +57,31 @@ def future_engine(state, phase, time_signal, harmonic, numerology):
             prediction["direction"] = "SIDEWAYS"
             prediction["cycle_event"] = "CONSOLIDATION PHASE — Range-bound, await breakout"
 
+    elif phase == "EXPANSION":
+        # Expansion = MARKUP phase in Gann/Wyckoff vocabulary
+        if is_reversal_num or is_strong_time:
+            prediction["direction"] = "EXPANSION PEAK NEAR"
+            prediction["cycle_event"] = "EXPANSION PEAK — Momentum crest, watch for reversal"
+        elif is_expansion_num:
+            prediction["direction"] = "EXPANSION CONTINUATION"
+            prediction["cycle_event"] = "EXPANSION PHASE ACTIVE — Markup in full force"
+        else:
+            prediction["direction"] = "MARKUP CONTINUATION"
+            prediction["cycle_event"] = "MARKUP PHASE — Trend extended, momentum carrying"
+
+    elif phase == "MANIPULATION":
+        # Smart money sweep — anticipate the reversal after the trap
+        if is_expansion_num or is_strong_time:
+            prediction["direction"] = "REVERSAL AFTER SWEEP"
+            prediction["cycle_event"] = "MANIPULATION DETECTED — Sweep complete, reversal imminent"
+        else:
+            prediction["direction"] = "TRAP FORMING"
+            prediction["cycle_event"] = "LIQUIDITY SWEEP — False breakout, await confirmation"
+
     else:
-        prediction["direction"] = "UNCLEAR"
-        prediction["cycle_event"] = f"PHASE={phase} — Monitor for cycle trigger"
+        # Unknown phase — map to CONSOLIDATION conservatively
+        prediction["direction"] = "MONITOR"
+        prediction["cycle_event"] = f"PHASE={phase} — Gann cycle building, await trigger"
 
     # ── Strength scoring ──────────────────────────────────────────────────────
     strength = 0
@@ -84,6 +106,7 @@ def future_engine(state, phase, time_signal, harmonic, numerology):
     phase_pct = {
         "ACCUMULATION": 10, "MARKUP": 35, "DISTRIBUTION": 60,
         "MARKDOWN": 80, "CONSOLIDATION": 50, "NEUTRAL": 50,
+        "EXPANSION": 40, "MANIPULATION": 20,
     }
     prediction["cycle_progress_pct"] = phase_pct.get(phase, 50)
     prediction["numerology_energy"] = num_meaning if num_meaning else "NEUTRAL"

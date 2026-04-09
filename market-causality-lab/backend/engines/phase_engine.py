@@ -15,4 +15,7 @@ def phase_engine(state, liquidity):
     if abs(state["momentum"]) < 0.3 and state["volatility"] > 2:
         return "DISTRIBUTION"
 
+    # Default: no clear phase signal → consolidation
+    return "CONSOLIDATION"
+
     return "NEUTRAL"

@@ -30,8 +30,25 @@ def price_to_degrees(price: float) -> float:
 
 
 def degrees_to_price(degrees: float) -> float:
-    """Inverse: convert Gann degrees back to a price level."""
+    """Inverse: convert Gann degrees back to a price level.
+    NOTE: This simple inverse is only valid for prices 0-1.
+    Use gann_90_levels(price) for real price-scale support/resistance.
+    """
     return round((degrees / 180) ** 2, 5)
+
+
+def gann_90_levels(price: float) -> tuple[float, float]:
+    """Compute Gann Square-of-9 nearest 90-degree support and resistance levels.
+    Gold at $4833 → support ~$4830, resist ~$4900 (90-degree intervals on root scale).
+    Formula: each 90-degree step = 0.5 units on the square-root (price) scale.
+    """
+    if price <= 0:
+        return 0.0, 0.0
+    import math
+    step = 0.5  # one 90-degree step on sqrt scale
+    root = math.sqrt(price)
+    floor_n = int(root / step)
+    return round((floor_n * step) ** 2, 2), round(((floor_n + 1) * step) ** 2, 2)
 
 
 def price_time_equality(
@@ -89,16 +106,15 @@ def gann_advanced_analysis(state: dict, df) -> dict:
     pte = price_time_equality(recent_high - recent_low, 20)
     angles = nearest_gann_angles(degrees)
 
-    # Key support/resistance at next 90-degree boundary
-    floor_90 = (int(degrees) // 90) * 90
-    ceil_90 = floor_90 + 90
+    # Key support/resistance at next 90-degree boundary (Square-of-9)
+    support_90, resist_90 = gann_90_levels(price)
 
     return {
         "degrees": degrees,
         "cycle": cycle,
         "price_time_equality": pte,
         "nearest_angles": angles,
-        "support_90": round(degrees_to_price(float(floor_90)), 2),
-        "resist_90": round(degrees_to_price(float(ceil_90)), 2),
+        "support_90": support_90,
+        "resist_90": resist_90,
         "swing_range": round(recent_high - recent_low, 4),
     }

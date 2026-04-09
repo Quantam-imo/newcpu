@@ -112,7 +112,7 @@ def _build_reasoning_display(result: dict) -> dict:
     reliability = decision_trace.get("reliability_score")
     quality = str((result or {}).get("quality") or "UNKNOWN")
     timing = str(time_signal.get("timing") or "NO SIGNAL")
-    future_direction = str(future.get("direction") or "UNCLEAR")
+    future_direction = str(future.get("direction") or future.get("cycle_event") or "UNCLEAR")
     rejection_reason = (result or {}).get("rejection_reason") or "none"
     news_guard_applied = bool((result or {}).get("news_guard_applied"))
     trap_name = str(trap.get("trap") or "NONE")

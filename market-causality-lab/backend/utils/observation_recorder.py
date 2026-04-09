@@ -510,6 +510,16 @@ def record_observation(
                                  (result or {}).get("astro", {}).get("moon", {}).get("full_moon_peaked")),
         "cycle_event": ((result or {}).get("future") or {}).get("cycle_event"),
         "cycle_progress_pct": ((result or {}).get("future") or {}).get("cycle_progress_pct"),
+        # ── Gann Square-of-9 levels + cycle position ──────────────────────────
+        "gann_sq9_support": ((result or {}).get("universal") or {}).get("gann", {}).get("support_90"),
+        "gann_sq9_resist":  ((result or {}).get("universal") or {}).get("gann", {}).get("resist_90"),
+        "gann_sq9_swing":   ((result or {}).get("universal") or {}).get("gann", {}).get("swing_range"),
+        "gann_cycle_degree": ((result or {}).get("universal") or {}).get("gann", {}).get("cycle", {}).get("cycle_degree"),
+        "gann_cycle_quadrant": ((result or {}).get("universal") or {}).get("gann", {}).get("cycle", {}).get("quadrant"),
+        "gann_cycle_description": ((result or {}).get("universal") or {}).get("gann", {}).get("cycle", {}).get("description"),
+        "macro_bias": (result or {}).get("institutional", {}).get("macro"),
+        "future_direction": ((result or {}).get("future") or {}).get("direction"),
+        "liquidity_signal": ((result or {}).get("signals") or {}).get("liquidity"),
     }
 
     csv_path = out_dir / "market_observations.csv"
