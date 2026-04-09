@@ -698,8 +698,188 @@ def test_gann_369_formula() -> TestResult:
 
 
 # ============================================================================
-# MAIN TEST RUNNER
+# LESSON 3: ASC + SQ9 ENGINE TESTS
 # ============================================================================
+
+def test_gann_astro_timing_formulas() -> TestResult:
+    """Lesson 3 — Gann math functions produce expected outputs."""
+    result = TestResult("GANN", "test_gann_astro_timing_formulas")
+    try:
+        from astroquant.engine.gann.gann_astro_timing_engine import (
+            gann_linear, gann_quadratic, gann_sine, gann_exponential, gann_logarithmic,
+            vibrational_impact, planetary_cycle_period, gann_timing_degrees,
+        )
+        failures = []
+
+        # 1. Linear: y = 2×(10) + 4800 = 4820
+        lin = gann_linear(10, 2.0, 4800.0)
+        if abs(lin.result - 4820.0) > 0.01:
+            failures.append(f"Linear expected 4820, got {lin.result}")
+
+        # 2. Quadratic: y = 1×(3²) + 0×3 + 100 = 109
+        quad = gann_quadratic(3.0, 1.0, 0.0, 100.0)
+        if abs(quad.result - 109.0) > 0.01:
+            failures.append(f"Quadratic expected 109, got {quad.result}")
+
+        # 3. Sine: y = 1×sin(0) + 0 = 0 (at phase C=0, x=0, A=1, B=1, D=0)
+        sn = gann_sine(0.0, 1.0, 1.0, 0.0, 0.0)
+        if abs(sn.result) > 0.001:
+            failures.append(f"Sine at 0 expected 0, got {sn.result}")
+
+        # 4. Exponential: y = 1×e^0 = 1
+        ex = gann_exponential(0.0, 1.0, 1.0)
+        if abs(ex.result - 1.0) > 0.001:
+            failures.append(f"Exponential at x=0 expected 1, got {ex.result}")
+
+        # 5. Logarithmic: y = 1×ln(e) = 1
+        import math
+        lg = gann_logarithmic(math.e, 1.0)
+        if abs(lg.result - 1.0) > 0.001:
+            failures.append(f"Logarithmic at e expected 1, got {lg.result}")
+
+        # 6. Vibrational impact at t=0 = 0 (sin(0)=0)
+        v = vibrational_impact(0.0, 3.0, "moon", 0.0)
+        if abs(v) > 0.001:
+            failures.append(f"V at t=0 expected 0, got {v}")
+
+        # 7. Jupiter–Saturn synodic > 7000 days
+        cycle = planetary_cycle_period("jupiter", "saturn")
+        if cycle.get("synodic_period_days", 0) < 7000:
+            failures.append(f"Jupiter-Saturn synodic too small: {cycle.get('synodic_period_days')}")
+
+        # 8. Gann timing: 365 days / 1 orbital period = 360°
+        timing = gann_timing_degrees("earth", 365.25)
+        if abs(timing["degrees_moved"] - 360.0) > 1.0:
+            failures.append(f"Earth 365.25d should ≈ 360°, got {timing['degrees_moved']}")
+
+        result.passed = not failures
+        result.message = "All 8 formula checks passed" if result.passed else "; ".join(failures)
+    except Exception as e:
+        result.message = f"Error: {e}"
+    assert result.passed, result.message
+    return result
+
+
+def test_gann_asc_sq9_time_nodes() -> TestResult:
+    """Lesson 3 — Time nodes correctly classified as PASSED / ACTIVE / PENDING."""
+    result = TestResult("GANN", "test_gann_asc_sq9_time_nodes")
+    try:
+        from astroquant.engine.gann.gann_asc_sq9_engine import compute_time_nodes, ASC_KEY_ANGLES
+        failures = []
+
+        anchor_asc_deg = 10.0
+        # cumulative = (97 - 10) % 360 = 87 → 45° = PASSED, 90° = ACTIVE (within ±3°)
+        current_asc = 97.0
+        nodes = compute_time_nodes(anchor_asc_deg, current_asc, 4800.0)
+
+        if len(nodes) != 5:
+            failures.append(f"Expected 5 nodes, got {len(nodes)}")
+        else:
+            n45 = nodes[0]   # 45°
+            n90 = nodes[1]   # 90°
+            n180 = nodes[2]  # 180°
+            if n45.status != "PASSED":
+                failures.append(f"45° should be PASSED at cumulative 87°, got {n45.status}")
+            if n90.status != "ACTIVE":
+                failures.append(f"90° should be ACTIVE at cumulative 87°, got {n90.status}")
+            if n180.status != "PENDING":
+                failures.append(f"180° should be PENDING at cumulative 87°, got {n180.status}")
+
+        result.passed = not failures
+        result.message = "PASSED/ACTIVE/PENDING classification correct" if result.passed else "; ".join(failures)
+    except Exception as e:
+        result.message = f"Error: {e}"
+    assert result.passed, result.message
+    return result
+
+
+def test_gann_asc_sq9_signal() -> TestResult:
+    """Lesson 3 — compute_asc_sq9_signal returns valid signal enum."""
+    result = TestResult("GANN", "test_gann_asc_sq9_signal")
+    try:
+        from astroquant.engine.gann.gann_asc_sq9_engine import compute_asc_sq9_signal
+        failures = []
+
+        sig = compute_asc_sq9_signal(
+            price=4800.0,
+            anchor_asc_deg=10.0,
+            anchor_price=4800.0,
+            elapsed_mins=60.0,
+            volume_ratio=1.0,
+        )
+
+        if sig.signal not in ("ENTRY", "WATCH", "NOISE"):
+            failures.append(f"Invalid signal: {sig.signal}")
+        if not (0.0 <= sig.signal_strength <= 1.0):
+            failures.append(f"Signal strength out of range: {sig.signal_strength}")
+        if sig.current_asc_deg is None or sig.current_asc_deg < 0:
+            failures.append("Invalid ASC degree")
+        if len(sig.all_time_nodes) != 5:
+            failures.append(f"Expected 5 time nodes, got {len(sig.all_time_nodes)}")
+        if sig.intraday_price_projection is None:
+            failures.append("Missing intraday price projection")
+        if not sig.lesson_note:
+            failures.append("Missing lesson note")
+
+        result.passed = not failures
+        result.message = (
+            f"Signal={sig.signal} strength={sig.signal_strength} ASC={sig.current_asc_deg:.1f}°"
+            if result.passed else "; ".join(failures)
+        )
+    except Exception as e:
+        result.message = f"Error: {e}"
+    assert result.passed, result.message
+    return result
+
+
+def test_gann_asc_sq9_backtest() -> TestResult:
+    """Lesson 3 — Backtest engine runs on synthetic bars without errors."""
+    result = TestResult("GANN", "test_gann_asc_sq9_backtest")
+    try:
+        from astroquant.engine.gann.gann_asc_sq9_engine import (
+            backtest_asc_sq9, BacktestBar, BacktestResult
+        )
+        failures = []
+
+        # Build 50 synthetic bars — simulate ASC advancing 4°/bar (price XAUUSD ~4800)
+        bars = []
+        base_price = 4800.0
+        base_asc = 10.0
+        for i in range(50):
+            asc = (base_asc + i * 4.0) % 360.0
+            price = base_price + i * 0.5
+            bars.append(BacktestBar(
+                timestamp=f"2026-03-{10 + i // 24:02d}T{i % 24:02d}:00:00Z",
+                open=price,
+                high=price + 3.0,
+                low=price - 3.0,
+                close=price + 0.5,
+                volume=1000.0 + i * 10,
+                asc_deg=asc,
+            ))
+
+        bt = backtest_asc_sq9(bars, anchor_asc_deg=base_asc, anchor_price=base_price,
+                               stop_pts=5.0, target_pts=10.0, require_ict=False)
+
+        if not isinstance(bt, BacktestResult):
+            failures.append("Backtest did not return BacktestResult")
+        if not (0.0 <= bt.win_rate <= 1.0):
+            failures.append(f"Win rate out of range: {bt.win_rate}")
+        if bt.total_trades < 0:
+            failures.append(f"Negative total trades: {bt.total_trades}")
+        if not (0.0 <= bt.reversal_rate <= 1.0):
+            failures.append(f"Reversal rate out of range: {bt.reversal_rate}")
+
+        result.passed = not failures
+        result.message = (
+            f"Backtest: {bt.total_trades} trades, WR={bt.win_rate:.1%}, "
+            f"PF={bt.profit_factor}, Reversal={bt.reversal_rate:.1%}"
+            if result.passed else "; ".join(failures)
+        )
+    except Exception as e:
+        result.message = f"Error: {e}"
+    assert result.passed, result.message
+    return result
 def run_all_tests() -> List[TestResult]:
     """Run all test suites"""
     tests = [
@@ -726,6 +906,11 @@ def run_all_tests() -> List[TestResult]:
         test_gann_node_noise_rule,
         test_gann_369_phases,
         test_gann_369_formula,
+        # ASC + Square of 9 Tests (Gann Lesson 3)
+        test_gann_astro_timing_formulas,
+        test_gann_asc_sq9_time_nodes,
+        test_gann_asc_sq9_signal,
+        test_gann_asc_sq9_backtest,
         
         # Astrology Tests
         test_astrology_planets,

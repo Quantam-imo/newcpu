@@ -351,9 +351,125 @@ async def gann_nodes(price: Optional[float] = None, timeframe: str = "swing"):
     return JSONResponse(_get_node_data(price, timeframe))
 
 
+# ── ASC + SQ9 Engine cache (Lesson 3) ────────────────────────────────────────
+_asc_sq9_cache: dict = {"state": None, "ts": 0.0}
+_ASC_SQ9_CACHE_TTL = 30.0  # seconds
+
+
+def _get_asc_sq9_data(
+    price: Optional[float] = None,
+    anchor_asc_deg: Optional[float] = None,
+    anchor_price: Optional[float] = None,
+    elapsed_mins: Optional[float] = None,
+    volume_ratio: Optional[float] = None,
+    prev_high: Optional[float] = None,
+    prev_low: Optional[float] = None,
+) -> dict:
+    """Compute or return cached ASC + SQ9 signal (Lesson 3).
+    Re-computes if any query parameter changes.
+    """
+    global _asc_sq9_cache
+    now_ts = _time.time()
+
+    has_params = any(v is not None for v in [price, anchor_asc_deg, anchor_price])
+    if (
+        not has_params
+        and now_ts - _asc_sq9_cache["ts"] < _ASC_SQ9_CACHE_TTL
+        and _asc_sq9_cache["state"]
+    ):
+        return _asc_sq9_cache["state"]
+
+    try:
+        from astroquant.engine.gann.gann_asc_sq9_engine import build_asc_sq9_api_payload
+        from astroquant.engine.gann.gann_node_engine import compute_ascendant_state
+
+        # Use live ASC as anchor if not provided
+        if anchor_asc_deg is None:
+            asc_state = compute_ascendant_state()
+            anchor_asc_deg = float(asc_state.degree)
+
+        _price = float(price) if price else 4800.0
+        _anchor_price = float(anchor_price) if anchor_price else _price
+        _elapsed = float(elapsed_mins) if elapsed_mins else 0.0
+        _vol_ratio = float(volume_ratio) if volume_ratio else 1.0
+        _ph = float(prev_high) if prev_high else None
+        _pl = float(prev_low) if prev_low else None
+
+        payload = build_asc_sq9_api_payload(
+            price=_price,
+            anchor_asc_deg=float(anchor_asc_deg),
+            anchor_price=_anchor_price,
+            elapsed_mins=_elapsed,
+            volume_ratio=_vol_ratio,
+            prev_high=_ph,
+            prev_low=_pl,
+        )
+
+        if not has_params:
+            _asc_sq9_cache["state"] = payload
+            _asc_sq9_cache["ts"] = now_ts
+
+        return payload
+
+    except Exception as exc:
+        logger.error(f"ASC+SQ9 endpoint error: {exc}")
+        return {
+            "error": str(exc),
+            "signal": "NOISE",
+            "lesson_note": "ASC+SQ9 engine unavailable",
+        }
+
+
+@router.get("/api/astro/asc-sq9")
+async def asc_sq9_signal(
+    price: Optional[float] = None,
+    anchor_asc_deg: Optional[float] = None,
+    anchor_price: Optional[float] = None,
+    elapsed_mins: Optional[float] = None,
+    volume_ratio: Optional[float] = None,
+    prev_high: Optional[float] = None,
+    prev_low: Optional[float] = None,
+):
+    """Gann Lesson 3 — ASC + Square of 9 Tradeable Signal.
+
+    Maps Ascendant degree movement to Square of 9 price levels.
+    Generates ENTRY / WATCH / NOISE signal using ICT filters.
+
+    Parameters:
+    - price: Current market price (default: 4800)
+    - anchor_asc_deg: ASC degree at swing-low anchor (default: current live ASC)
+    - anchor_price: Price at anchor point (default: price)
+    - elapsed_mins: Minutes since anchor (for intraday P(t))
+    - volume_ratio: Current/average volume ratio (default: 1.0)
+    - prev_high/prev_low: Prior session range for ICT liquidity sweep detection
+
+    Returns:
+    - signal: ENTRY | WATCH | NOISE
+    - signal_strength: 0.0–1.0
+    - asc: {current_deg, cumulative_movement, anchor_deg}
+    - sq9: {nearest_level, distance, bias}
+    - active_time_node: 45°/90°/180°/270°/360° if currently at one
+    - all_time_nodes: full table of all 5 nodes with status (PASSED/ACTIVE/PENDING)
+    - ict: {session, liquidity_swept, displacement, pass}
+    - projections: {intraday_price, vibration_P}
+    - lesson_note: plain-English rules applied
+    """
+    return JSONResponse(
+        _get_asc_sq9_data(
+            price=price,
+            anchor_asc_deg=anchor_asc_deg,
+            anchor_price=anchor_price,
+            elapsed_mins=elapsed_mins,
+            volume_ratio=volume_ratio,
+            prev_high=prev_high,
+            prev_low=prev_low,
+        )
+    )
+
+
 class GannConnectionManager:
     """Manages WebSocket connections for Gann updates"""
-    
+
     def __init__(self):
         self.active_connections: Dict[str, List[WebSocket]] = {}
     

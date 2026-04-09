@@ -733,6 +733,33 @@
         .asc-timer { font-size: 10px; color: #fbbf24; margin-top: 2px; }
         /* ── End Law of Vibration ────────────────────────────────────────── */
 
+        /* ── ASC + Square of 9 — Lesson 3 ───────────────────────────────── */
+        .asc-sq9-module { padding: 16px; }
+        .asc-sq9-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 12px; }
+        @media (max-width: 768px) { .asc-sq9-grid { grid-template-columns: 1fr; } }
+        .asc-dial-wrapper { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+        #ascCanvas { border-radius: 50%; }
+        .asc-signal-badge {
+            display: inline-block; padding: 5px 14px; border-radius: 12px;
+            font-size: 13px; font-weight: 700; letter-spacing: .8px;
+        }
+        .asc-signal-badge.ENTRY  { background: rgba(16,185,129,.2); color: #10b981; border: 1px solid #10b981; }
+        .asc-signal-badge.WATCH  { background: rgba(251,191,36,.18); color: #fbbf24; border: 1px solid #fbbf24; }
+        .asc-signal-badge.NOISE  { background: rgba(100,116,139,.15); color: #64748b; border: 1px solid #64748b; }
+        .time-node-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        .time-node-table th, .time-node-table td { padding: 5px 7px; text-align: left; border-bottom: 1px solid rgba(255,255,255,.06); }
+        .time-node-table th { color: var(--muted); font-size: 10px; text-transform: uppercase; }
+        .node-status-PASSED  { color: #64748b; }
+        .node-status-ACTIVE  { color: #10b981; font-weight: 700; }
+        .node-status-PENDING { color: #fbbf24; }
+        .ict-filter-row { display: flex; align-items: center; gap: 6px; margin: 4px 0; font-size: 11px; }
+        .ict-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .ict-dot.pass { background: #10b981; }
+        .ict-dot.fail { background: #ef4444; }
+        .strength-bar-wrap { background: rgba(255,255,255,.07); border-radius: 4px; height: 6px; width: 100%; margin-top: 4px; }
+        .strength-bar-fill { height: 6px; border-radius: 4px; background: linear-gradient(90deg,#38bdf8,#10b981); transition: width .4s; }
+        /* ── End ASC+SQ9 ─────────────────────────────────────────────────── */
+
         .ai-badge {
             display: inline-block;
             background: linear-gradient(135deg, rgba(56, 189, 248, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%);
@@ -1968,6 +1995,119 @@
                 </div>
                 <!-- ── End Law of Vibration ───────────────────────── -->
             </div>
+
+            <!-- ── ASC + Square of 9: Lesson 3 ──────────────────────────────── -->
+            <div class="section">
+                <div class="section-title" style="display:flex;align-items:center;gap:8px;">
+                    📐 Gann Astro Lesson 3 — ASC + Square of 9
+                    <span class="ai-badge">LESSON 3</span>
+                    <span id="ascSq9RefreshBadge" style="font-size:9px;color:var(--muted);margin-left:auto;">● refreshing...</span>
+                </div>
+                <div class="asc-sq9-module">
+                    <!-- Signal Banner -->
+                    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px;">
+                        <span class="asc-signal-badge NOISE" id="ascSignalBadge">NOISE</span>
+                        <div>
+                            <div style="font-size:11px;color:var(--muted);">Signal Strength</div>
+                            <div class="strength-bar-wrap" style="width:120px;">
+                                <div class="strength-bar-fill" id="ascStrengthBar" style="width:0%"></div>
+                            </div>
+                        </div>
+                        <div style="font-size:11px;color:var(--muted);">
+                            ASC: <span style="color:var(--accent);font-weight:700;" id="ascCurrentDeg">--°</span>
+                            &nbsp;Δ<span style="color:#fbbf24;" id="ascCumulativeDeg">--°</span>
+                        </div>
+                        <div style="font-size:11px;color:var(--muted);">
+                            SQ9: <span style="color:#a78bfa;font-weight:600;" id="ascSq9Level">--</span>
+                            <span style="font-size:10px;" id="ascSq9Bias">(--)</span>
+                        </div>
+                    </div>
+
+                    <!-- 3-column grid -->
+                    <div class="asc-sq9-grid">
+
+                        <!-- Col 1: ASC Dial -->
+                        <div class="gann-card" style="padding:12px;">
+                            <div style="font-size:11px;font-weight:600;color:var(--accent);margin-bottom:8px;">🔮 ASC Timing Dial</div>
+                            <div class="asc-dial-wrapper">
+                                <canvas id="ascCanvas" width="180" height="180"></canvas>
+                                <div style="text-align:center;">
+                                    <div class="asc-deg" id="ascDialDeg">--°</div>
+                                    <div class="asc-timer" id="ascNextKeyLabel">--  to next key</div>
+                                    <div style="font-size:9px;color:var(--muted);margin-top:3px;" id="ascNextAngle">Next: --</div>
+                                </div>
+                            </div>
+                            <!-- Intraday projection -->
+                            <div style="margin-top:10px;border-top:1px solid rgba(255,255,255,.07);padding-top:8px;">
+                                <div class="asc-label">P(t) Intraday Projection</div>
+                                <div style="font-size:14px;font-weight:700;color:#fbbf24;" id="ascIntradayPrice">--</div>
+                                <div class="asc-label" style="margin-top:4px;">Vibration P</div>
+                                <div style="font-size:12px;color:#a78bfa;" id="ascVibrationP">--</div>
+                            </div>
+                        </div>
+
+                        <!-- Col 2: Time Nodes Table -->
+                        <div class="gann-card" style="padding:12px;">
+                            <div style="font-size:11px;font-weight:600;color:var(--accent);margin-bottom:8px;">⏱ Time Node Status</div>
+                            <table class="time-node-table" id="ascTimeNodeTable">
+                                <thead>
+                                    <tr>
+                                        <th>Angle</th>
+                                        <th>Name</th>
+                                        <th>Status</th>
+                                        <th>SQ9 Level</th>
+                                        <th>Mins</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ascTimeNodeBody">
+                                    <tr><td colspan="5" style="color:var(--muted);text-align:center;">Loading...</td></tr>
+                                </tbody>
+                            </table>
+                            <!-- Active node callout -->
+                            <div id="ascActiveNodeCallout" style="display:none;margin-top:8px;padding:8px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:6px;font-size:11px;">
+                                <span style="color:#10b981;font-weight:700;" id="ascActiveNodeName">--</span>
+                                <span style="color:var(--muted);"> at SQ9 </span>
+                                <span style="color:#a78bfa;" id="ascActiveNodeSq9">--</span>
+                            </div>
+                        </div>
+
+                        <!-- Col 3: ICT Filter + Signal Rules -->
+                        <div class="gann-card" style="padding:12px;">
+                            <div style="font-size:11px;font-weight:600;color:var(--accent);margin-bottom:8px;">🏦 ICT Filter</div>
+                            <div class="ict-filter-row">
+                                <div class="ict-dot fail" id="ascIctSession"></div>
+                                <span id="ascIctSessionLabel">Session: --</span>
+                            </div>
+                            <div class="ict-filter-row">
+                                <div class="ict-dot fail" id="ascIctLiq"></div>
+                                <span>Liquidity Swept</span>
+                            </div>
+                            <div class="ict-filter-row">
+                                <div class="ict-dot fail" id="ascIctDisp"></div>
+                                <span>Displacement</span>
+                            </div>
+                            <div style="margin-top:6px;font-size:10px;color:var(--muted);" id="ascIctNote">--</div>
+
+                            <!-- Signal rules -->
+                            <div style="margin-top:12px;border-top:1px solid rgba(255,255,255,.07);padding-top:8px;">
+                                <div class="asc-label">Signal Rules (Gann Lesson 3)</div>
+                                <div style="font-size:10px;color:var(--muted);line-height:1.6;margin-top:4px;">
+                                    <div>• <span style="color:#10b981;">ENTRY</span>: ASC @ key angle + ICT PASS</div>
+                                    <div>• <span style="color:#fbbf24;">WATCH</span>: Time node only, ICT pending</div>
+                                    <div>• <span style="color:#64748b;">NOISE</span>: No active time node</div>
+                                    <div style="margin-top:4px;">Key angles: 45° 90° 180° 270° 360°</div>
+                                    <div>SQ9 squared = time²=price² node</div>
+                                </div>
+                            </div>
+                            <div style="margin-top:10px;font-size:10px;color:var(--muted);line-height:1.5;padding:6px;background:rgba(255,255,255,.03);border-radius:4px;" id="ascLessonNote">
+                                Lesson note loading...
+                            </div>
+                        </div>
+
+                    </div><!-- /asc-sq9-grid -->
+                </div><!-- /asc-sq9-module -->
+            </div>
+            <!-- ── End ASC + SQ9 ──────────────────────────────────────────────── -->
 
             <!-- Gann Deep Q&A (Date Selectable) -->
             <div class="section">
@@ -3813,6 +3953,174 @@
             setInterval(fetchAndUpdateVibration, 30_000);  // 30s refresh (nodes change faster)
         })();
         // ── End Law of Vibration ─────────────────────────────────────────────
+
+        // ── ASC + Square of 9 — Lesson 3 ─────────────────────────────────────
+        (() => {
+            const API_BASE = window.API_BASE || "http://localhost:8000";
+
+            function drawAscDial(canvas, ascDeg, keyAngles) {
+                const ctx = canvas.getContext("2d");
+                const W = canvas.width, H = canvas.height;
+                const cx = W / 2, cy = H / 2, R = W / 2 - 8;
+                ctx.clearRect(0, 0, W, H);
+
+                // Background circle
+                ctx.beginPath(); ctx.arc(cx, cy, R, 0, 2 * Math.PI);
+                ctx.fillStyle = "rgba(15,23,42,0.8)"; ctx.fill();
+                ctx.strokeStyle = "rgba(56,189,248,.25)"; ctx.lineWidth = 1.5; ctx.stroke();
+
+                // Key angle ticks (45° intervals)
+                [45, 90, 135, 180, 225, 270, 315, 360].forEach(a => {
+                    const rad = (a - 90) * Math.PI / 180;
+                    const isMain = [90, 180, 270, 360].includes(a);
+                    const inner = isMain ? R - 14 : R - 8;
+                    ctx.beginPath();
+                    ctx.moveTo(cx + inner * Math.cos(rad), cy + inner * Math.sin(rad));
+                    ctx.lineTo(cx + R * Math.cos(rad), cy + R * Math.sin(rad));
+                    ctx.strokeStyle = isMain ? "rgba(167,139,250,.6)" : "rgba(56,189,248,.25)";
+                    ctx.lineWidth = isMain ? 2 : 1;
+                    ctx.stroke();
+                    if (isMain) {
+                        ctx.font = "9px monospace";
+                        ctx.fillStyle = "rgba(167,139,250,.7)";
+                        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                        ctx.fillText(a + "°",
+                            cx + (inner - 8) * Math.cos(rad),
+                            cy + (inner - 8) * Math.sin(rad));
+                    }
+                });
+
+                // ASC needle
+                const needleRad = (ascDeg % 360 - 90) * Math.PI / 180;
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.lineTo(cx + (R - 10) * Math.cos(needleRad), cy + (R - 10) * Math.sin(needleRad));
+                ctx.strokeStyle = "#38bdf8"; ctx.lineWidth = 2.5; ctx.stroke();
+
+                // Centre dot
+                ctx.beginPath(); ctx.arc(cx, cy, 4, 0, 2 * Math.PI);
+                ctx.fillStyle = "#38bdf8"; ctx.fill();
+
+                // Degree text
+                ctx.font = "bold 13px monospace";
+                ctx.fillStyle = "#38bdf8"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+                ctx.fillText(ascDeg.toFixed(1) + "°", cx, cy + R * 0.52);
+            }
+
+            async function fetchAndUpdateAscSq9() {
+                try {
+                    const price = 4800;  // default XAUUSD proxy
+                    const resp = await fetch(`${API_BASE}/api/astro/asc-sq9?price=${price}`);
+                    if (!resp.ok) return;
+                    const d = await resp.json();
+
+                    // Signal badge
+                    const signalEl = document.getElementById("ascSignalBadge");
+                    if (signalEl) {
+                        signalEl.textContent = d.signal || "NOISE";
+                        signalEl.className = "asc-signal-badge " + (d.signal || "NOISE");
+                    }
+
+                    // Strength bar
+                    const sb = document.getElementById("ascStrengthBar");
+                    if (sb) sb.style.width = ((d.signal_strength || 0) * 100).toFixed(0) + "%";
+
+                    // ASC degrees
+                    const el = id => document.getElementById(id);
+                    if (d.asc) {
+                        if (el("ascCurrentDeg")) el("ascCurrentDeg").textContent = (d.asc.current_deg || 0).toFixed(1) + "°";
+                        if (el("ascCumulativeDeg")) el("ascCumulativeDeg").textContent = (d.asc.cumulative_movement || 0).toFixed(1) + "°";
+                        if (el("ascDialDeg")) el("ascDialDeg").textContent = (d.asc.current_deg || 0).toFixed(1) + "°";
+                    }
+
+                    // SQ9
+                    if (d.sq9) {
+                        if (el("ascSq9Level")) el("ascSq9Level").textContent = (d.sq9.nearest_level || "--").toLocaleString();
+                        if (el("ascSq9Bias")) el("ascSq9Bias").textContent = "(" + (d.sq9.bias || "--") + ")";
+                    }
+
+                    // Projections
+                    if (d.projections) {
+                        if (el("ascIntradayPrice")) el("ascIntradayPrice").textContent = (d.projections.intraday_price || "--").toLocaleString();
+                        if (el("ascVibrationP")) el("ascVibrationP").textContent = (d.projections.vibration_P || "--");
+                    }
+
+                    // Draw ASC dial
+                    const canvas = document.getElementById("ascCanvas");
+                    if (canvas && d.asc) drawAscDial(canvas, d.asc.current_deg || 0, [45,90,180,270,360]);
+
+                    // Time to next key angle
+                    if (d.all_time_nodes) {
+                        const pending = d.all_time_nodes.find(n => n.status === "PENDING");
+                        if (pending) {
+                            if (el("ascNextKeyLabel")) {
+                                const m = pending.mins_to_activate;
+                                const hrs = m >= 60 ? (m/60).toFixed(1)+"h" : m.toFixed(0)+"m";
+                                el("ascNextKeyLabel").textContent = hrs + " to next key";
+                            }
+                            if (el("ascNextAngle")) el("ascNextAngle").textContent = "Next: " + pending.angle + "° " + pending.name;
+                        }
+
+                        // Time node table
+                        const tbody = document.getElementById("ascTimeNodeBody");
+                        if (tbody) {
+                            tbody.innerHTML = d.all_time_nodes.map(n => `
+                                <tr>
+                                    <td><strong>${n.angle}°</strong></td>
+                                    <td style="font-size:10px;">${n.name.split(" ").slice(1).join(" ")}</td>
+                                    <td class="node-status-${n.status}">${n.status}</td>
+                                    <td style="color:#a78bfa;">${(n.sq9_level||0).toLocaleString()}</td>
+                                    <td style="color:${n.status==='PENDING'?'#fbbf24':'#64748b'};">${n.status==='PENDING'? n.mins_to_activate.toFixed(0)+"m":"-"}</td>
+                                </tr>
+                            `).join("");
+                        }
+                    }
+
+                    // Active node callout
+                    const callout = document.getElementById("ascActiveNodeCallout");
+                    if (callout) {
+                        if (d.active_time_node) {
+                            callout.style.display = "block";
+                            if (el("ascActiveNodeName")) el("ascActiveNodeName").textContent = d.active_time_node.name;
+                            if (el("ascActiveNodeSq9")) el("ascActiveNodeSq9").textContent = (d.active_time_node.sq9_level||"--").toLocaleString();
+                        } else {
+                            callout.style.display = "none";
+                        }
+                    }
+
+                    // ICT filter
+                    if (d.ict) {
+                        const dot = (id, pass) => {
+                            const e = document.getElementById(id);
+                            if (e) { e.className = "ict-dot " + (pass ? "pass" : "fail"); }
+                        };
+                        dot("ascIctSession", d.ict.session_active);
+                        dot("ascIctLiq", d.ict.liquidity_swept);
+                        dot("ascIctDisp", d.ict.displacement);
+                        if (el("ascIctSessionLabel")) el("ascIctSessionLabel").textContent = "Session: " + (d.ict.session || "--");
+                        if (el("ascIctNote")) el("ascIctNote").textContent = d.ict.note || "";
+                    }
+
+                    // Lesson note
+                    if (el("ascLessonNote")) el("ascLessonNote").textContent = d.lesson_note || "";
+
+                    // Refresh badge
+                    const badge = document.getElementById("ascSq9RefreshBadge");
+                    if (badge) {
+                        badge.textContent = "● " + new Date().toLocaleTimeString();
+                        badge.style.color = "#10b981";
+                        setTimeout(() => { if (badge) badge.style.color = "var(--muted)"; }, 2000);
+                    }
+
+                } catch (e) {
+                    console.warn("ASC+SQ9 fetch error:", e);
+                }
+            }
+
+            fetchAndUpdateAscSq9();
+            setInterval(fetchAndUpdateAscSq9, 30_000);
+        })();
+        // ── End ASC + SQ9 ────────────────────────────────────────────────────
 
         document.getElementById("loadBtn").addEventListener("click", () => loadAnalysis(false));
         document.getElementById("refreshBtn").addEventListener("click", () => loadAnalysis(true));
