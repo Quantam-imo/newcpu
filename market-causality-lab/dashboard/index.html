@@ -1332,6 +1332,11 @@
             </div>
             <div id="mclChart" class="chart-wrap"></div>
             <div id="mclChartStatus" class="chart-status">Loading chart data...</div>
+            <!-- Moon Phase + Gann Cycle Identification Panel -->
+            <div id="moonCyclePanel" style="display:none;margin:0 10px 10px;padding:12px 14px;
+                 background:rgba(15,23,42,0.8);border:1px solid rgba(251,191,36,0.25);
+                 border-radius:8px;backdrop-filter:blur(4px);">
+            </div>
         </div>
 
         <!-- AI Model Absorption Panel -->
@@ -2956,6 +2961,94 @@
             });
         }
 
+        function _applyMoonCyclePanel(moon) {
+            /** Render the moon phase + Gann cycle identification panel. */
+            const panelEl = document.getElementById("moonCyclePanel");
+            if (!panelEl) return;
+            if (!moon) { panelEl.style.display = "none"; return; }
+            panelEl.style.display = "";
+
+            // Moon phase arc (CSS conic-gradient)
+            const pct = moon.cycle_pct || 0;
+            const arcColor = moon.color || "#fcd34d";
+
+            // Market bias badge colour
+            const biasColors = {
+                BUY_ZONE: "#10b981", BUY: "#22c55e", BUY_STRONG: "#16a34a",
+                SELL: "#ef4444", SELL_END: "#dc2626", REVERSAL: "#f97316",
+                WATCH: "#fbbf24", NEUTRAL: "#6b7280",
+            };
+            const biasColor = biasColors[moon.market_bias] || "#6b7280";
+
+            // Cycle event badge
+            const cycleEventHtml = moon.cycle_event
+                ? `<div class="cycle-event-badge" style="background:rgba(251,191,36,0.15);border:1px solid #fbbf24;
+                        border-radius:6px;padding:6px 10px;margin-top:8px;font-size:12px;color:#fbbf24;">
+                     🔁 ${moon.cycle_event}
+                   </div>`
+                : "";
+
+            const cycleProgressHtml = moon.cycle_progress != null
+                ? `<div style="margin-top:6px;font-size:11px;color:var(--muted)">
+                     Gann cycle progress: <b style="color:#e2e8f0">${moon.cycle_progress}%</b>
+                     ${moon.cycle_energy ? `  ·  Energy: <b style="color:#a78bfa">${moon.cycle_energy}</b>` : ""}
+                   </div>`
+                : "";
+
+            const alertHtml = moon.cycle_started
+                ? `<div style="margin-top:6px;padding:4px 8px;background:rgba(16,185,129,0.15);
+                       border-left:3px solid #10b981;font-size:12px;color:#10b981;">
+                     ✨ NEW CYCLE STARTED — Accumulation zone active
+                   </div>`
+                : moon.full_peaked
+                ? `<div style="margin-top:6px;padding:4px 8px;background:rgba(249,115,22,0.15);
+                       border-left:3px solid #f97316;font-size:12px;color:#f97316;">
+                     ⚡ FULL MOON PEAK — Distribution/reversal window
+                   </div>`
+                : "";
+
+            panelEl.innerHTML = `
+              <div style="display:flex;align-items:flex-start;gap:14px;">
+                <!-- Moon arc display -->
+                <div style="position:relative;width:64px;height:64px;flex-shrink:0;">
+                  <svg width="64" height="64" viewBox="0 0 64 64">
+                    <circle cx="32" cy="32" r="28" fill="none" stroke="#1e293b" stroke-width="6"/>
+                    <circle cx="32" cy="32" r="28" fill="none" stroke="${arcColor}" stroke-width="6"
+                      stroke-dasharray="${(pct/100*175.9).toFixed(1)} 175.9"
+                      stroke-linecap="round"
+                      transform="rotate(-90 32 32)"/>
+                    <text x="32" y="36" text-anchor="middle" font-size="22" fill="${arcColor}">${moon.emoji || "🌙"}</text>
+                  </svg>
+                </div>
+                <!-- Phase info -->
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:15px;font-weight:700;color:#e2e8f0;">
+                    ${moon.emoji} ${moon.phase_name}
+                  </div>
+                  <div style="font-size:12px;color:var(--muted);margin-top:2px;">
+                    Age: ${moon.age_days}d  ·  ${pct.toFixed(0)}% of cycle
+                    · Full in ${moon.days_to_full}d · New in ${moon.days_to_new}d
+                  </div>
+                  <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">
+                    <span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;
+                                 background:rgba(255,255,255,0.08);color:#e2e8f0;">
+                      ${moon.market_phase}
+                    </span>
+                    <span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;
+                                 background:${biasColor}22;color:${biasColor};border:1px solid ${biasColor}44;">
+                      ${moon.market_bias}
+                    </span>
+                  </div>
+                  <div style="font-size:11px;color:#94a3b8;margin-top:6px;line-height:1.4;">
+                    ${moon.gann_narration}
+                  </div>
+                  ${alertHtml}
+                  ${cycleEventHtml}
+                  ${cycleProgressHtml}
+                </div>
+              </div>`;
+        }
+
         async function loadChartOverlays(symbol, timeframe) {
             if (!mclChart) return;
             const params = new URLSearchParams({
@@ -3000,6 +3093,7 @@
                 _refreshMarkers();
                 _applyPredictionSeries(data.prediction_zone || []);
                 _applyGannAngleSeries(data.gann_angles || []);
+                _applyMoonCyclePanel(data.moon || null);
 
                 // Update status
                 const meta = data.meta || {};

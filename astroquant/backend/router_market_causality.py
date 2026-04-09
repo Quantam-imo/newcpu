@@ -2846,6 +2846,98 @@ def market_causality_reset_weights(
 # Chart Overlays — Cycles · Lunar Events · Auto-Pattern Identification
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _build_moon_overlay(candles: list) -> dict:
+    """
+    Compute the current moon phase from the last candle timestamp and return
+    a structured dict for the dashboard cycle/moon display panel.
+    """
+    from datetime import datetime, timezone as _tz
+
+    # ── Pure-math moon phase (same formula as astro_engine.moon_phase) ───────
+    _KNOWN_NEW_MOON_TS = 947167440.0   # 2000-01-06 18:14 UTC in epoch seconds
+    _SYNODIC            = 29.530588853 * 86400.0  # seconds
+
+    last_ts = candles[-1]["time"] if candles else int(datetime.now(_tz.utc).timestamp())
+    elapsed  = last_ts - _KNOWN_NEW_MOON_TS
+    age_secs = elapsed % _SYNODIC
+    age_days = age_secs / 86400.0
+    cycle_pct = (age_days / 29.530588853) * 100.0
+
+    _PHASES = [
+        (0.0,  1.85,  "New Moon",        "NEW_MOON",        "🌑", "#64748b"),
+        (1.85, 7.38,  "Waxing Crescent", "WAXING_CRESCENT", "🌒", "#93c5fd"),
+        (7.38, 9.22,  "First Quarter",   "FIRST_QUARTER",   "🌓", "#fbbf24"),
+        (9.22, 14.75, "Waxing Gibbous",  "WAXING_GIBBOUS",  "🌔", "#f59e0b"),
+        (14.75,16.61, "Full Moon",        "FULL_MOON",        "🌕", "#fcd34d"),
+        (16.61,22.15, "Waning Gibbous",  "WANING_GIBBOUS",  "🌖", "#fb923c"),
+        (22.15,24.46, "Last Quarter",    "LAST_QUARTER",    "🌗", "#f97316"),
+        (24.46,29.53, "Waning Crescent", "WANING_CRESCENT", "🌘", "#9ca3af"),
+    ]
+    phase_name, phase_key, emoji, color = "Waning Crescent", "WANING_CRESCENT", "🌘", "#9ca3af"
+    for lo, hi, name, key, em, col in _PHASES:
+        if lo <= age_days < hi:
+            phase_name, phase_key, emoji, color = name, key, em, col
+            break
+
+    _MOON_BIAS = {
+        "NEW_MOON":        ("ACCUMULATION",  "BUY_ZONE",   "Gann: New cycle starting — seeds of next move planted"),
+        "WAXING_CRESCENT": ("MARKUP",        "BUY",        "Gann: Energy building — watch for breakout confirmation"),
+        "FIRST_QUARTER":   ("DECISION",      "WATCH",      "Gann: Mid-cycle decision — resistance test"),
+        "WAXING_GIBBOUS":  ("MARKUP",        "BUY_STRONG", "Gann: Power accumulating — momentum peak near"),
+        "FULL_MOON":       ("DISTRIBUTION",  "REVERSAL",   "Gann: Cycle peak — distribution zone, reversal risk"),
+        "WANING_GIBBOUS":  ("DISTRIBUTION",  "SELL",       "Gann: Energy dispersing — consider distribution"),
+        "LAST_QUARTER":    ("DECISION",      "WATCH",      "Gann: Mid-decline decision — support test"),
+        "WANING_CRESCENT": ("MARKDOWN",      "SELL_END",   "Gann: Final drain — next accumulation cycle forming"),
+    }
+    market_phase, market_bias, gann_narration = _MOON_BIAS.get(
+        phase_key, ("NEUTRAL", "WATCH", "Moon phase neutral")
+    )
+
+    days_to_full = (14.765 - age_days) % 29.530588853
+    days_to_new  = (29.530588853 - age_days) % 29.530588853
+    if days_to_new < 0.01:
+        days_to_new = 29.530588853
+
+    cycle_started = age_days < 2.0
+    full_peaked   = abs(age_days - 14.765) < 1.5
+
+    # ── Cycle identification from cached summary ──────────────────────────────
+    cycle_event = cycle_progress = cycle_energy = None
+    try:
+        with _cache_lock:
+            summaries = list(_cache_payloads.values())
+        for s in summaries:
+            if s.get("status") == "ok":
+                fut = (s.get("future") or {})
+                cycle_event    = fut.get("cycle_event")
+                cycle_progress = fut.get("cycle_progress_pct")
+                cycle_energy   = fut.get("numerology_energy")
+                break
+    except Exception:
+        pass
+
+    return {
+        "phase_name":     phase_name,
+        "phase_key":      phase_key,
+        "emoji":          emoji,
+        "color":          color,
+        "age_days":       round(age_days, 2),
+        "cycle_pct":      round(cycle_pct, 1),
+        "days_to_full":   round(days_to_full, 1),
+        "days_to_new":    round(days_to_new, 1),
+        "market_phase":   market_phase,
+        "market_bias":    market_bias,
+        "gann_narration": gann_narration,
+        "cycle_started":  cycle_started,
+        "full_peaked":    full_peaked,
+        "display": f"{emoji} {phase_name}  ({cycle_pct:.0f}% cycle)  │  {gann_narration}",
+        "badge":   f"{emoji} {phase_name}",
+        "cycle_event":    cycle_event,
+        "cycle_progress": cycle_progress,
+        "cycle_energy":   cycle_energy,
+    }
+
+
 @router.get("/chart/overlays")
 def chart_overlays(
     symbol: str = Query(default="XAUUSD"),
@@ -3124,6 +3216,8 @@ def chart_overlays(
         "auto_patterns": auto_patterns,
         "prediction_zone": prediction_zone,
         "gann_angles": gann_angles,
+        # ── Moon phase + Gann cycle identification (live) ──────────────────────
+        "moon": _build_moon_overlay(candles),
         "meta": {
             "swing_highs_found": len(swing_highs),
             "swing_lows_found":  len(swing_lows),

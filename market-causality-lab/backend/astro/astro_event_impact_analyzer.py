@@ -32,12 +32,19 @@ def analyze_gann_at_event(df: pd.DataFrame, event_time: pd.Timestamp) -> dict:
     # Calculate Gann degree (price-based angle)
     gann_degree = (math.sqrt(price) * 180) % 360
     
-    # Get event time bar if exists
-    event_df = df[df["time"] == event_time] if "time" in df.columns else None
+    # Get event time bar if exists (normalise tz before equality too)
+    event_df = None
     bars_since_event = 0
     
     if "time" in df.columns:
-        time_diffs = (df["time"] - event_time).abs()
+        # Normalise tz: make both tz-naive (UTC) to avoid pandas TypeError
+        _et = event_time
+        if hasattr(_et, "tzinfo") and _et.tzinfo is not None:
+            _et = _et.replace(tzinfo=None)
+        _col = df["time"]
+        if hasattr(_col.dtype, "tz") and _col.dtype.tz is not None:
+            _col = _col.dt.tz_localize(None)
+        time_diffs = (_col - _et).abs()
         if not time_diffs.empty:
             bars_since_event = int(time_diffs.idxmin())
     

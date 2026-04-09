@@ -5,6 +5,7 @@ Integrates Gann analysis, numerology, market structure, and physics observations
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -15,10 +16,160 @@ from backend.astro.astro_event_narration import generate_astro_narration, format
 from backend.astro.astro_event_impact_analyzer import analyze_astro_event_impact
 
 
+# ─── Pure-math Moon Phase Calculator ─────────────────────────────────────────
+# Reference new moon: 2000-01-06 18:14 UTC (J2000.0)
+_KNOWN_NEW_MOON = datetime(2000, 1, 6, 18, 14, tzinfo=timezone.utc)
+_SYNODIC_MONTH  = 29.530588853   # days
+
+_PHASE_NAMES = [
+    (0.0,   1.85,  "New Moon",        "NEW_MOON"),
+    (1.85,  7.38,  "Waxing Crescent", "WAXING_CRESCENT"),
+    (7.38,  9.22,  "First Quarter",   "FIRST_QUARTER"),
+    (9.22,  14.75, "Waxing Gibbous",  "WAXING_GIBBOUS"),
+    (14.75, 16.61, "Full Moon",       "FULL_MOON"),
+    (16.61, 22.15, "Waning Gibbous",  "WANING_GIBBOUS"),
+    (22.15, 24.46, "Last Quarter",    "LAST_QUARTER"),
+    (24.46, 29.53, "Waning Crescent", "WANING_CRESCENT"),
+]
+
+# Market bias by moon phase (Gann: New Moon = accumulation, Full Moon = distribution/reversal)
+_MOON_MARKET_BIAS = {
+    "NEW_MOON":       ("ACCUMULATION",  "BUY_ZONE",    "Gann: seeds planted — new cycle starting"),
+    "WAXING_CRESCENT":("MARKUP",        "BUY",         "Gann: energy building — continuation"),
+    "FIRST_QUARTER":  ("DECISION",      "WATCH",       "Gann: mid-cycle test — key resistance"),
+    "WAXING_GIBBOUS": ("MARKUP",        "BUY_STRONG",  "Gann: momentum peak approaching"),
+    "FULL_MOON":      ("DISTRIBUTION",  "REVERSAL",    "Gann: cycle peak — watch for reversal"),
+    "WANING_GIBBOUS": ("DISTRIBUTION",  "SELL",        "Gann: energy dispersing — distribution"),
+    "LAST_QUARTER":   ("DECISION",      "WATCH",       "Gann: mid-decline test — key support"),
+    "WANING_CRESCENT":("MARKDOWN",      "SELL_END",    "Gann: final drain — approaching next seed"),
+}
+
+
+def moon_phase(dt: datetime) -> dict:
+    """
+    Compute the moon phase for a given datetime using pure math.
+    No external astronomy library required.
+    Returns:
+        {
+          "phase_name": str,           # "Waxing Gibbous" etc.
+          "phase_key": str,            # "WAXING_GIBBOUS" etc.
+          "cycle_pct": float,          # 0–100 (where in the 29.5-day cycle)
+          "age_days": float,           # days since last new moon
+          "days_to_full": float,       # days until next full moon
+          "days_to_new": float,        # days until next new moon
+          "market_phase": str,         # "MARKUP" / "DISTRIBUTION" etc.
+          "market_bias": str,          # "BUY" / "SELL" / "WATCH"
+          "gann_narration": str,
+          "cycle_started": bool,       # True if within 2 days of a new moon
+          "full_moon_peaked": bool,    # True if within 1.5 days of a full moon
+        }
+    """
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    elapsed_days = (dt - _KNOWN_NEW_MOON).total_seconds() / 86400.0
+    age_days = elapsed_days % _SYNODIC_MONTH  # 0..29.53
+
+    # Phase identification
+    phase_name, phase_key = "Waning Crescent", "WANING_CRESCENT"
+    for lo, hi, name, key in _PHASE_NAMES:
+        if lo <= age_days < hi:
+            phase_name, phase_key = name, key
+            break
+
+    cycle_pct = (age_days / _SYNODIC_MONTH) * 100.0
+
+    # Days to next full moon (14.75 days into cycle)
+    full_moon_age = 14.765  # exact synodic mid-point
+    days_to_full = (full_moon_age - age_days) % _SYNODIC_MONTH
+
+    # Days to next new moon
+    days_to_new = (_SYNODIC_MONTH - age_days) % _SYNODIC_MONTH
+    if days_to_new < 0.01:
+        days_to_new = _SYNODIC_MONTH
+
+    market_phase, market_bias, gann_narration = _MOON_MARKET_BIAS.get(
+        phase_key, ("NEUTRAL", "WATCH", "Moon phase neutral — monitor other signals")
+    )
+
+    return {
+        "phase_name": phase_name,
+        "phase_key": phase_key,
+        "cycle_pct": round(cycle_pct, 2),
+        "age_days": round(age_days, 2),
+        "days_to_full": round(days_to_full, 2),
+        "days_to_new": round(days_to_new, 2),
+        "market_phase": market_phase,
+        "market_bias": market_bias,
+        "gann_narration": gann_narration,
+        "cycle_started": age_days < 2.0,
+        "full_moon_peaked": abs(age_days - full_moon_age) < 1.5,
+    }
+
+
+def _generate_lunar_events(start_year: int = 2020, end_year: int = 2027) -> list[dict]:
+    """Generate New Moon and Full Moon events between start_year and end_year."""
+    events = []
+    # Start from the known new moon and step by synodic months
+    step = _KNOWN_NEW_MOON
+    end_dt = datetime(end_year, 12, 31, tzinfo=timezone.utc)
+    start_dt = datetime(start_year, 1, 1, tzinfo=timezone.utc)
+
+    # Fast-forward to first event after start_dt
+    months_ahead = (start_dt - step).total_seconds() / 86400.0 / _SYNODIC_MONTH
+    step = step + timedelta(days=int(months_ahead) * _SYNODIC_MONTH)
+
+    while step <= end_dt:
+        if step >= start_dt:
+            events.append({
+                "time": step.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                "event": "New Moon",
+                "impact": "high",
+                "category": "lunar",
+                "source": "computed",
+                "detail": f"New lunar cycle begins — Gann accumulation zone. Age=0 days.",
+            })
+        # Full moon ≈ 14.765 days later
+        full = step + timedelta(days=14.765)
+        if start_dt <= full <= end_dt:
+            events.append({
+                "time": full.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                "event": "Full Moon",
+                "impact": "high",
+                "category": "lunar",
+                "source": "computed",
+                "detail": f"Full Moon peak — Gann distribution/reversal zone. Cycle at 50%.",
+            })
+        # First Quarter ≈ 7.4 days
+        fq = step + timedelta(days=7.38)
+        if start_dt <= fq <= end_dt:
+            events.append({
+                "time": fq.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                "event": "First Quarter Moon",
+                "impact": "medium",
+                "category": "lunar",
+                "source": "computed",
+                "detail": "First Quarter — decision point, resistance test.",
+            })
+        # Last Quarter ≈ 22.15 days
+        lq = step + timedelta(days=22.15)
+        if start_dt <= lq <= end_dt:
+            events.append({
+                "time": lq.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                "event": "Last Quarter Moon",
+                "impact": "medium",
+                "category": "lunar",
+                "source": "computed",
+                "detail": "Last Quarter — decision point, support test.",
+            })
+        step = step + timedelta(days=_SYNODIC_MONTH)
+
+    return sorted(events, key=lambda e: e["time"])
+
+
 def load_astro_events(cache: dict | None = None) -> pd.DataFrame:
     """
-    Load pre-generated astrology event dataset (ingresses + nakshatra transitions).
-    Caches in memory to avoid repeated disk reads.
+    Load astrology event dataset. Falls back to computed lunar events if CSV is empty.
     """
     if cache is None:
         cache = {}
@@ -26,37 +177,44 @@ def load_astro_events(cache: dict | None = None) -> pd.DataFrame:
     if "astro_events_df" in cache:
         return cache["astro_events_df"]
 
-    astro_file = Path("market-causality-lab/data/astro_nakshatra_events_2000_2026.csv")
-    if not astro_file.exists():
-        # Return empty frame if file doesn't exist
-        empty = pd.DataFrame({
-            "time": pd.Series([], dtype="datetime64[ns]"),
-            "event": pd.Series([], dtype=str),
-            "impact": pd.Series([], dtype=str),
-            "category": pd.Series([], dtype=str),
-            "source": pd.Series([], dtype=str),
-            "detail": pd.Series([], dtype=str),
-        })
-        cache["astro_events_df"] = empty
-        return empty
+    df = pd.DataFrame()
 
-    try:
-        df = pd.read_csv(astro_file)
+    # Try all path variants (works from any cwd)
+    for candidate in [
+        Path("data/astro_nakshatra_events_2000_2026.csv"),
+        Path("market-causality-lab/data/astro_nakshatra_events_2000_2026.csv"),
+        Path(__file__).parent.parent.parent / "data" / "astro_nakshatra_events_2000_2026.csv",
+    ]:
+        if candidate.exists():
+            try:
+                _df = pd.read_csv(candidate)
+                _df["time"] = pd.to_datetime(_df["time"], utc=True, errors="coerce")
+                _df = _df.dropna(subset=["time"])
+                if len(_df) > 0:
+                    df = _df
+                    break
+            except Exception:
+                pass
+
+    # If CSV is missing or entirely empty — generate lunar events on-the-fly
+    if df.empty:
+        rows = _generate_lunar_events(2020, 2027)
+        df = pd.DataFrame(rows)
         df["time"] = pd.to_datetime(df["time"], utc=True, errors="coerce")
-        cache["astro_events_df"] = df
-        return df
-    except Exception:
-        # Return empty frame on read error
-        empty = pd.DataFrame({
-            "time": pd.Series([], dtype="datetime64[ns]"),
-            "event": pd.Series([], dtype=str),
-            "impact": pd.Series([], dtype=str),
-            "category": pd.Series([], dtype=str),
-            "source": pd.Series([], dtype=str),
-            "detail": pd.Series([], dtype=str),
-        })
-        cache["astro_events_df"] = empty
-        return empty
+        # Persist so future calls are fast
+        for out_candidate in [
+            Path("data/astro_nakshatra_events_2000_2026.csv"),
+            Path("market-causality-lab/data/astro_nakshatra_events_2000_2026.csv"),
+        ]:
+            if out_candidate.parent.exists():
+                try:
+                    df.to_csv(out_candidate, index=False)
+                except Exception:
+                    pass
+                break
+
+    cache["astro_events_df"] = df
+    return df
 
 
 def find_nearby_astro_event(df: pd.DataFrame, ts: pd.Timestamp, hours_window: int = 12) -> dict | None:
@@ -145,9 +303,22 @@ def astro_engine(df, cache: dict | None = None):
     else:
         strength = "NORMAL"
 
+    # ── Moon phase (computed from latest bar timestamp) ───────────────────────
+    current_bar_ts = df["time"].iloc[-1] if "time" in df.columns and not df.empty else pd.Timestamp.now("UTC")
+    if isinstance(current_bar_ts, pd.Timestamp):
+        bar_dt = current_bar_ts.to_pydatetime()
+        if bar_dt.tzinfo is None:
+            bar_dt = bar_dt.replace(tzinfo=timezone.utc)
+    else:
+        bar_dt = datetime.now(timezone.utc)
+    moon_info = moon_phase(bar_dt)
+
+    # Update nakshatra strength if moon is at a key phase
+    if moon_info["phase_key"] in ("NEW_MOON", "FULL_MOON"):
+        strength = "HIGH"
+
     # Event detection: find nearby astro event within ±12 hours
     astro_events_df = load_astro_events(cache)
-    current_bar_ts = df["time"].iloc[-1] if "time" in df.columns and not df.empty else pd.Timestamp.now("UTC")
 
     event_info = None
     if not astro_events_df.empty:
@@ -184,4 +355,10 @@ def astro_engine(df, cache: dict | None = None):
         "nakshatra_cycle": cycle,
         "strength": strength,
         "nearby_event": event_info,
+        "moon": moon_info,
     }
+
+
+def _run_astro_engine(df, cache: dict | None = None):
+    """Alias kept for back-compat."""
+    return astro_engine(df, cache)

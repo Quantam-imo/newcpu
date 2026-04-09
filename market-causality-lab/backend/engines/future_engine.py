@@ -1,28 +1,92 @@
 def future_engine(state, phase, time_signal, harmonic, numerology):
+    """
+    Identify Gann cycle phase and project near-term direction.
+    Produces human-readable cycle identification markers.
+    """
     prediction = {}
 
-    # Direction logic
-    if phase == "ACCUMULATION" and "STRONG TURN WINDOW" in time_signal["timing"]:
-        prediction["direction"] = "EXPANSION SOON"
+    # ── Numerology meaning → cycle energy ────────────────────────────────────
+    num_meaning = str(numerology.get("meaning") or "").upper()
+    timing      = str(time_signal.get("timing") or "").upper()
+    harmonic_pattern = str(harmonic.get("pattern") or "NONE").upper()
+
+    is_strong_time   = "STRONG TURN" in timing
+    is_turn_window   = "TURN WINDOW" in timing
+    is_expansion_num = num_meaning in ("START", "EXPANSION", "POWER")
+    is_reversal_num  = num_meaning in ("REVERSAL", "COMPLETION", "CHANGE")
+
+    # ── Gann cycle identification ─────────────────────────────────────────────
+    # Map phase + numerology → Gann cycle identification label
+    if phase == "ACCUMULATION":
+        if is_strong_time or is_expansion_num:
+            prediction["direction"] = "EXPANSION STARTING"
+            prediction["cycle_event"] = "CYCLE STARTED — Accumulation complete, markup imminent"
+        else:
+            prediction["direction"] = "ACCUMULATION ONGOING"
+            prediction["cycle_event"] = "CYCLE IN PROGRESS — Price absorbing supply"
+
+    elif phase == "MARKUP":
+        if is_reversal_num or is_strong_time:
+            prediction["direction"] = "DISTRIBUTION APPROACHING"
+            prediction["cycle_event"] = "CYCLE PEAK NEAR — Distribution zone forming"
+        else:
+            prediction["direction"] = "MARKUP CONTINUATION"
+            prediction["cycle_event"] = "MARKUP PHASE ACTIVE — Trend continuation expected"
 
     elif phase == "DISTRIBUTION":
-        prediction["direction"] = "REVERSAL SOON"
+        if is_strong_time or is_reversal_num:
+            prediction["direction"] = "REVERSAL SOON"
+            prediction["cycle_event"] = "CYCLE TOP — Reversal setup in progress"
+        else:
+            prediction["direction"] = "DISTRIBUTION ONGOING"
+            prediction["cycle_event"] = "DISTRIBUTION PHASE — Supply entering market"
+
+    elif phase == "MARKDOWN":
+        if is_expansion_num or is_strong_time:
+            prediction["direction"] = "BOTTOM FORMING"
+            prediction["cycle_event"] = "CYCLE BOTTOM NEAR — Markdown exhausting"
+        else:
+            prediction["direction"] = "MARKDOWN CONTINUATION"
+            prediction["cycle_event"] = "MARKDOWN PHASE ACTIVE — Decline continuing"
+
+    elif phase in ("CONSOLIDATION", "NEUTRAL"):
+        if is_strong_time:
+            prediction["direction"] = "BREAKOUT IMMINENT"
+            prediction["cycle_event"] = "COIL PHASE — Energy compressing, breakout near"
+        else:
+            prediction["direction"] = "SIDEWAYS"
+            prediction["cycle_event"] = "CONSOLIDATION PHASE — Range-bound, await breakout"
 
     else:
         prediction["direction"] = "UNCLEAR"
+        prediction["cycle_event"] = f"PHASE={phase} — Monitor for cycle trigger"
 
-    # Strength
+    # ── Strength scoring ──────────────────────────────────────────────────────
     strength = 0
 
-    if harmonic["pattern"] != "NONE":
+    if harmonic_pattern != "NONE":
+        strength += 1  # Harmonic pattern confirms cycle
+
+    if is_reversal_num or is_expansion_num:
+        strength += 1  # Numerology aligns
+
+    if is_strong_time:
+        strength += 2  # Time window is critical
+    elif is_turn_window:
         strength += 1
 
-    if numerology["meaning"] in ["REVERSAL", "COMPLETION"]:
-        strength += 1
+    if phase in ("ACCUMULATION", "DISTRIBUTION"):
+        strength += 1  # Phase transition zones are high probability
 
-    if time_signal["timing"] == "STRONG TURN WINDOW":
-        strength += 2
+    prediction["strength"] = min(4, strength)
 
-    prediction["strength"] = strength
+    # ── Cycle progress description ────────────────────────────────────────────
+    phase_pct = {
+        "ACCUMULATION": 10, "MARKUP": 35, "DISTRIBUTION": 60,
+        "MARKDOWN": 80, "CONSOLIDATION": 50, "NEUTRAL": 50,
+    }
+    prediction["cycle_progress_pct"] = phase_pct.get(phase, 50)
+    prediction["numerology_energy"] = num_meaning if num_meaning else "NEUTRAL"
+    prediction["timing_window"] = timing if timing else "NORMAL"
 
     return prediction

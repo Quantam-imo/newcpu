@@ -292,6 +292,28 @@ def _build_gann_mindset_context(result: dict, signal_ctx: dict, gp: dict) -> dic
 
     cycle = str(numerology.get("numerology_cycle") or "NEUTRAL")
     harmonious = bool(numerology.get("harmonious_alignment", False))
+
+    # ── Fallback: derive numerology cycle from top-level result numerology ────
+    if cycle == "NEUTRAL":
+        _num_result = (result or {}).get("numerology") or {}
+        _meaning = str(_num_result.get("meaning") or "").upper()
+        # Map numerology meaning → Gann cycle phase name
+        _meaning_to_cycle = {
+            "START":      "EXPANSION",
+            "EXPANSION":  "EXPANSION",
+            "MARKUP":     "EXPANSION",
+            "COMPLETION": "COMPLETION",
+            "REVERSAL":   "REVERSAL",
+            "CHANGE":     "REVERSAL",
+            "HARMONY":    "CONSOLIDATION",
+            "STRUCTURE":  "CONSOLIDATION",
+            "BALANCE":    "CONSOLIDATION",
+            "POWER":      "EXPANSION",
+        }
+        if _meaning in _meaning_to_cycle:
+            cycle = _meaning_to_cycle[_meaning]
+            harmonious = _meaning in ("HARMONY", "EXPANSION", "STRUCTURE", "COMPLETION")
+
     time_phase = f"{cycle} ({'harmonious' if harmonious else 'mixed'})"
 
     bos = bool(structure.get("bos_confirmed", False))
@@ -305,6 +327,21 @@ def _build_gann_mindset_context(result: dict, signal_ctx: dict, gp: dict) -> dic
     if acceleration is None:
         acceleration = gp.get("physics_acceleration_price_per_hour2")
     acceleration_val = _safe_float(acceleration, 0.0)
+
+    # ── Fallback: derive momentum from velocity/acceleration in gp ───────────
+    if momentum == "NEUTRAL":
+        _vel = _safe_float(gp.get("physics_velocity_price_per_hour"), 0.0)
+        if abs(_vel) > 20.0:
+            momentum = "STRONG_UP" if _vel > 0 else "STRONG_DOWN"
+        elif abs(_vel) > 5.0:
+            momentum = "MILD_UP" if _vel > 0 else "MILD_DOWN"
+        elif abs(_vel) > 0.5:
+            # Acceleration opposing velocity = fading momentum
+            if _vel * acceleration_val < 0:
+                momentum = "FADING_UP" if _vel > 0 else "FADING_DOWN"
+            else:
+                momentum = "MILD_UP" if _vel > 0 else "MILD_DOWN"
+
     tape_text = "force is still pushing" if acceleration_val >= 0 else "motion is decaying"
 
     start_time = signal_ctx.get("signal_start_time") or "--"
@@ -454,6 +491,25 @@ def record_observation(
         "date_time_code": pd.to_datetime(trend_ctx.get("latest_time"), errors="coerce").strftime("%Y%m%d%H%M")
         if trend_ctx.get("latest_time")
         else None,
+        # ── NEW: Moon phase + Gann cycle identification ────────────────────────
+        "moon_phase": ((result or {}).get("astro") or {}).get("moon", {}) and
+                      (result or {}).get("astro", {}).get("moon", {}).get("phase_name"),
+        "moon_phase_key": ((result or {}).get("astro") or {}).get("moon", {}) and
+                          (result or {}).get("astro", {}).get("moon", {}).get("phase_key"),
+        "moon_cycle_pct": ((result or {}).get("astro") or {}).get("moon", {}) and
+                          (result or {}).get("astro", {}).get("moon", {}).get("cycle_pct"),
+        "moon_age_days": ((result or {}).get("astro") or {}).get("moon", {}) and
+                         (result or {}).get("astro", {}).get("moon", {}).get("age_days"),
+        "moon_market_phase": ((result or {}).get("astro") or {}).get("moon", {}) and
+                              (result or {}).get("astro", {}).get("moon", {}).get("market_phase"),
+        "moon_gann_narration": ((result or {}).get("astro") or {}).get("moon", {}) and
+                                (result or {}).get("astro", {}).get("moon", {}).get("gann_narration"),
+        "moon_cycle_started": bool(((result or {}).get("astro") or {}).get("moon", {}) and
+                                   (result or {}).get("astro", {}).get("moon", {}).get("cycle_started")),
+        "moon_full_peaked": bool(((result or {}).get("astro") or {}).get("moon", {}) and
+                                 (result or {}).get("astro", {}).get("moon", {}).get("full_moon_peaked")),
+        "cycle_event": ((result or {}).get("future") or {}).get("cycle_event"),
+        "cycle_progress_pct": ((result or {}).get("future") or {}).get("cycle_progress_pct"),
     }
 
     csv_path = out_dir / "market_observations.csv"
