@@ -1723,6 +1723,15 @@
                     </div>
                 </div>
 
+                <!-- ── Gann Astro Sub-System Tab Strip ─────────────────── -->
+                <div class="gann-sub-tabs" id="gannSubTabs">
+                    <button class="gann-sub-tab active" data-tab="astro">🪐 Astrology</button>
+                    <button class="gann-sub-tab" data-tab="lesson1">🌙 Lesson 1: Lunar</button>
+                    <button class="gann-sub-tab" data-tab="lesson2">🔯 Lesson 2: Vibration</button>
+                    <button class="gann-sub-tab" data-tab="lesson3">📐 Lesson 3: ASC+SQ9</button>
+                </div>
+
+                <div id="gannTab-astro" class="gann-tab-panel">
                 <!-- ── Astrology Module ─────────────────────────── -->
                 <div class="astro-module">
                     <div class="astro-module-title">🪐 Planetary Astrology Integration</div>
@@ -1784,7 +1793,9 @@
                     </div>
                 </div>
                 <!-- ── End Astrology Module ──────────────────────── -->
+                </div><!-- /gannTab-astro -->
 
+                <div id="gannTab-lesson1" class="gann-tab-panel" style="display:none">
                 <!-- ── Lunar Expansion Engine ─────────────────── -->
                 <div class="lunar-module" id="lunarModule">
                     <div class="lunar-module-title">
@@ -1857,7 +1868,9 @@
                     </div>
                 </div>
                 <!-- ── End Lunar Expansion Engine ────────────────── -->
+                </div><!-- /gannTab-lesson1 -->
 
+                <div id="gannTab-lesson2" class="gann-tab-panel" style="display:none">
                 <!-- ── Law of Vibration: Node + 3-6-9 Engine ──── -->
                 <div class="vibration-module" id="vibrationModule">
                     <div class="vibration-module-title">
@@ -1994,12 +2007,12 @@
                     </div>
                 </div>
                 <!-- ── End Law of Vibration ───────────────────────── -->
-            </div>
+                </div><!-- /gannTab-lesson2 -->
 
-            <!-- ── ASC + Square of 9: Lesson 3 ──────────────────────────────── -->
-            <div class="section">
-                <div class="section-title" style="display:flex;align-items:center;gap:8px;">
-                    📐 Gann Astro Lesson 3 — ASC + Square of 9
+                <div id="gannTab-lesson3" class="gann-tab-panel" style="display:none">
+                <!-- ── ASC + Square of 9 — Lesson 3 ──────────────── -->
+                <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:12px;">
+                    <span style="font-size:13px;font-weight:700;color:var(--text);">📐 ASC + Square of 9</span>
                     <span class="ai-badge">LESSON 3</span>
                     <span id="ascSq9RefreshBadge" style="font-size:9px;color:var(--muted);margin-left:auto;">● refreshing...</span>
                 </div>
@@ -2106,8 +2119,10 @@
 
                     </div><!-- /asc-sq9-grid -->
                 </div><!-- /asc-sq9-module -->
-            </div>
-            <!-- ── End ASC + SQ9 ──────────────────────────────────────────────── -->
+                </div><!-- /gannTab-lesson3 -->
+
+            </div><!-- /Gann 360° section -->
+            <!-- ── End Gann 360° + Astro Sub-System ─────────────────────────── -->
 
             <!-- Gann Deep Q&A (Date Selectable) -->
             <div class="section">
@@ -4121,6 +4136,33 @@
             setInterval(fetchAndUpdateAscSq9, 30_000);
         })();
         // ── End ASC + SQ9 ────────────────────────────────────────────────────
+
+        // ── Gann Sub-System Tab Switching ─────────────────────────────────────
+        (() => {
+            const strip = document.getElementById("gannSubTabs");
+            if (!strip) return;
+
+            const TABS = ["astro", "lesson1", "lesson2", "lesson3"];
+
+            function activateTab(tab) {
+                strip.querySelectorAll(".gann-sub-tab").forEach(btn => {
+                    btn.classList.toggle("active", btn.dataset.tab === tab);
+                });
+                TABS.forEach(t => {
+                    const panel = document.getElementById("gannTab-" + t);
+                    if (panel) panel.style.display = t === tab ? "" : "none";
+                });
+            }
+
+            strip.addEventListener("click", e => {
+                const btn = e.target.closest(".gann-sub-tab");
+                if (btn && btn.dataset.tab) activateTab(btn.dataset.tab);
+            });
+
+            // Expose for external use (e.g. deep-link to lesson tab)
+            window.gannTabActivate = activateTab;
+        })();
+        // ── End Gann Sub Tabs ─────────────────────────────────────────────────
 
         document.getElementById("loadBtn").addEventListener("click", () => loadAnalysis(false));
         document.getElementById("refreshBtn").addEventListener("click", () => loadAnalysis(true));
