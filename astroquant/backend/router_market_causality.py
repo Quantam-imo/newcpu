@@ -1236,7 +1236,205 @@ def _compute_summary(
         _cache_payloads[key] = summary
         _cache_ts_by_key[key] = time.time()
 
+    # ── Auto-learning: record prediction + resolve expired predictions ────────
+    if summary.get("status") == "ok":
+        import threading as _threading
+        _threading.Thread(
+            target=_auto_record_and_resolve,
+            args=(summary, symbol),
+            daemon=True,
+        ).start()
+
     return summary
+
+
+def _auto_record_and_resolve(summary: dict[str, Any], symbol: str) -> None:
+    """
+    Background task called after every fresh _compute_summary():
+      1. If signal is BUY or SELL — record it as a new prediction so the AI can learn.
+      2. Auto-resolve any expired predictions against the latest price.
+
+    This is the core of 'machine absorption': every MCL analysis call feeds the
+    learning engine, and outcomes are resolved automatically when the forecast
+    horizon expires.
+    """
+    try:
+        _auto_record_prediction(summary)
+    except Exception as exc:
+        logging.debug("_auto_record_prediction error: %s", exc)
+
+    try:
+        _auto_resolve_expired(symbol)
+    except Exception as exc:
+        logging.debug("_auto_resolve_expired error: %s", exc)
+
+
+def _auto_record_prediction(summary: dict[str, Any]) -> None:
+    """
+    Convert an MCL summary into a recorded prediction for the learning engine.
+    Only records directional signals (BUY / SELL) — never WAIT.
+    De-duplicates on observation_id so each fresh signal is only recorded once.
+    """
+    signal = str(summary.get("signal") or "").upper()
+    if signal not in ("BUY", "SELL"):
+        return
+
+    # Build a stable prediction_id from the observation so we don't duplicate
+    obs_id = str(summary.get("observation_id") or "")
+    import hashlib as _hashlib, uuid as _uuid
+    if obs_id:
+        pid = str(_uuid.UUID(bytes=_hashlib.md5(obs_id.encode()).digest()))
+    else:
+        # Fallback: use symbol + signal + rounded timestamp (nearest 5 min)
+        ts_bucket = int(time.time() // 300) * 300
+        pid = str(_uuid.UUID(bytes=_hashlib.md5(f"{summary.get('symbol')}|{signal}|{ts_bucket}".encode()).digest()))
+
+    # Don't re-record if already stored
+    existing_ids = {p.get("id") for p in _LEARNING_ENGINE.predictions}
+    if pid in existing_ids:
+        return
+
+    # Extract signal booleans from observation
+    obs = summary.get("observation") or {}
+    tl = summary.get("trade_levels") or {}
+
+    def _sf(v: Any, default: float = 0.0) -> float:
+        try:
+            return float(v) if v is not None else default
+        except (TypeError, ValueError):
+            return default
+
+    entry_price  = _sf(tl.get("entry") or summary.get("observation_signal_start_price"), 0.0)
+    stop_price   = _sf(tl.get("stop_loss"), 0.0)
+    target_price = _sf(tl.get("take_profit"), 0.0)
+
+    # Need valid prices to record
+    if entry_price <= 0:
+        return
+    if stop_price <= 0:
+        stop_price = entry_price * (0.997 if signal == "BUY" else 1.003)
+    if target_price <= 0:
+        target_price = entry_price * (1.006 if signal == "BUY" else 0.994)
+
+    confidence_raw = _sf(summary.get("confidence"), 50.0)
+    # Confidence may be 0–100 or 0–1
+    confluence_score = confidence_raw / 100.0 if confidence_raw > 1.0 else confidence_raw
+
+    # Signal boolean flags from observation confirmations + system outputs
+    geometry_signal  = bool(obs.get("confirmation_geometry"))
+    time_signal      = bool(obs.get("confirmation_time"))
+    structure_signal = bool(obs.get("confirmation_structure"))
+    momentum_signal  = bool(
+        str((obs.get("physics_momentum_runtime") or {}).get("direction") or "").lower()
+        in ("up", "bullish") and signal == "BUY"
+        or
+        str((obs.get("physics_momentum_runtime") or {}).get("direction") or "").lower()
+        in ("down", "bearish") and signal == "SELL"
+    )
+    gann_signal      = bool(summary.get("gann_confluence_ready"))
+    ict_signal       = _sf(summary.get("institutional_score"), 0.0) > 0.55
+    confluence_signal = bool(summary.get("math_verdict") in ("PASS", "HIGH_CONFIDENCE"))
+
+    # Forecast horizon from signal window hours (default 1 day)
+    window_hours = _sf(summary.get("observation_signal_window_hours"), 24.0)
+    forecast_horizon_days = max(1, int(round(window_hours / 24.0)))
+
+    try:
+        result = _LEARNING_ENGINE.record_prediction(
+            prediction_id=pid,
+            direction=signal,
+            confluence_score=confluence_score,
+            geometry_signal=geometry_signal,
+            time_signal=time_signal,
+            structure_signal=structure_signal,
+            momentum_signal=momentum_signal,
+            gann_signal=gann_signal,
+            ict_signal=ict_signal,
+            entry_price=entry_price,
+            stop_price=stop_price,
+            target_price=target_price,
+            forecast_horizon_days=forecast_horizon_days,
+            confluence_signal=confluence_signal,
+        )
+        if result.get("status") not in ("error", None):
+            logging.info(
+                "MCL auto-prediction recorded: %s %s @ %.4f  (id=%s horizon=%dd)",
+                signal, summary.get("symbol", "?"), entry_price, pid, forecast_horizon_days,
+            )
+    except Exception as exc:
+        logging.debug("record_prediction failed: %s", exc)
+
+
+def _auto_resolve_expired(symbol: str) -> None:
+    """
+    Resolve any recorded predictions whose forecast horizon has passed.
+    Called from the background thread so it never blocks the API response.
+    """
+    from datetime import datetime, timezone as _tz
+    now_utc = datetime.now(_tz.utc)
+
+    resolved_ids: set[str] = {
+        o.get("prediction_id")
+        for o in _LEARNING_ENGINE.realized_outcomes
+        if o.get("prediction_id")
+    }
+
+    # Fetch current price once
+    current_price: float | None = None
+    try:
+        resp = market_causality_live_price(symbol=symbol)
+        if resp.get("status") == "ok":
+            current_price = float(resp["price"])
+    except Exception:
+        pass
+
+    if current_price is None:
+        return
+
+    for pred in list(_LEARNING_ENGINE.predictions):
+        pid = pred.get("id")
+        if not pid or pid in resolved_ids:
+            continue
+        try:
+            # Accept either recorded_at (ISO string) or prediction_timestamp (unix int)
+            recorded_raw = pred.get("recorded_at")
+            ts_raw = pred.get("prediction_timestamp")
+            if recorded_raw:
+                recorded_at = datetime.fromisoformat(
+                    str(recorded_raw).replace("Z", "+00:00")
+                )
+                if recorded_at.tzinfo is None:
+                    recorded_at = recorded_at.replace(tzinfo=_tz.utc)
+            elif ts_raw:
+                from datetime import timezone as _tz2
+                recorded_at = datetime.fromtimestamp(float(ts_raw), tz=_tz2.utc)
+            else:
+                continue
+
+            horizon_days = int(pred.get("forecast_horizon_days") or 1)
+            elapsed_days = (now_utc - recorded_at).total_seconds() / 86400.0
+            if elapsed_days < horizon_days:
+                continue
+
+            entry_price = float(pred.get("entry_price") or current_price)
+            move = current_price - entry_price
+            direction = "UP" if move > 0.10 else ("DOWN" if move < -0.10 else "SIDEWAYS")
+            pips = abs(round(move, 2))
+
+            result = _LEARNING_ENGINE.record_outcome(
+                prediction_id=pid,
+                realized_price=current_price,
+                outcome_direction=direction,
+                actual_move_pips=pips,
+                timeframe_reached=max(1, int(elapsed_days * 24)),
+            )
+            if result.get("status") not in ("error", None):
+                logging.info(
+                    "MCL auto-resolved: %s → %s %.4f→%.4f was_correct=%s",
+                    pid[:8], direction, entry_price, current_price, result.get("was_correct"),
+                )
+        except Exception as exc:
+            logging.debug("auto_resolve pred %s error: %s", str(pid)[:8], exc)
 
 
 def _compute_timeframe_matrix(
@@ -2858,7 +3056,7 @@ def chart_overlays(
                 "type": "prediction",
             })
     except Exception as _exc:
-        logger.debug("Prediction zone compute failed: %s", _exc)
+        logging.debug("Prediction zone compute failed: %s", _exc)
 
     # ── 6. Gann angle lines from last major swing low ──────────────────────
     gann_angles = []
@@ -2884,7 +3082,7 @@ def chart_overlays(
                     ],
                 })
     except Exception as _exc:
-        logger.debug("Gann angle lines compute failed: %s", _exc)
+        logging.debug("Gann angle lines compute failed: %s", _exc)
 
     return {
         "status": "ok",
