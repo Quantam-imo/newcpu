@@ -621,6 +621,48 @@
         .cal-moon-label.new  { color: #818cf8; }
         /* ── End Astro Module ───────────────────────────────────────────── */
 
+        /* ── Lunar Expansion Engine ─────────────────────────────────────── */
+        .lunar-module { margin-top: 24px; border-top: 1px solid var(--border); padding-top: 18px; }
+        .lunar-module-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 14px; letter-spacing: .3px; }
+        .lunar-layout { display: grid; grid-template-columns: 240px 1fr; gap: 18px; align-items: start; }
+        @media (max-width: 700px) { .lunar-layout { grid-template-columns: 1fr; } }
+        .lunar-wheel-wrap { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        #lunarCanvas { border-radius: 50%; }
+        .lunar-phase-badge {
+            display: inline-block; padding: 4px 14px; border-radius: 20px;
+            font-size: 12px; font-weight: 700; letter-spacing: .5px;
+        }
+        .lunar-phase-badge.SEED            { background: rgba(107,114,128,.18); color: #9ca3af; border: 1px solid #374151; }
+        .lunar-phase-badge.EARLY_EXPANSION { background: rgba(245,158,11,.15);  color: #fbbf24; border: 1px solid #f59e0b; }
+        .lunar-phase-badge.MOMENTUM        { background: rgba(16,185,129,.18);  color: #10b981; border: 1px solid #10b981; }
+        .lunar-phase-badge.EXHAUSTION      { background: rgba(248,113,113,.15); color: #f87171; border: 1px solid #ef4444; }
+        .lunar-phase-badge.FULL_MOON_APEX  { background: rgba(252,211,77,.15);  color: #fcd34d; border: 1px solid #fcd34d; }
+        .lunar-phase-badge.DRIFT           { background: rgba(107,114,128,.12); color: #6b7280; border: 1px solid #374151; }
+        .lunar-phase-badge.TRANSITION      { background: rgba(56,189,248,.12);  color: var(--accent); border: 1px solid var(--accent); }
+        .lunar-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .lunar-stat { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+        .lunar-stat .k { font-size: 9px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 4px; }
+        .lunar-stat .v { font-size: 15px; font-weight: 700; color: var(--accent); }
+        .lunar-stat .v.green  { color: #10b981; }
+        .lunar-stat .v.yellow { color: #fbbf24; }
+        .lunar-stat .v.red    { color: #f87171; }
+        .lunar-stat .v.grey   { color: #6b7280; }
+        .lunar-score-bar { height: 6px; border-radius: 3px; background: var(--border); margin-top: 6px; overflow: hidden; }
+        .lunar-score-fill { height: 100%; border-radius: 3px; transition: width .6s ease; background: linear-gradient(90deg, #818cf8, #fcd34d); }
+        .lunar-ict-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-alt); }
+        .lunar-ict-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .lunar-ict-dot.pass { background: #10b981; box-shadow: 0 0 6px #10b981; }
+        .lunar-ict-dot.fail { background: #6b7280; }
+        .lunar-lesson-note { font-size: 11px; color: var(--muted); line-height: 1.55; margin-top: 10px;
+            padding: 10px 12px; border-radius: 8px; border-left: 3px solid var(--accent);
+            background: rgba(56,189,248,.05); font-style: italic; }
+        .lunar-wax-indicator { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); margin-top: 6px; }
+        .lunar-wax-indicator .arrow { font-size: 16px; }
+        .lunar-wax-indicator .wax-label { font-weight: 700; }
+        .lunar-wax-indicator .wax-label.waxing  { color: #fcd34d; }
+        .lunar-wax-indicator .wax-label.waning  { color: #818cf8; }
+        /* ── End Lunar Expansion Engine ─────────────────────────────────── */
+
         .ai-badge {
             display: inline-block;
             background: linear-gradient(135deg, rgba(56, 189, 248, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%);
@@ -1645,6 +1687,79 @@
                     </div>
                 </div>
                 <!-- ── End Astrology Module ──────────────────────── -->
+
+                <!-- ── Lunar Expansion Engine ─────────────────── -->
+                <div class="lunar-module" id="lunarModule">
+                    <div class="lunar-module-title">
+                        🌙 Gann Astro Lesson 1 — Lunar Expansion Engine
+                        <span style="font-size:10px;font-weight:400;color:var(--muted);margin-left:8px; font-style:italic;">
+                            Market breathes with light · New Moon → Full Moon = accumulation → expansion
+                        </span>
+                        <span id="lunarRefreshBadge" style="font-size:9px;color:var(--muted);margin-left:auto;float:right;">● refreshing...</span>
+                    </div>
+
+                    <div class="lunar-layout">
+                        <!-- Left: 360° Lunar Cycle Ring -->
+                        <div class="lunar-wheel-wrap">
+                            <canvas id="lunarCanvas" width="220" height="220"></canvas>
+                            <div id="lunarPhaseBadge" class="lunar-phase-badge SEED">SEED</div>
+                            <div class="lunar-wax-indicator">
+                                <span class="arrow" id="lunarWaxArrow">🌒</span>
+                                <span class="wax-label waxing" id="lunarWaxLabel">WAXING</span>
+                                <span style="font-size:10px;" id="lunarCycleDayLabel">Day --</span>
+                            </div>
+                        </div>
+
+                        <!-- Right: Stats + lesson -->
+                        <div>
+                            <div class="lunar-stats-grid">
+                                <div class="lunar-stat">
+                                    <div class="k">Cycle Day</div>
+                                    <div class="v" id="lunarCycleDay">--</div>
+                                    <div style="font-size:9px;color:var(--muted);margin-top:2px;">of 29.53 days</div>
+                                </div>
+                                <div class="lunar-stat">
+                                    <div class="k">Moon Phase</div>
+                                    <div class="v" style="font-size:12px;" id="lunarMoonPhaseName">--</div>
+                                    <div style="font-size:9px;color:var(--muted);margin-top:2px;" id="lunarMoonAngle">--° Sun–Moon</div>
+                                </div>
+                                <div class="lunar-stat">
+                                    <div class="k">Expansion Score</div>
+                                    <div class="v" id="lunarExpScore">--</div>
+                                    <div class="lunar-score-bar"><div class="lunar-score-fill" id="lunarScoreFill" style="width:0%"></div></div>
+                                </div>
+                                <div class="lunar-stat">
+                                    <div class="k">Gann Wheel Angle</div>
+                                    <div class="v" id="lunarGannAngle">--°</div>
+                                    <div style="font-size:9px;color:var(--muted);margin-top:2px;" id="lunarGannKey">Key: --° (orb --°)</div>
+                                </div>
+                                <div class="lunar-stat">
+                                    <div class="k">Trade Bias</div>
+                                    <div class="v" id="lunarTradeBias">--</div>
+                                </div>
+                                <div class="lunar-stat">
+                                    <div class="k">Next Momentum</div>
+                                    <div class="v" id="lunarNextMomentum">--</div>
+                                    <div style="font-size:9px;color:var(--muted);margin-top:2px;">days away</div>
+                                </div>
+                            </div>
+
+                            <!-- ICT filter -->
+                            <div class="lunar-ict-row">
+                                <div class="lunar-ict-dot fail" id="lunarIctDot"></div>
+                                <span style="font-size:11px;font-weight:600;color:var(--text);">ICT Phase Filter:</span>
+                                <span style="font-size:11px;" id="lunarIctStatus">Not in active phase</span>
+                                <span style="font-size:10px;color:var(--muted);margin-left:auto;">Requires sweep + displacement</span>
+                            </div>
+
+                            <!-- Lesson note -->
+                            <div class="lunar-lesson-note" id="lunarLessonNote">
+                                Loading Gann Lesson 1 context...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- ── End Lunar Expansion Engine ────────────────── -->
             </div>
 
             <!-- Gann Deep Q&A (Date Selectable) -->
@@ -3105,6 +3220,229 @@
             }
         })();
         // ── End Gann 360° Calendar ───────────────────────────────────────────
+
+        // ── Lunar Expansion Engine ───────────────────────────────────────────
+        (function initLunarEngine() {
+            const PHASE_COLORS = {
+                SEED:            "#6b7280",
+                EARLY_EXPANSION: "#f59e0b",
+                MOMENTUM:        "#10b981",
+                EXHAUSTION:      "#ef4444",
+                FULL_MOON_APEX:  "#fcd34d",
+                DRIFT:           "#374151",
+                TRANSITION:      "#38bdf8",
+            };
+            const BIAS_COLOR = {
+                LONG_BIAS:      "#10b981",
+                WATCH_SETUP:    "#f59e0b",
+                EXIT_PARTIAL:   "#f87171",
+                EXIT_FULL:      "#fcd34d",
+                AVOID:          "#6b7280",
+                WAIT:           "#38bdf8",
+            };
+
+            function drawLunarWheel(cycleDay, phase) {
+                const canvas = document.getElementById("lunarCanvas");
+                if (!canvas) return;
+                const ctx = canvas.getContext("2d");
+                const W = canvas.width, H = canvas.height;
+                const cx = W / 2, cy = H / 2, R = W / 2 - 14;
+                ctx.clearRect(0, 0, W, H);
+
+                // Background circle
+                ctx.beginPath();
+                ctx.arc(cx, cy, R, 0, 2 * Math.PI);
+                ctx.strokeStyle = "#1e293b";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.fillStyle = "#0b1220";
+                ctx.fill();
+
+                // Phase arc segments (colour coded)
+                const LUNAR_CYCLE = 29.53058;
+                const windows = [
+                    { name: "SEED",            lo: 0,    hi: 2,    },
+                    { name: "EARLY_EXPANSION",  lo: 3,    hi: 5.5,  },
+                    { name: "MOMENTUM",         lo: 7,    hi: 9.5,  },
+                    { name: "EXHAUSTION",       lo: 11,   hi: 13.5, },
+                    { name: "FULL_MOON_APEX",   lo: 13.5, hi: 15,   },
+                    { name: "DRIFT",            lo: 15,   hi: LUNAR_CYCLE },
+                ];
+                const toRad = day => ((day / LUNAR_CYCLE) * 2 * Math.PI) - Math.PI / 2;
+                windows.forEach(w => {
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, R - 2, toRad(w.lo), toRad(w.hi));
+                    ctx.lineWidth = 8;
+                    ctx.strokeStyle = (PHASE_COLORS[w.name] || "#374151") + "55";
+                    ctx.stroke();
+                });
+
+                // Key angle tick marks (every 45°)
+                for (let a = 0; a < 360; a += 45) {
+                    const rad = (a * Math.PI / 180) - Math.PI / 2;
+                    const x1 = cx + (R - 14) * Math.cos(rad);
+                    const y1 = cy + (R - 14) * Math.sin(rad);
+                    const x2 = cx + R * Math.cos(rad);
+                    const y2 = cy + R * Math.sin(rad);
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.strokeStyle = "#38bdf844";
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+
+                // Waxing / Waning divider (Full Moon = 180° = day 14.76)
+                const fullMoonRad = toRad(LUNAR_CYCLE / 2);
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                const fx = cx + R * Math.cos(fullMoonRad);
+                const fy = cy + R * Math.sin(fullMoonRad);
+                ctx.lineTo(fx, fy);
+                ctx.strokeStyle = "#fcd34d33";
+                ctx.lineWidth = 1;
+                ctx.setLineDash([3, 3]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // New Moon label (top)
+                ctx.fillStyle = "#818cf8";
+                ctx.font = "bold 8px sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText("NEW", cx, cy - R + 10);
+
+                // Full Moon label (bottom)
+                ctx.fillStyle = "#fcd34d";
+                ctx.fillText("FULL", cx, cy + R - 2);
+
+                // Current day needle
+                const needleRad = toRad(cycleDay);
+                const needleCol = PHASE_COLORS[phase] || "#38bdf8";
+                const nx = cx + (R - 22) * Math.cos(needleRad);
+                const ny = cy + (R - 22) * Math.sin(needleRad);
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.lineTo(nx, ny);
+                ctx.strokeStyle = needleCol;
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+
+                // Dot at tip
+                ctx.beginPath();
+                ctx.arc(nx, ny, 5, 0, 2 * Math.PI);
+                ctx.fillStyle = needleCol;
+                ctx.fill();
+                ctx.shadowColor = needleCol;
+                ctx.shadowBlur = 8;
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // Centre dot
+                ctx.beginPath();
+                ctx.arc(cx, cy, 4, 0, 2 * Math.PI);
+                ctx.fillStyle = "#ffffff22";
+                ctx.fill();
+            }
+
+            function updateLunarUI(d) {
+                const _t = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+                const _s = (id, style, val) => { const el = document.getElementById(id); if (el) el.style[style] = val; };
+
+                _t("lunarCycleDay",      d.cycle_day != null ? d.cycle_day.toFixed(2) : "--");
+                _t("lunarCycleDayLabel", d.cycle_day != null ? `Day ${d.cycle_day.toFixed(1)}` : "Day --");
+                _t("lunarMoonPhaseName", d.moon_phase_name || "--");
+                _t("lunarMoonAngle",     d.moon_phase_angle != null ? `${d.moon_phase_angle.toFixed(1)}° Sun–Moon` : "--");
+                _t("lunarGannAngle",     d.gann_angle != null ? `${d.gann_angle.toFixed(1)}°` : "--°");
+                _t("lunarGannKey",       d.nearest_gann_key != null ? `Key: ${d.nearest_gann_key}° (orb ${d.gann_key_orb}°)` : "--");
+                _t("lunarLessonNote",    d.lesson_note || "--");
+                _t("lunarRefreshBadge",  "● live");
+
+                // Expansion score
+                const score = d.expansion_score != null ? d.expansion_score : 0;
+                const scoreEl = document.getElementById("lunarExpScore");
+                if (scoreEl) {
+                    scoreEl.textContent = score.toFixed(3);
+                    scoreEl.className = "v " + (score >= 0.8 ? "green" : score >= 0.5 ? "yellow" : "grey");
+                }
+                _s("lunarScoreFill", "width", `${Math.round(score * 100)}%`);
+
+                // Phase badge
+                const badge = document.getElementById("lunarPhaseBadge");
+                if (badge) {
+                    badge.textContent = (d.phase || "").replace(/_/g, " ");
+                    badge.className = `lunar-phase-badge ${d.phase || "SEED"}`;
+                }
+
+                // Trade bias colour
+                const biasEl = document.getElementById("lunarTradeBias");
+                if (biasEl) {
+                    biasEl.textContent = (d.trade_bias || "--").replace(/_/g, " ");
+                    biasEl.style.color = BIAS_COLOR[d.trade_bias] || "var(--accent)";
+                }
+
+                // Next momentum
+                const nm = document.getElementById("lunarNextMomentum");
+                if (nm) {
+                    if (d.phase === "MOMENTUM") {
+                        nm.textContent = "NOW";
+                        nm.style.color = "#10b981";
+                    } else {
+                        nm.textContent = d.next_momentum_day != null ? `${d.next_momentum_day}` : "--";
+                        nm.style.color = "var(--accent)";
+                    }
+                }
+
+                // Wax/wane
+                const waxArrow = document.getElementById("lunarWaxArrow");
+                const waxLabel = document.getElementById("lunarWaxLabel");
+                if (waxArrow && waxLabel) {
+                    if (d.waxing) {
+                        waxArrow.textContent = "🌒";
+                        waxLabel.textContent = "WAXING";
+                        waxLabel.className = "wax-label waxing";
+                    } else {
+                        waxArrow.textContent = "🌘";
+                        waxLabel.textContent = "WANING";
+                        waxLabel.className = "wax-label waning";
+                    }
+                }
+
+                // ICT filter
+                const dot = document.getElementById("lunarIctDot");
+                const status = document.getElementById("lunarIctStatus");
+                const ict = d.ict_filter_pass;
+                if (dot) dot.className = `lunar-ict-dot ${ict ? "pass" : "fail"}`;
+                if (status) {
+                    status.textContent = ict
+                        ? "ACTIVE — Phase allows ICT entry setup"
+                        : "INACTIVE — Not in expansion window";
+                    status.style.color = ict ? "#10b981" : "#6b7280";
+                }
+
+                // Wheel
+                drawLunarWheel(d.cycle_day || 0, d.phase || "SEED");
+            }
+
+            async function fetchAndUpdateLunar() {
+                try {
+                    const res = await fetch("/api/astro/lunar-phase");
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const d = await res.json();
+                    if (!d.error) updateLunarUI(d);
+                    else document.getElementById("lunarLessonNote").textContent = `Error: ${d.error}`;
+                } catch(e) {
+                    console.warn("Lunar phase fetch error:", e);
+                    const rb = document.getElementById("lunarRefreshBadge");
+                    if (rb) rb.textContent = "● error";
+                }
+            }
+
+            // Initial draw + poll every 60s (phase changes slowly)
+            drawLunarWheel(0, "SEED");
+            fetchAndUpdateLunar();
+            setInterval(fetchAndUpdateLunar, 60_000);
+        })();
+        // ── End Lunar Expansion Engine ───────────────────────────────────────
 
         document.getElementById("loadBtn").addEventListener("click", () => loadAnalysis(false));
         document.getElementById("refreshBtn").addEventListener("click", () => loadAnalysis(true));

@@ -12,8 +12,9 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
 import asyncio
 import json
-from typing import List, Dict
+from typing import List, Dict, Optional
 import logging
+import time as _time
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -142,6 +143,89 @@ def _get_astro_live_data() -> dict:
 async def astro_live():
     """Live planetary positions, aspects, moon phase, retrograde, and Gann-planet alignments."""
     return JSONResponse(_get_astro_live_data())
+
+
+# ── Lunar Expansion Engine cache ──────────────────────────────────────────────
+_lunar_cache: dict = {"state": None, "ts": 0.0, "prev_phase": None}
+_LUNAR_CACHE_TTL = 60.0  # seconds
+
+
+def _get_lunar_phase_data() -> dict:
+    """Compute or return cached lunar expansion state.
+    Triggers Telegram alert when phase transitions into MOMENTUM.
+    """
+    global _lunar_cache
+    now_ts = _time.time()
+
+    if now_ts - _lunar_cache["ts"] < _LUNAR_CACHE_TTL and _lunar_cache["state"]:
+        return _lunar_cache["state"]
+
+    try:
+        from astroquant.engine.gann.lunar_expansion_engine import compute_lunar_phase
+        state = compute_lunar_phase(prev_phase=_lunar_cache.get("prev_phase"))
+
+        payload = {
+            "date":               state.date,
+            "cycle_day":          state.cycle_day,
+            "phase":              state.phase,
+            "phase_description":  state.phase_description,
+            "waxing":             state.waxing,
+            "expansion_score":    state.expansion_score,
+            "gann_angle":         state.gann_angle,
+            "nearest_gann_key":   state.nearest_gann_key,
+            "gann_key_orb":       state.gann_key_orb,
+            "trade_bias":         state.trade_bias,
+            "ict_filter_pass":    state.ict_filter_pass,
+            "moon_phase_name":    state.moon_phase_name,
+            "moon_phase_angle":   state.moon_phase_angle,
+            "lesson_note":        state.lesson_note,
+            "next_momentum_day":  state.next_momentum_day,
+        }
+        if state.extra:
+            payload["extra"] = state.extra
+
+        # Telegram alert on MOMENTUM entry
+        if state.telegram_alert_due:
+            try:
+                from astroquant.engine.telegram_bot import send_telegram
+                msg = (
+                    f"⚠️ XAUUSD — Lunar MOMENTUM Phase\n"
+                    f"Day {state.cycle_day:.1f} of {29.53} | {state.moon_phase_name}\n"
+                    f"Expansion Score: {state.expansion_score:.2f}\n"
+                    f"Gann Angle: {state.gann_angle}° (Key: {state.nearest_gann_key}°, orb {state.gann_key_orb}°)\n"
+                    f"Lesson 1: Waxing energy peak — wait for liquidity sweep confirmation.\n"
+                    f"Bias: {state.trade_bias}"
+                )
+                send_telegram(msg)
+                logger.info("Lunar MOMENTUM Telegram alert sent")
+            except Exception as tel_err:
+                logger.warning(f"Telegram lunar alert failed: {tel_err}")
+
+        _lunar_cache["state"] = payload
+        _lunar_cache["ts"] = now_ts
+        _lunar_cache["prev_phase"] = state.phase
+        return payload
+
+    except Exception as exc:
+        logger.error(f"Lunar phase endpoint error: {exc}")
+        return {"error": str(exc)}
+
+
+@router.get("/api/astro/lunar-phase")
+async def lunar_phase():
+    """Gann Lesson 1 — Lunar Expansion Engine.
+
+    Returns the current waxing moon cycle state with:
+    - cycle_day: days since New Moon (0–29.53)
+    - phase: SEED / EARLY_EXPANSION / MOMENTUM / EXHAUSTION / FULL_MOON_APEX / DRIFT
+    - expansion_score: sin-wave energy (0→1→0), peaks at Full Moon
+    - gann_angle: price-time degree on the 360° lunar Gann wheel
+    - trade_bias: LONG_BIAS / AVOID / WATCH_SETUP / EXIT_PARTIAL / EXIT_FULL
+    - ict_filter_pass: True when phase allows ICT entry setup
+    - lesson_note: Gann Lesson 1 context for the current state
+    """
+    return JSONResponse(_get_lunar_phase_data())
+
 
 class GannConnectionManager:
     """Manages WebSocket connections for Gann updates"""

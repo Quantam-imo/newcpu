@@ -508,6 +508,91 @@ def test_ai_mentor_endpoint() -> TestResult:
     assert result.passed, result.message
     return result
 
+
+# ── Lunar Expansion Engine Tests ─────────────────────────────────────────────
+
+def test_lunar_phase_classification() -> TestResult:
+    result = TestResult("GANN", "Lunar Phase Classification")
+    try:
+        from astroquant.engine.gann.lunar_expansion_engine import _classify_phase
+        cases = [
+            (0.5, "SEED"), (1.9, "SEED"),
+            (3.0, "EARLY_EXPANSION"), (5.0, "EARLY_EXPANSION"),
+            (7.0, "MOMENTUM"), (9.4, "MOMENTUM"),
+            (11.0, "EXHAUSTION"), (13.4, "EXHAUSTION"),
+            (13.5, "FULL_MOON_APEX"), (14.9, "FULL_MOON_APEX"),
+            (15.5, "DRIFT"), (28.0, "DRIFT"),
+        ]
+        failures = [f"day={d} expected={e} got={_classify_phase(d)}"
+                    for d, e in cases if _classify_phase(d) != e]
+        result.passed = len(failures) == 0
+        result.message = "All 12 phase cases correct" if result.passed else f"Failures: {failures}"
+    except Exception as e:
+        result.message = f"Error: {e}"
+    assert result.passed, result.message
+    return result
+
+
+def test_lunar_expansion_score() -> TestResult:
+    result = TestResult("GANN", "Lunar Expansion Score")
+    try:
+        from astroquant.engine.gann.lunar_expansion_engine import _expansion_score
+        # Score at day 0 ≈ 0, at day 14.76 ≈ 1.0, at day 29 ≈ ~0
+        s0   = _expansion_score(0)
+        s14  = _expansion_score(14.76)
+        s29  = _expansion_score(29.0)
+        s9   = _expansion_score(9.0)   # Momentum window: should be ≥0.80
+        ok = (s0 <= 0.01 and s14 >= 0.99 and s29 <= 0.07 and s9 >= 0.80)
+        result.passed = ok
+        result.message = (f"day0={s0:.4f} day9={s9:.4f} day14.76={s14:.4f} day29={s29:.4f}"
+                          f" {'OK' if ok else 'FAIL'}")
+    except Exception as e:
+        result.message = f"Error: {e}"
+    assert result.passed, result.message
+    return result
+
+
+def test_lunar_gann_angle() -> TestResult:
+    result = TestResult("GANN", "Lunar Gann Wheel Angle")
+    try:
+        from astroquant.engine.gann.lunar_expansion_engine import _gann_angle, LUNAR_CYCLE
+        a0   = _gann_angle(0)
+        a_full = _gann_angle(LUNAR_CYCLE / 2)  # Full Moon ≈ 180°
+        a_end  = _gann_angle(LUNAR_CYCLE)       # End of cycle ≈ 0°
+        ok = (a0 == 0.0 and 178 <= a_full <= 182 and a_end <= 1.0)
+        result.passed = ok
+        result.message = f"day0={a0}° full={a_full:.2f}° end={a_end:.2f}° {'OK' if ok else 'FAIL'}"
+    except Exception as e:
+        result.message = f"Error: {e}"
+    assert result.passed, result.message
+    return result
+
+
+def test_lunar_live_state() -> TestResult:
+    result = TestResult("GANN", "Lunar Expansion Live State")
+    try:
+        from astroquant.engine.gann.lunar_expansion_engine import compute_lunar_phase, LUNAR_CYCLE
+        state = compute_lunar_phase()
+        ok = (
+            0.0 <= state.cycle_day <= LUNAR_CYCLE
+            and state.phase in ("SEED", "EARLY_EXPANSION", "MOMENTUM",
+                                "EXHAUSTION", "FULL_MOON_APEX", "DRIFT", "TRANSITION")
+            and 0.0 <= state.expansion_score <= 1.0
+            and 0.0 <= state.gann_angle < 360.0
+            and isinstance(state.waxing, bool)
+            and len(state.lesson_note) > 10
+        )
+        result.passed = ok
+        result.message = (f"day={state.cycle_day:.2f} phase={state.phase} "
+                          f"score={state.expansion_score:.3f} "
+                          f"angle={state.gann_angle}° waxing={state.waxing}")
+        result.data = {"phase": state.phase, "cycle_day": state.cycle_day}
+    except Exception as e:
+        result.message = f"Error: {e}"
+    assert result.passed, result.message
+    return result
+
+
 # ============================================================================
 # MAIN TEST RUNNER
 # ============================================================================
@@ -527,6 +612,11 @@ def run_all_tests() -> List[TestResult]:
         test_gann_square_of_9,
         test_gann_spiral,
         test_gann_degree,
+        # Lunar Expansion Engine Tests (Gann Lesson 1)
+        test_lunar_phase_classification,
+        test_lunar_expansion_score,
+        test_lunar_gann_angle,
+        test_lunar_live_state,
         
         # Astrology Tests
         test_astrology_planets,
