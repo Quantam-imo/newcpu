@@ -205,6 +205,50 @@
 
             const tl = data.trade_levels || null;
             setText("mclTradeLevels", tl ? `Entry ${tl.entry} | SL ${tl.stop_loss} | TP ${tl.take_profit} | R ${tl.r_ratio}` : "--");
+
+            // ── MCL Engines ─────────────────────────────────────────────────
+            setText("mclEngGannDegree", data.mcl_gann_degree != null ? String(data.mcl_gann_degree) : "--");
+            setText("mclEngGannZone", data.mcl_gann_zone || "--");
+            setText("mclEngGannNodeType", data.mcl_gann_node_type || "--");
+            setText("mclEngGannNodePrice", data.mcl_gann_node_price != null ? String(data.mcl_gann_node_price) : "--");
+            setText("mclEngGannTimeCycle", data.mcl_gann_time_cycle != null ? String(data.mcl_gann_time_cycle) : "--");
+            setText("mclEngGannPTEqual", data.mcl_gann_price_time_equal != null ? String(data.mcl_gann_price_time_equal) : "--");
+            setText("mclEngAstroNakshatra", data.mcl_astro_nakshatra || "--");
+            setText("mclEngAstroStrength", data.mcl_astro_strength != null ? String(data.mcl_astro_strength) : "--");
+            setText("mclEngMoonPhase", data.mcl_astro_moon_phase || "--");
+            setText("mclEngMoonIllum", data.mcl_astro_moon_illumination != null ? `${Number(data.mcl_astro_moon_illumination).toFixed(1)}%` : "--");
+            setText("mclEngNumNum", data.mcl_numerology_number != null ? String(data.mcl_numerology_number) : "--");
+            setText("mclEngNumMeaning", data.mcl_numerology_meaning || "--");
+            setText("mclEngHarmPattern", data.mcl_harmonic_pattern || "--");
+            setText("mclEngHarmRatio", data.mcl_harmonic_ratio != null ? String(data.mcl_harmonic_ratio) : "--");
+            setText("mclEngPhysForce", data.mcl_physics_force != null ? String(data.mcl_physics_force) : "--");
+            setText("mclEngPhysVelocity", data.mcl_physics_velocity != null ? String(data.mcl_physics_velocity) : "--");
+            setText("mclEngPhysEnergy", data.mcl_physics_energy != null ? String(data.mcl_physics_energy) : "--");
+            setText("mclEngComprPhase", data.mcl_compression_phase || "--");
+            setText("mclEngComprScore", data.mcl_compression_score != null ? String(data.mcl_compression_score) : "--");
+            setText("mclEngComprBreakout", data.mcl_compression_breakout_near === true ? "YES" : data.mcl_compression_breakout_near === false ? "NO" : "--");
+            setText("mclEngComprBias", data.mcl_compression_direction_bias || "--");
+            setText("mclEngComprSilence", data.mcl_compression_silence_active === true ? "YES" : data.mcl_compression_silence_active === false ? "NO" : "--");
+            setText("mclEngFutureDir", data.mcl_future_direction || "--");
+            setText("mclEngCycleEvent", data.mcl_future_cycle_event || "--");
+            setText("mclEngFutureStrength", data.mcl_future_strength != null ? String(data.mcl_future_strength) : "--");
+            setText("mclEngCycleProgress", data.mcl_future_cycle_progress_pct != null ? `${Number(data.mcl_future_cycle_progress_pct).toFixed(1)}%` : "--");
+            setText("mclEngLiqType", data.mcl_liquidity_type || "--");
+            setText("mclEngLiqAbove", data.mcl_liquidity_above != null ? String(data.mcl_liquidity_above) : "--");
+            setText("mclEngLiqBelow", data.mcl_liquidity_below != null ? String(data.mcl_liquidity_below) : "--");
+            setText("mclEngPsychEmotion", data.mcl_psychology_emotion || "--");
+            setText("mclEngBehaviorNext", data.mcl_behavior_next || "--");
+            setText("mclEngTrapProb", data.mcl_trap_probability != null ? String(data.mcl_trap_probability) : "--");
+            setText("mclEngExecVerdict", data.mcl_execution_verdict || "--");
+            setText("mclEngExecScore", data.mcl_execution_score != null ? String(data.mcl_execution_score) : "--");
+            setText("mclEngBtWinrate", data.mcl_backtest_winrate != null ? `${(Number(data.mcl_backtest_winrate) * 100).toFixed(1)}%` : "--");
+            setText("mclEngBtWinsLosses", (data.mcl_backtest_wins != null && data.mcl_backtest_losses != null) ? `${data.mcl_backtest_wins}W / ${data.mcl_backtest_losses}L` : "--");
+            setText("mclEngFailStatus", data.mcl_failure_status || "--");
+            setText("mclEngFailSeverity", data.mcl_failure_severity || "--");
+            setText("mclEngDataQuality", data.mcl_data_quality_status ? `${data.mcl_data_quality_status} (${data.mcl_data_quality_score ?? "--"})` : "--");
+            setText("mclEngClarity", data.mcl_clarity || "--");
+            setText("mclEngConviction", data.mcl_conviction != null ? String(data.mcl_conviction) : "--");
+            setText("mclEngDominance", data.mcl_dominance_score != null ? String(data.mcl_dominance_score) : "--");
         } catch (err) {
             setText("mclStatus", "ERROR");
             setText("mclSignal", "--");
@@ -336,6 +380,53 @@
                 <div style="color:var(--muted);font-size:12px;">Reasoning Summary</div>
                 <div id="mclReasoningSummary" style="font-weight:600;line-height:1.45;">--</div>
                 <ul id="mclReasoningChain" style="margin:8px 0 0 18px;padding:0;line-height:1.45;"><li>--</li></ul>
+            </div>
+            <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
+                <div style="color:var(--muted);font-size:12px;font-weight:600;letter-spacing:0.04em;">MCL Engines</div>
+                <div class="row-list" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px;">
+                    <div><span>Gann Degree</span><strong id="mclEngGannDegree">--</strong></div>
+                    <div><span>Gann Zone</span><strong id="mclEngGannZone">--</strong></div>
+                    <div><span>Gann Node Type</span><strong id="mclEngGannNodeType">--</strong></div>
+                    <div><span>Gann Node Price</span><strong id="mclEngGannNodePrice">--</strong></div>
+                    <div><span>Gann Cycle</span><strong id="mclEngGannTimeCycle">--</strong></div>
+                    <div><span>Gann P/T Equal</span><strong id="mclEngGannPTEqual">--</strong></div>
+                    <div><span>Astro Nakshatra</span><strong id="mclEngAstroNakshatra">--</strong></div>
+                    <div><span>Astro Strength</span><strong id="mclEngAstroStrength">--</strong></div>
+                    <div><span>Moon Phase</span><strong id="mclEngMoonPhase">--</strong></div>
+                    <div><span>Moon Illumination</span><strong id="mclEngMoonIllum">--</strong></div>
+                    <div><span>Numerology #</span><strong id="mclEngNumNum">--</strong></div>
+                    <div><span>Numerology Meaning</span><strong id="mclEngNumMeaning">--</strong></div>
+                    <div><span>Harmonic Pattern</span><strong id="mclEngHarmPattern">--</strong></div>
+                    <div><span>Harmonic Ratio</span><strong id="mclEngHarmRatio">--</strong></div>
+                    <div><span>Physics Force</span><strong id="mclEngPhysForce">--</strong></div>
+                    <div><span>Physics Velocity</span><strong id="mclEngPhysVelocity">--</strong></div>
+                    <div><span>Physics Energy</span><strong id="mclEngPhysEnergy">--</strong></div>
+                    <div><span>Compression Phase</span><strong id="mclEngComprPhase">--</strong></div>
+                    <div><span>Compression Score</span><strong id="mclEngComprScore">--</strong></div>
+                    <div><span>Breakout Near</span><strong id="mclEngComprBreakout">--</strong></div>
+                    <div><span>Compr Bias</span><strong id="mclEngComprBias">--</strong></div>
+                    <div><span>Silence Active</span><strong id="mclEngComprSilence">--</strong></div>
+                    <div><span>Future Direction</span><strong id="mclEngFutureDir">--</strong></div>
+                    <div><span>Cycle Event</span><strong id="mclEngCycleEvent">--</strong></div>
+                    <div><span>Future Strength</span><strong id="mclEngFutureStrength">--</strong></div>
+                    <div><span>Cycle Progress</span><strong id="mclEngCycleProgress">--</strong></div>
+                    <div><span>Liquidity Type</span><strong id="mclEngLiqType">--</strong></div>
+                    <div><span>Liq Above</span><strong id="mclEngLiqAbove">--</strong></div>
+                    <div><span>Liq Below</span><strong id="mclEngLiqBelow">--</strong></div>
+                    <div><span>Psychology</span><strong id="mclEngPsychEmotion">--</strong></div>
+                    <div><span>Behavior Next</span><strong id="mclEngBehaviorNext">--</strong></div>
+                    <div><span>Trap Probability</span><strong id="mclEngTrapProb">--</strong></div>
+                    <div><span>Execution Verdict</span><strong id="mclEngExecVerdict">--</strong></div>
+                    <div><span>Execution Score</span><strong id="mclEngExecScore">--</strong></div>
+                    <div><span>Backtest Winrate</span><strong id="mclEngBtWinrate">--</strong></div>
+                    <div><span>BT Wins / Losses</span><strong id="mclEngBtWinsLosses">--</strong></div>
+                    <div><span>Failure Status</span><strong id="mclEngFailStatus">--</strong></div>
+                    <div><span>Failure Severity</span><strong id="mclEngFailSeverity">--</strong></div>
+                    <div><span>Data Quality</span><strong id="mclEngDataQuality">--</strong></div>
+                    <div><span>Clarity</span><strong id="mclEngClarity">--</strong></div>
+                    <div><span>Conviction</span><strong id="mclEngConviction">--</strong></div>
+                    <div><span>Dominance Score</span><strong id="mclEngDominance">--</strong></div>
+                </div>
             </div>
         `;
 
