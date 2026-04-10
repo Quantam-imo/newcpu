@@ -30,7 +30,29 @@ _cache_ts_by_key: dict[str, float] = {}
 # Stored separately so /engines can serve all engine outputs without
 # going through the summary flattening layer.
 _cache_raw_payloads: dict[str, dict[str, Any]] = {}
-_CACHE_TTL_SECONDS = 300.0  # 5-minute cache — summaries take 40-90s to compute
+_CACHE_TTL_SECONDS = 300.0
+
+
+def _to_json_safe(obj: Any) -> Any:
+    """Recursively convert numpy/pandas scalars to plain Python types so FastAPI
+    can serialise the response without raising TypeError."""
+    try:
+        import numpy as np  # lazy import — only used when MCL returns numpy types
+        if isinstance(obj, (np.bool_,)):
+            return bool(obj)
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return [_to_json_safe(v) for v in obj.tolist()]
+    except ImportError:
+        pass
+    if isinstance(obj, dict):
+        return {k: _to_json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_json_safe(v) for v in obj]
+    return obj  # 5-minute cache — summaries take 40-90s to compute
 _SUMMARY_TIMEOUT_SECONDS = max(5.0, float(os.getenv("MCL_SUMMARY_TIMEOUT_SECONDS", "90")))
 _MATRIX_TIMEFRAMES = ("1d", "4h", "1h", "30m", "15m", "5m", "1m", "1w", "1month")
 _MATRIX_MAX_WORKERS = max(1, int(os.getenv("MCL_MATRIX_MAX_WORKERS", "9")))
@@ -335,7 +357,7 @@ def _run_full_system(
     if accepts_source_mode:
         call_kwargs["source_mode"] = source_mode
 
-    payload = full_system(**call_kwargs)
+    payload = _to_json_safe(full_system(**call_kwargs))
 
     applied_symbol = str(payload.get("symbol") or (symbol if accepts_symbol else "XAUUSD")).strip().upper()
     applied_timeframe = str(
@@ -1172,27 +1194,27 @@ def _compute_summary(
             "mcl_gann_node_type": ((payload.get("gann_nodes") or {}).get("node_type")),
             "mcl_gann_node_price": ((payload.get("gann_nodes") or {}).get("node_price")),
             "mcl_gann_time_harmonic": ((payload.get("gann_nodes") or {}).get("time_harmonic")),
-            "mcl_liquidity": payload.get("liquidity"),
+            "mcl_liquidity": _to_json_safe(payload.get("liquidity")),
             "mcl_liquidity_type": ((payload.get("liquidity") or {}).get("type")),
             "mcl_liquidity_above": ((payload.get("liquidity") or {}).get("above")),
             "mcl_liquidity_below": ((payload.get("liquidity") or {}).get("below")),
             "mcl_physics_force": ((payload.get("physics") or {}).get("force")),
             "mcl_physics_velocity": ((payload.get("physics") or {}).get("velocity")),
             "mcl_physics_energy": ((payload.get("physics") or {}).get("energy")),
-            "mcl_numerology": payload.get("numerology"),
+            "mcl_numerology": _to_json_safe(payload.get("numerology")),
             "mcl_numerology_number": ((payload.get("numerology") or {}).get("number")),
             "mcl_numerology_meaning": ((payload.get("numerology") or {}).get("meaning")),
-            "mcl_harmonic": payload.get("harmonic"),
+            "mcl_harmonic": _to_json_safe(payload.get("harmonic")),
             "mcl_harmonic_pattern": ((payload.get("harmonic") or {}).get("pattern")),
             "mcl_harmonic_ratio": ((payload.get("harmonic") or {}).get("ratio")),
-            "mcl_astro": payload.get("astro"),
+            "mcl_astro": _to_json_safe(payload.get("astro")),
             "mcl_astro_nakshatra": ((payload.get("astro") or {}).get("nakshatra_name")),
             "mcl_astro_nakshatra_cycle": ((payload.get("astro") or {}).get("nakshatra_cycle")),
             "mcl_astro_strength": ((payload.get("astro") or {}).get("strength")),
             "mcl_astro_moon_phase": ((payload.get("astro") or {}).get("moon") or {}).get("phase_key") if payload.get("astro") else None,
             "mcl_astro_moon_illumination": (((payload.get("astro") or {}).get("moon") or {}).get("illumination")),
-            "mcl_astro_nearby_event": ((payload.get("astro") or {}).get("nearby_event")),
-            "mcl_compression": payload.get("compression"),
+            "mcl_astro_nearby_event": _to_json_safe((payload.get("astro") or {}).get("nearby_event")),
+            "mcl_compression": _to_json_safe(payload.get("compression")),
             "mcl_compression_phase": ((payload.get("compression") or {}).get("phase")),
             "mcl_compression_score": ((payload.get("compression") or {}).get("score")),
             "mcl_compression_silence_active": ((payload.get("compression") or {}).get("silence_active")),
