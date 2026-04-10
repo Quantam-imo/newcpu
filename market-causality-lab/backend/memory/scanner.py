@@ -34,7 +34,9 @@ def scan_market(df):
     # Start after enough data; fallback for shorter datasets.
     start_idx = 50 if len(df) > 50 else 10
 
-    for i in range(start_idx, len(df)):
+    # range includes len(df) so the final iteration uses the complete df,
+    # ensuring current_record[-1] reflects the ACTUAL last bar (not N-1).
+    for i in range(start_idx, len(df) + 1):
         sub_df = df.iloc[:i]
 
         state = build_state(sub_df)

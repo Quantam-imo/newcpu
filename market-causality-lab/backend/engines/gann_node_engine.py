@@ -173,20 +173,24 @@ def gann_node_engine(df, state: dict) -> dict:
     node_deg   = matched_node["degree"]    if matched_node else 0
 
     # ── Spiral direction ─────────────────────────────────────────────────────
-    # Determine if price is expanding outward (up or down the spiral)
-    # or coiling (price compressing near a node between harmonics)
+    # Compare average bar range (last 5 bars) vs average (last 20 bars).
+    # Using avg-range prevents the large absolute spread of a 20-bar trend
+    # from always making the 5-bar window look like "COILING".
+    # UP/DOWN direction comes from price position vs the nearest SQ9 node grid.
     if len(df) >= 20:
-        range_now  = float(df["high"].tail(5).max()  - df["low"].tail(5).min())
-        range_prev = float(df["high"].tail(20).max() - df["low"].tail(20).min())
-        expansion_ratio = range_now / range_prev if range_prev > 0 else 1.0
+        avg_range_5  = float((df["high"].tail(5)  - df["low"].tail(5)).mean())
+        avg_range_20 = float((df["high"].tail(20) - df["low"].tail(20)).mean())
+        expansion_ratio = avg_range_5 / avg_range_20 if avg_range_20 > 0 else 1.0
     else:
         expansion_ratio = 1.0
 
     trend = state.get("trend", "UP")
-    if expansion_ratio > 0.35:
-        spiral_expansion = "UP_SPIRAL" if trend == "UP" else "DOWN_SPIRAL"
-    else:
+    if expansion_ratio < 0.55:          # avg bar range shrinking to <55% of norm = coiling
         spiral_expansion = "COILING"
+    elif trend == "UP":
+        spiral_expansion = "UP_SPIRAL"
+    else:
+        spiral_expansion = "DOWN_SPIRAL"
 
     # ── Next forward nodes (price levels + estimated bar counts) ─────────────
     # Find next 3 levels above and below, with nearest harmonic bar count

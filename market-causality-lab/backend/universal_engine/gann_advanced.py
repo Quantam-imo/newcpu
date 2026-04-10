@@ -93,6 +93,26 @@ def nearest_gann_angles(degree: float) -> list[str]:
     return [name for name, ang in GANN_ANGLES.items() if abs(ang - local_deg) < 10] or ["1x1"]
 
 
+def gann_sq9_levels(price: float, steps: int = 4) -> list[dict]:
+    """Compute multiple Square-of-9 levels above and below current price.
+    Returns a list of {price, degree_step, direction} for the nearest steps.
+    """
+    if price <= 0:
+        return []
+    step = 0.5  # one 90-degree step on sqrt scale
+    root = math.sqrt(price)
+    floor_n = int(root / step)
+    levels = []
+    for i in range(-steps, steps + 1):
+        n = floor_n + i
+        if n <= 0:
+            continue
+        lvl_price = round((n * step) ** 2, 2)
+        direction = "above" if lvl_price > price else "below" if lvl_price < price else "exact"
+        levels.append({"price": lvl_price, "degree_step": i, "direction": direction})
+    return sorted(levels, key=lambda x: x["price"])
+
+
 def gann_advanced_analysis(state: dict, df) -> dict:
     """Full advanced Gann analysis: degrees, cycle position, price-time equality, key levels."""
     price = float(state["price"])
@@ -106,15 +126,21 @@ def gann_advanced_analysis(state: dict, df) -> dict:
     pte = price_time_equality(recent_high - recent_low, 20)
     angles = nearest_gann_angles(degrees)
 
-    # Key support/resistance at next 90-degree boundary (Square-of-9)
+    # Key support/resistance at nearest ±90-degree Square-of-9 boundaries
     support_90, resist_90 = gann_90_levels(price)
+
+    # Full SQ9 levels table (±4 steps = ±360 degrees)
+    sq9_table = gann_sq9_levels(price, steps=4)
+    nearest_below = next((x["price"] for x in reversed(sq9_table) if x["direction"] == "below"), support_90)
+    nearest_above = next((x["price"] for x in sq9_table if x["direction"] == "above"), resist_90)
 
     return {
         "degrees": degrees,
         "cycle": cycle,
         "price_time_equality": pte,
         "nearest_angles": angles,
-        "support_90": support_90,
-        "resist_90": resist_90,
+        "support_90": nearest_below,
+        "resist_90": nearest_above,
+        "sq9_table": sq9_table,
         "swing_range": round(recent_high - recent_low, 4),
     }
