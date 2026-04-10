@@ -243,7 +243,10 @@ def run_replay(
     candles = _load_candles(symbol, timeframe)
 
     tracker = PredictionTracker(tracker_path)
-    engine  = LearningFeedbackEngine(tracker=tracker)
+    # Don't bind the real tracker to the engine during dry_run:
+    # LearningFeedbackEngine.__init__ replays existing outcomes which calls
+    # save_weights() — that would mutate persisted state even for dry runs.
+    engine  = LearningFeedbackEngine(tracker=tracker if not dry_run else None)
 
     total = 0
     correct = 0

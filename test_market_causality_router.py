@@ -1,5 +1,6 @@
 from pathlib import Path
 import tempfile
+import pytest
 
 import astroquant.backend.router_market_causality as mcl_router
 from astroquant.backend.router_market_causality import (
@@ -586,14 +587,24 @@ def test_question_bank_endpoint_default_and_filters():
 # ---- live_price endpoint contracts ------------------------------------------
 
 def test_live_price_endpoint_returns_unavailable_when_both_sources_fail(monkeypatch):
-    """When both MCL fetch_xauusd and Databento fail, status must be 'unavailable'."""
+    """When stooq and Databento both fail, status must be 'unavailable'.
+    The broker DOM path is skipped silently (module not present in tests).
+    """
+    import urllib.request as _url_req
     import astroquant.backend.router_market_causality as _r
 
-    # Disable MCL module so the first path raises.
-    monkeypatch.setattr(_r, "_module", None, raising=False)
+    # Attempt 2: stooq — make urlopen raise so the network path is blocked.
+    def _raise_network(*a, **kw):
+        raise OSError("network blocked in test")
+    monkeypatch.setattr(_url_req, "urlopen", _raise_network)
 
-    # No DATABENTO_API_KEY in env so Databento attempt also fails.
-    monkeypatch.delenv("DATABENTO_API_KEY", raising=False)
+    # Attempt 3: Databento — patch the import target so the call also fails.
+    import astroquant.backend.services.databento_utility as _db_util
+    monkeypatch.setattr(
+        _db_util,
+        "fetch_candles_unified",
+        lambda **kw: (_ for _ in ()).throw(RuntimeError("databento blocked in test")),
+    )
 
     result = _r.market_causality_live_price(symbol="XAUUSD")
 
@@ -617,27 +628,31 @@ def test_live_price_endpoint_schema_keys_always_present(monkeypatch):
         assert key in result, f"Missing key '{key}' in live_price response"
 
 
-def test_live_price_endpoint_ok_path_via_mcl_module(monkeypatch):
-    """When MCL module provides fetch_xauusd returning a valid row, status must be 'ok'."""
-    import pandas as pd
+def test_live_price_endpoint_ok_path_via_stooq(monkeypatch):
+    """When stooq returns a valid CSV row, status must be 'ok' with the parsed price."""
+    import urllib.request as _url_req
     import astroquant.backend.router_market_causality as _r
 
-    class _FakeModule:
-        @staticmethod
-        def fetch_xauusd(count=3):
-            return pd.DataFrame(
-                [{"time": pd.Timestamp("2026-04-03 12:00:00", tz="UTC"), "close": 3120.50}]
-            )
+    # Return a valid stooq-format CSV with a known close price.
+    _CSV = b"Symbol,Date,Time,Open,High,Low,Close,Volume\nXAUUSD,2026-04-03,12:00:00,3118.00,3125.00,3110.00,3120.50,0\n"
 
-    monkeypatch.setattr(_r, "_module", _FakeModule, raising=False)
-    # Ensure _load_module() returns our fake module without subprocess.
-    monkeypatch.setattr(_r, "_load_module", lambda: _FakeModule, raising=False)
+    class _FakeResp:
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            pass
+        def read(self):
+            return _CSV
+
+    monkeypatch.setattr(_url_req, "urlopen", lambda *a, **kw: _FakeResp())
 
     result = _r.market_causality_live_price(symbol="XAUUSD")
 
     assert result["status"] == "ok"
     assert result["price"] == 3120.50
     assert result["symbol"] == "XAUUSD"
+    assert result["source"] == "stooq_xauusd_spot"
+    assert result["spot"] is True
     assert result["ts"] is not None
     assert result["elapsed_ms"] >= 0
 
@@ -1985,3 +2000,182 @@ def test_save_outcomes_bulk_overwrites_all(tmp_path):
     outcomes = t.load_outcomes()
     assert len(outcomes) == 1
     assert outcomes[0]["prediction_id"] == "p3"
+
+
+# ---- Q5 news context tests --------------------------------------------------
+
+_Q5_OBS_CSV = """\
+observation_id,recorded_at_utc,symbol,requested_timeframe,applied_timeframe,lookback_years,source_mode,signal,trend_label,trend_start_time,trend_start_price,trend_duration_hours,latest_time,latest_price,signal_start_time,signal_end_time,signal_start_price,signal_end_price,signal_window_hours,signal_projected_move,signal_projected_move_pct,signal_window_basis,gann_nearest_key_angle,gann_angle_proximity,numerology_cycle_runtime,numerology_harmonious_runtime,structure_major_runtime,structure_bos_runtime,physics_momentum_runtime,physics_acceleration_runtime,confirmation_geometry,confirmation_time,confirmation_structure,confirmation_tape_action,gann_mindset_bias,gann_time_phase,gann_recommended_signal,gann_mindset_narration,news_previous_time,news_previous_event,news_previous_impact,news_previous_minutes_ago,news_next_time,news_next_event,news_next_impact,news_next_minutes_ahead,price_degree,gann_degree,gann_cycle_degree,gann_cycle_quadrant,gann_cycle_description,gann_nearest_angles,gann_price_time_status,gann_price_time_ratio,nakshatra,nakshatra_pada,geometry_slope_price_per_hour,geometry_angle_deg,physics_velocity_price_per_hour,physics_acceleration_price_per_hour2,price_time_ratio,degree_time_ratio,date_time_code
+obsA,2026-04-03T10:00:00+00:00,XAUUSD,1d,1d,1,historical_first,BUY,UP,2026-04-01T00:00:00,3050.0,48.0,2026-04-03T00:00:00,3120.0,2026-04-01T00:00:00,2026-04-04T00:00:00,3050.0,3120.0,72.0,70.0,2.3,physics_projection,270,EXACT,EXPANSION,False,TREND,True,UP,30.0,YES,YES,YES,YES,BUY_CONTINUATION,EXPANSION,BUY,Price near 270deg,2026-04-01T13:30:00,US Core PCE,high,2340.0,2026-04-10T13:30:00,US CPI YoY,high,5130.0,273.56,273.56,202.11,3,DISTRIBUTION,8x1,PRICE_LEADS,54.5,Uttara Ashadha,3,0.5,26.0,0.5,0.008,54.5,0.2,20260403
+""".strip()
+
+
+@pytest.fixture
+def obs_log_with_q5(tmp_path, monkeypatch):
+    """Write a minimal observation log CSV and patch _observation_log_csv_path to use it."""
+    import pathlib
+    csv_path = tmp_path / "market_observations.csv"
+    csv_path.write_text(_Q5_OBS_CSV)
+    import astroquant.backend.router_market_causality as _r
+    monkeypatch.setattr(_r, "_observation_log_csv_path", lambda: pathlib.Path(csv_path))
+    return csv_path
+
+
+def test_q5_answer_always_present_in_gann_qa(obs_log_with_q5):
+    """Every era group in /gann_qa rows must include a Q5 news question."""
+    from astroquant.backend.router_market_causality import market_causality_gann_qa
+
+    result = market_causality_gann_qa(date="2026-04-03", symbol="XAUUSD", limit=60, horizon_days=1)
+
+
+def test_q5_answer_contains_news_event_fields(obs_log_with_q5):
+    """Q5 answer must reference the previous and next news events from the observation."""
+    from astroquant.backend.router_market_causality import market_causality_gann_qa
+
+    result = market_causality_gann_qa(date="2026-04-03", symbol="XAUUSD", limit=60, horizon_days=1)
+    rows = result.get("rows", [])
+    q5_rows = [r for r in rows if "news" in str(r.get("question", "")).lower()]
+    assert q5_rows, "No Q5 rows"
+
+    for row in q5_rows[:3]:
+        assert row.get("recommended_signal") in ("BUY", "SELL", "WAIT")
+        answer = str(row.get("answer", ""))
+        assert len(answer) > 20, f"Q5 answer too short: {answer!r}"
+        assert any(kw in answer for kw in ("Previous event", "Next scheduled", "No high-impact")), (
+            f"Q5 answer missing news keywords: {answer!r}"
+        )
+
+
+def test_q5_high_impact_news_triggers_caution_flag(obs_log_with_q5):
+    """Q5 answer must include caution text when the next event is high-impact."""
+    from astroquant.backend.router_market_causality import market_causality_gann_qa
+
+    # The seed CSV has news_next_impact=high → CAUTION must appear in Q5 answer.
+    result = market_causality_gann_qa(date="2026-04-03", symbol="XAUUSD", limit=60, horizon_days=1)
+    rows = result.get("rows", [])
+    q5_rows = [r for r in rows if "news" in str(r.get("question", "")).lower()]
+    assert q5_rows, "No Q5 rows"
+
+    # At least one Q5 row should contain CAUTION (seeded next-event is high-impact).
+    caution_rows = [r for r in q5_rows if "CAUTION" in str(r.get("answer", ""))]
+    assert caution_rows, (
+        f"Expected CAUTION in Q5 answer for high-impact next event; answers: "
+        f"{[r.get('answer','')[:80] for r in q5_rows]}"
+    )
+
+
+# ---- signal_accuracy tests --------------------------------------------------
+
+def test_signal_accuracy_keys_match_weight_keys():
+    """signal_accuracy in /weights response must contain exactly the same keys as weights."""
+    from astroquant.backend.router_market_causality import market_causality_weights
+
+    result = market_causality_weights()
+    assert result["status"] == "ok"
+    weight_keys = set(result["weights"].keys())
+    accuracy_keys = set(result["signal_accuracy"].keys())
+    assert weight_keys == accuracy_keys, (
+        f"signal_accuracy keys {accuracy_keys} do not match weight keys {weight_keys}"
+    )
+
+
+def test_signal_accuracy_values_are_float_or_none():
+    """Each signal_accuracy value must be a float in [0,1] or None (no data yet)."""
+    from astroquant.backend.router_market_causality import market_causality_weights
+
+    result = market_causality_weights()
+    for signal, acc in result["signal_accuracy"].items():
+        assert acc is None or (isinstance(acc, float) and 0.0 <= acc <= 1.0), (
+            f"signal_accuracy[{signal!r}] = {acc!r} — expected float in [0,1] or None"
+        )
+
+
+def test_signal_accuracy_none_when_no_outcomes(tmp_path):
+    """signal_accuracy values must all be None when there are no realized outcomes."""
+    from astroquant.backend.mathematical_engines import LearningFeedbackEngine
+    from astroquant.backend.prediction_tracker import PredictionTracker
+
+    tracker = PredictionTracker(tmp_path / "empty.json")
+    engine = LearningFeedbackEngine(tracker=tracker)
+
+    cal = engine.get_model_calibration()
+    for signal, acc in cal["signal_accuracy"].items():
+        assert acc is None, (
+            f"Expected None for signal {signal!r} with no outcomes, got {acc!r}"
+        )
+
+
+def test_signal_accuracy_reflects_correct_outcome(tmp_path):
+    """After recording one correct BUY prediction, gann signal_accuracy must be > 0."""
+    from astroquant.backend.mathematical_engines import LearningFeedbackEngine
+    from astroquant.backend.prediction_tracker import PredictionTracker
+
+    tracker = PredictionTracker(tmp_path / "t.json")
+    engine = LearningFeedbackEngine(tracker=tracker)
+
+    engine.record_prediction(
+        prediction_id="test-sig-acc-001",
+        direction="BUY",
+        confluence_score=0.8,
+        geometry_signal=True,
+        time_signal=True,
+        structure_signal=True,
+        momentum_signal=True,
+        gann_signal=True,
+        ict_signal=True,
+        confluence_signal=True,
+        entry_price=3100.0,
+        stop_price=3090.0,
+        target_price=3120.0,
+        forecast_horizon_days=1,
+    )
+    engine.record_outcome(
+        prediction_id="test-sig-acc-001",
+        realized_price=3115.0,
+        outcome_direction="UP",
+        actual_move_pips=15.0,
+        timeframe_reached=3,
+    )
+
+    cal = engine.get_model_calibration()
+    gann_acc = cal["signal_accuracy"].get("gann")
+    assert gann_acc is not None, "gann signal_accuracy should not be None after one outcome"
+    assert gann_acc == 1.0, f"Expected gann accuracy=1.0 (one correct), got {gann_acc}"
+
+
+def test_signal_accuracy_reflects_incorrect_outcome(tmp_path):
+    """After one wrong SELL prediction, gann signal_accuracy must be 0.0."""
+    from astroquant.backend.mathematical_engines import LearningFeedbackEngine
+    from astroquant.backend.prediction_tracker import PredictionTracker
+
+    tracker = PredictionTracker(tmp_path / "t.json")
+    engine = LearningFeedbackEngine(tracker=tracker)
+
+    engine.record_prediction(
+        prediction_id="test-sig-acc-002",
+        direction="SELL",
+        confluence_score=0.7,
+        geometry_signal=True,
+        time_signal=False,
+        structure_signal=False,
+        momentum_signal=False,
+        gann_signal=True,
+        ict_signal=False,
+        confluence_signal=False,
+        entry_price=3100.0,
+        stop_price=3110.0,
+        target_price=3080.0,
+        forecast_horizon_days=1,
+    )
+    engine.record_outcome(
+        prediction_id="test-sig-acc-002",
+        realized_price=3115.0,
+        outcome_direction="UP",   # wrong direction for SELL
+        actual_move_pips=15.0,
+        timeframe_reached=2,
+    )
+
+    cal = engine.get_model_calibration()
+    gann_acc = cal["signal_accuracy"].get("gann")
+    assert gann_acc == 0.0, f"Expected gann accuracy=0.0 (one wrong), got {gann_acc}"
+
