@@ -532,6 +532,15 @@ def record_observation(
         "macro_bias": (result or {}).get("institutional", {}).get("macro"),
         "future_direction": ((result or {}).get("future") or {}).get("direction"),
         "liquidity_signal": ((result or {}).get("signals") or {}).get("liquidity"),
+        # ── Time Compression ─────────────────────────────────────────────────
+        "compression_phase":    ((result or {}).get("compression") or {}).get("phase", "OPEN"),
+        "compression_score":    ((result or {}).get("compression") or {}).get("score", 0.0),
+        "silence_active":       ((result or {}).get("compression") or {}).get("silence_active", False),
+        "breakout_near":        ((result or {}).get("compression") or {}).get("breakout_near", False),
+        "cycle_tightening":     ((result or {}).get("compression") or {}).get("cycle_tightening", False),
+        "compression_signal":   ((result or {}).get("compression") or {}).get("signal", ""),
+        "energy_stored":        ((result or {}).get("compression") or {}).get("energy_stored", 0.0),
+        "bars_in_compression":  ((result or {}).get("compression") or {}).get("bars_in_compression", 0),
     }
 
     csv_path = out_dir / "market_observations.csv"

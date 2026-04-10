@@ -1,4 +1,4 @@
-def time_engine(gann, astro, gann_nodes=None):
+def time_engine(gann, astro, gann_nodes=None, compression=None):
     signals = []
 
     if gann["price_time_equal"]:
@@ -14,6 +14,13 @@ def time_engine(gann, astro, gann_nodes=None):
     # Time-only harmonic firing (no price node yet, but cycle count hit)
     if gann_nodes and gann_nodes.get("time_at_node") and not gann_nodes.get("node_active"):
         signals.append("TIME HARMONIC")
+
+    # Time compression: silence phase = maximum energy stored, breakout imminent
+    if compression:
+        if compression.get("silence_active"):
+            signals.append("SILENCE")          # price + vol both compressed simultaneously
+        elif compression.get("breakout_near"):
+            signals.append("COMPRESSION")      # 2 of 3 layers contracting
 
     if len(signals) >= 2:
         timing = "STRONG TURN WINDOW"

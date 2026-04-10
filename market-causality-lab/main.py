@@ -36,6 +36,7 @@ from backend.engines.harmonic_engine import harmonic_engine
 from backend.engines.time_engine import time_engine
 from backend.engines.future_engine import future_engine
 from backend.engines.gann_node_engine import gann_node_engine
+from backend.engines.time_compression_engine import time_compression_engine
 from backend.sync.weight_engine import weight_engine
 from backend.sync.signal_engine import generate_signals
 from backend.sync.dominance_engine import dominance_engine
@@ -347,8 +348,9 @@ def process(df):
     numerology = numerology_engine(state["price"])
     harmonic = harmonic_engine(df)
     gann_nodes = gann_node_engine(df, state)
-    time_signal = time_engine(gann_adv, astro, gann_nodes)
-    future = future_engine(state, current_record["phase"], time_signal, harmonic, numerology)
+    compression = time_compression_engine(df)
+    time_signal = time_engine(gann_adv, astro, gann_nodes, compression)
+    future = future_engine(state, current_record["phase"], time_signal, harmonic, numerology, compression)
     stage_completed_at = pd.Timestamp.now("UTC")
     process_timing.append(
         {
@@ -579,6 +581,7 @@ def process(df):
         "overfit": overfit,
         "universal": universal,
         "gann_nodes": gann_nodes,
+        "compression": compression,
         "process_timing": process_timing,
     }
 

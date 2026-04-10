@@ -1341,6 +1341,10 @@
             <div id="gannNodePanel" style="display:none;margin:0 10px 10px;padding:0 4px 4px;
                  backdrop-filter:blur(4px);">
             </div>
+            <!-- Time Compression Panel -->
+            <div id="compressionPanel" style="display:none;margin:0 10px 10px;padding:0 4px 4px;
+                 backdrop-filter:blur(4px);">
+            </div>
         </div>
 
         <!-- AI Model Absorption Panel -->
@@ -3082,6 +3086,159 @@
               </div>`;
         }
 
+        function _applyCompressionPanel(comp) {
+            const panel = document.getElementById("compressionPanel");
+            if (!panel) return;
+            if (!comp) { panel.style.display = "none"; return; }
+            panel.style.display = "block";
+
+            const phase        = comp.phase        || "OPEN";
+            const score        = +(comp.score       || 0);
+            const silence      = !!comp.silence_active;
+            const breakoutNear = !!comp.breakout_near;
+            const cycleTight   = !!comp.cycle_tightening;
+            const dirBias      = comp.direction_bias || "NEUTRAL";
+            const energy       = +(comp.energy_stored || 0);
+            const bars         = comp.bars_in_compression || 0;
+            const signal       = comp.signal || "";
+            const layers       = comp.layers  || {};
+
+            // Phase colours
+            const phaseColors = {
+                OPEN:        "#64748b",
+                CONTRACTING: "#f59e0b",
+                SILENT:      "#ef4444",
+                RELEASED:    "#a78bfa",
+                EXPANDING:   "#22c55e",
+            };
+            const phaseColor = phaseColors[phase] || "#64748b";
+            const phaseEmoji = { OPEN:"🔓", CONTRACTING:"🔩", SILENT:"🤫", RELEASED:"💥", EXPANDING:"🚀" }[phase] || "❓";
+
+            // Score arc (SVG half-circle meter)
+            const arcPct   = Math.round(score * 100);
+            const arcAngle = score * 180;   // 0-180 degrees on half-circle
+            const r = 36, cx = 50, cy = 46;
+            const start = { x: cx - r, y: cy };
+            const end   = { x: cx + r, y: cy };
+            function polarToCart(angle) {
+                const rad = (angle - 180) * Math.PI / 180;
+                return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+            }
+            const arcEnd   = polarToCart(arcAngle);
+            const largeArc = arcAngle > 90 ? 1 : 0;
+            const arcPath  = `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${arcEnd.x} ${arcEnd.y}`;
+
+            // Direction badge
+            const dirColors = { UP:"#22c55e", DOWN:"#ef4444", NEUTRAL:"#94a3b8" };
+            const dirArrows = { UP:"↑", DOWN:"↓", NEUTRAL:"↔" };
+            const dirColor  = dirColors[dirBias] || "#94a3b8";
+            const dirArrow  = dirArrows[dirBias]  || "↔";
+
+            // Layer dots
+            const layerDot = (active, label) =>
+                `<span style="padding:2px 7px;border-radius:10px;font-size:10px;font-weight:700;
+                              background:${active ? phaseColor+"33" : "rgba(255,255,255,0.05)"};
+                              color:${active ? phaseColor : "#475569"};
+                              border:1px solid ${active ? phaseColor+"66" : "transparent"};">
+                  ${label}
+                </span>`;
+
+            // Silence alert banner
+            const silenceAlert = silence ? `
+              <div style="margin:6px 0;padding:7px 12px;border-radius:6px;
+                           background:#ef444422;border:1px solid #ef444466;
+                           color:#ef4444;font-size:12px;font-weight:700;text-align:center;
+                           animation:silencePulse 1.5s ease-in-out infinite alternate;">
+                🤫 SILENCE PHASE — Maximum compression detected. Breakout imminent.
+              </div>` : (breakoutNear ? `
+              <div style="margin:6px 0;padding:5px 10px;border-radius:6px;
+                           background:#f59e0b22;border:1px solid #f59e0b66;
+                           color:#f59e0b;font-size:11px;font-weight:600;text-align:center;">
+                ⚠ BREAKOUT NEAR — 2+ compression layers active. Energy storing.
+              </div>` : "");
+
+            panel.innerHTML = `
+              <style>
+                @keyframes silencePulse {
+                  from { opacity: 0.8; } to { opacity: 1.0; box-shadow: 0 0 8px #ef444466; }
+                }
+              </style>
+              <div style="border:1px solid ${phaseColor}44;border-radius:8px;
+                           background:linear-gradient(135deg,rgba(15,23,42,0.95),rgba(30,41,59,0.95));
+                           padding:12px;margin-top:8px;">
+
+                <!-- Header -->
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                  <div style="font-size:13px;font-weight:700;color:#e2e8f0;">
+                    ${phaseEmoji} Time Compression
+                  </div>
+                  <span style="padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;
+                               background:${phaseColor}22;color:${phaseColor};border:1px solid ${phaseColor}55;">
+                    ${phase}
+                  </span>
+                </div>
+
+                ${silenceAlert}
+
+                <!-- Score arc + stats -->
+                <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:10px;">
+                  <div style="text-align:center;min-width:100px;">
+                    <svg width="100" height="52" viewBox="0 0 100 52">
+                      <!-- Track -->
+                      <path d="M 14 46 A 36 36 0 1 1 86 46" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="7" stroke-linecap="round"/>
+                      <!-- Fill -->
+                      <path d="${arcPath}" fill="none" stroke="${phaseColor}" stroke-width="7" stroke-linecap="round"/>
+                      <!-- Label -->
+                      <text x="50" y="46" text-anchor="middle" fill="${phaseColor}" font-size="13" font-weight="700">${arcPct}%</text>
+                    </svg>
+                    <div style="font-size:10px;color:#64748b;margin-top:-4px;">compression</div>
+                  </div>
+                  <div style="flex:1;display:flex;flex-direction:column;gap:5px;padding-top:4px;">
+                    <div style="font-size:11px;color:#94a3b8;">
+                      Energy: <b style="color:#e2e8f0;">${energy.toFixed(1)}%</b> stored
+                      · ${bars} bars contracting
+                    </div>
+                    <div style="font-size:11px;color:#94a3b8;">
+                      Bias: <b style="color:${dirColor};">${dirArrow} ${dirBias}</b>
+                      pre-compression trend
+                    </div>
+                    <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:2px;">
+                      ${layerDot(layers.price_compressed, "PRICE")}
+                      ${layerDot(layers.cycle_compressed, "CYCLE")}
+                      ${layerDot(layers.vol_compressed,   "VOL")}
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Layer ratios -->
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:8px;">
+                  ${[
+                    ["Price", layers.price_ratio, layers.price_compressed],
+                    ["Cycle", layers.cycle_ratio, layers.cycle_compressed],
+                    ["Vol",   layers.vol_ratio,   layers.vol_compressed],
+                  ].map(([lbl, val, active]) => `
+                    <div style="background:rgba(255,255,255,0.03);border-radius:4px;padding:4px 6px;
+                                border-left:2px solid ${active ? phaseColor : "#334155"};">
+                      <div style="font-size:10px;color:#64748b;">${lbl}</div>
+                      <div style="font-size:12px;font-weight:700;color:${active ? phaseColor : "#94a3b8"};">
+                        ${((+(val||1))*100).toFixed(0)}% norm
+                      </div>
+                    </div>`).join("")}
+                </div>
+
+                <!-- Narration -->
+                <div style="font-size:11px;color:#94a3b8;padding:6px 8px;
+                             background:rgba(255,255,255,0.03);border-radius:4px;
+                             border-left:2px solid ${phaseColor}55;line-height:1.5;">
+                  ${signal}
+                </div>
+
+                <div style="margin-top:6px;font-size:10px;color:#334155;text-align:right;">
+                  LAW: SILENCE = SIGNAL · COMPRESSION STORES ENERGY · CYCLES TIGHTEN BEFORE EXPANSION
+                </div>
+              </div>`;
+        }
+
         function _applyGannNodePanel(nodes) {
             const panel = document.getElementById("gannNodePanel");
             if (!panel) return;
@@ -3222,6 +3379,7 @@
                 _applyMoonCyclePanel(data.moon || null);
                 _applyGannNodePanel(data.gann_nodes || null);
                 _applyGannNodeLines(data.gann_nodes || null, mclCandlesSeries);
+                _applyCompressionPanel(data.compression || null);
 
                 // Update status
                 const meta = data.meta || {};

@@ -3082,6 +3082,168 @@ def _build_moon_overlay(candles: list) -> dict:
     }
 
 
+def _build_compression_overlay(candles: list, cached_summary: dict | None = None) -> dict:
+    """
+    3-layer time compression overlay for dashboard panel.
+    Implements Gann's silence-before-expansion law:
+    - Layer 1: Price range compression (bars contracting)
+    - Layer 2: Cycle gap compression (swing intervals shortening)
+    - Layer 3: Volatility silence (stddev contracting)
+    Returns phase, score, layers, and breakout signal.
+    """
+    import math as _m
+    import statistics as _stat
+
+    EMPTY = {
+        "phase": "OPEN", "score": 0.0, "breakout_near": False,
+        "silence_active": False, "cycle_tightening": False,
+        "direction_bias": "NEUTRAL", "energy_stored": 0.0,
+        "bars_in_compression": 0,
+        "signal": "Insufficient data for compression analysis.",
+        "layers": {},
+    }
+
+    # Pull from cached full_system if available (live signal)
+    if cached_summary:
+        comp = cached_summary.get("compression") or {}
+        if comp.get("phase"):
+            return comp
+
+    if len(candles) < 55:
+        return EMPTY
+
+    highs  = [float(c.get("high",  c.get("h", 0)) or 0) for c in candles]
+    lows   = [float(c.get("low",   c.get("l", 0)) or 0) for c in candles]
+    closes = [float(c.get("close", c.get("c", 0)) or 0) for c in candles]
+
+    # ── Layer 1: price range compression ──────────────────────────────────────
+    ranges = [h - l for h, l in zip(highs, lows)]
+    r5  = sum(ranges[-5:])  / 5  if len(ranges) >= 5  else 0
+    r20 = sum(ranges[-20:]) / 20 if len(ranges) >= 20 else 0
+    r50 = sum(ranges[-50:]) / 50 if len(ranges) >= 50 else 0
+    price_ratio = (r5 / r20) if r20 > 0 else 1.0
+    price_score = max(0.0, min(1.0, 1.0 - price_ratio))
+    price_compressed = price_ratio < 0.60
+    silence_price     = price_ratio < 0.40
+
+    # ── Layer 2: cycle gap compression (bars between pivots shortening) ────────
+    window = min(60, len(closes) - 1)
+    gaps = []
+    i = 1
+    last_pivot = 0
+    while i < window - 1:
+        is_high = highs[-i-1] > highs[-i] and highs[-i-1] > highs[-i-2]
+        is_low  = lows[-i-1]  < lows[-i]  and lows[-i-1]  < lows[-i-2]
+        if is_high or is_low:
+            if last_pivot > 0:
+                gaps.append(i - last_pivot)
+            last_pivot = i
+        i += 1
+
+    if len(gaps) >= 4:
+        recent_gaps  = gaps[:len(gaps)//2]
+        earlier_gaps = gaps[len(gaps)//2:]
+        avg_recent   = sum(recent_gaps)  / len(recent_gaps)
+        avg_earlier  = sum(earlier_gaps) / len(earlier_gaps)
+        cycle_ratio  = (avg_recent / avg_earlier) if avg_earlier > 0 else 1.0
+        cycle_score  = max(0.0, min(1.0, 1.0 - cycle_ratio))
+        cycle_compressed = cycle_ratio < 0.65
+    else:
+        cycle_ratio     = 1.0
+        cycle_score     = 0.0
+        cycle_compressed = False
+
+    # ── Layer 3: volatility silence (stddev compression) ─────────────────────
+    returns = [((closes[-i] - closes[-i-1]) / closes[-i-1]) for i in range(1, min(52, len(closes)))]
+    if len(returns) >= 20:
+        recent_std   = _stat.stdev(returns[:10]) if len(returns[:10]) > 1 else 0.0
+        baseline_std = _stat.stdev(returns[:50]) if len(returns[:50]) > 1 else 0.0
+        vol_ratio    = (recent_std / baseline_std) if baseline_std > 0 else 1.0
+        vol_score    = max(0.0, min(1.0, 1.0 - vol_ratio))
+        vol_compressed = vol_ratio < 0.50
+    else:
+        vol_ratio     = 1.0
+        vol_score     = 0.0
+        vol_compressed = False
+
+    # ── Composite score ────────────────────────────────────────────────────────
+    score = round(price_score * 0.40 + cycle_score * 0.35 + vol_score * 0.25, 3)
+    layers_active = sum([price_compressed, cycle_compressed, vol_compressed])
+    breakout_near  = layers_active >= 2
+    silence_active = silence_price and vol_compressed
+
+    # ── Phase ─────────────────────────────────────────────────────────────────
+    if silence_active:
+        phase = "SILENT"
+    elif score >= 0.60:
+        phase = "CONTRACTING"
+    elif score <= 0.15 and not breakout_near:
+        phase = "OPEN"
+    elif price_ratio > 1.4:
+        phase = "EXPANDING"
+    else:
+        phase = "OPEN"
+
+    # ── Direction bias (pre-compression trend) ────────────────────────────────
+    if len(closes) >= 20:
+        trend_close = closes[-20]
+        direction_bias = "UP" if closes[-1] > trend_close else ("DOWN" if closes[-1] < trend_close else "NEUTRAL")
+    else:
+        direction_bias = "NEUTRAL"
+
+    # ── Energy stored ─────────────────────────────────────────────────────────
+    max_range = max(ranges[-50:]) if len(ranges) >= 50 else (max(ranges) if ranges else 1.0)
+    energy_stored = round((1.0 - (r5 / max_range if max_range > 0 else 0)) * 100, 1)
+    energy_stored = max(0.0, min(100.0, energy_stored))
+
+    # ── Bars in compression ────────────────────────────────────────────────────
+    bars_in_compression = 0
+    for i in range(2, min(50, len(ranges))):
+        if (ranges[-i] / r20 if r20 > 0 else 1.0) < 0.70:
+            bars_in_compression += 1
+        else:
+            break
+
+    # ── Signal narration ──────────────────────────────────────────────────────
+    if phase == "SILENT":
+        signal = (
+            f"SILENCE PHASE — Price range {price_ratio:.0%} of norm, vol {vol_ratio:.0%} of norm. "
+            f"Maximum compression. {direction_bias} bias. Breakout imminent."
+        )
+    elif phase == "CONTRACTING":
+        signal = (
+            f"CONTRACTING — {layers_active}/3 layers compressing. Score {score:.2f}. "
+            f"Cycles tightening: {cycle_compressed}. Energy {energy_stored:.0f}% stored."
+        )
+    elif phase == "EXPANDING":
+        signal = f"EXPANDING — Range expanding {price_ratio:.0%} above norm. Energy releasing {direction_bias}."
+    else:
+        signal = f"OPEN — No compression detected. Score {score:.2f}. Market in free range."
+
+    return {
+        "phase":              phase,
+        "score":              score,
+        "breakout_near":      breakout_near,
+        "silence_active":     silence_active,
+        "cycle_tightening":   cycle_compressed,
+        "direction_bias":     direction_bias,
+        "energy_stored":      energy_stored,
+        "bars_in_compression": bars_in_compression,
+        "signal":             signal,
+        "layers": {
+            "price_score":     round(price_score, 3),
+            "price_ratio":     round(price_ratio, 3),
+            "price_compressed": price_compressed,
+            "cycle_score":     round(cycle_score, 3),
+            "cycle_ratio":     round(cycle_ratio, 3),
+            "cycle_compressed": cycle_compressed,
+            "vol_score":       round(vol_score, 3),
+            "vol_ratio":       round(vol_ratio, 3),
+            "vol_compressed":  vol_compressed,
+        },
+    }
+
+
 @router.get("/chart/overlays")
 def chart_overlays(
     symbol: str = Query(default="XAUUSD"),
@@ -3364,6 +3526,8 @@ def chart_overlays(
         "moon": _build_moon_overlay(candles),
         # ── Gann Node pressure points (time+price spiral convergence) ──────────
         "gann_nodes": _build_node_overlay(candles, _cache_payloads.get(f"{symbol}_{timeframe}")),
+        # ── Time Compression (silence = signal, cycles tightening = breakout near)
+        "compression": _build_compression_overlay(candles, _cache_payloads.get(f"{symbol}_{timeframe}")),
         "meta": {
             "swing_highs_found": len(swing_highs),
             "swing_lows_found":  len(swing_lows),

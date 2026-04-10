@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import numpy as np
+from backend.engines.time_compression_engine import time_compression_engine
 
 
 def detect_volatility_regime(df, lookback: int = 20) -> dict:
@@ -52,65 +53,29 @@ def detect_volatility_regime(df, lookback: int = 20) -> dict:
     }
 
 
-def detect_time_compression(df, window: int = 10) -> dict:
-    """
-    Detect price compression (tight range) that often precedes a breakout.
-    Compression score approaches 1.0 as range shrinks toward zero.
-    """
-    if len(df) < window * 2:
-        return {
-            "compressed": False,
-            "compression_score": 0.0,
-            "recent_range": 0.0,
-            "prior_range": 0.0,
-            "breakout_risk": "LOW",
-        }
-
-    recent_range = float(
-        (df["high"].tail(window) - df["low"].tail(window)).mean()
-    )
-    prior_slice = df.tail(window * 2).head(window)
-    prior_range = float((prior_slice["high"] - prior_slice["low"]).mean())
-
-    if prior_range == 0:
-        return {
-            "compressed": False,
-            "compression_score": 0.0,
-            "recent_range": recent_range,
-            "prior_range": prior_range,
-            "breakout_risk": "LOW",
-        }
-
-    ratio = recent_range / prior_range
-    compressed = ratio < 0.60
-    compression_score = round(max(0.0, 1.0 - ratio), 4)
-
-    return {
-        "compressed": compressed,
-        "compression_score": compression_score,
-        "recent_range": round(recent_range, 4),
-        "prior_range": round(prior_range, 4),
-        "breakout_risk": "HIGH" if compressed else "LOW",
-    }
-
-
 def adaptive_timescale_analysis(state: dict, df) -> dict:
     """
-    Combined time-scale analysis: volatility regime + compression detection.
-    Returns signal_modifier: NORMAL | REDUCE_POSITION | BREAKOUT_WATCH.
+    Combined time-scale analysis: volatility regime + full time compression.
+    signal_modifier:
+      NORMAL          — no compression, trade as usual
+      REDUCE_POSITION — fast/expanding regime, size down
+      BREAKOUT_WATCH  — price+cycle+vol contracting, await node break
+      SILENCE_ALERT   — maximum compression (silence phase), breakout imminent
     """
-    regime = detect_volatility_regime(df)
-    compression = detect_time_compression(df)
+    regime      = detect_volatility_regime(df)
+    compression = time_compression_engine(df)   # full 3-layer engine
 
-    if regime["regime"] == "FAST":
-        signal_modifier = "REDUCE_POSITION"
-    elif compression["compressed"]:
+    if compression["phase"] == "SILENT":
+        signal_modifier = "SILENCE_ALERT"
+    elif compression["breakout_near"] or compression["phase"] == "CONTRACTING":
         signal_modifier = "BREAKOUT_WATCH"
+    elif regime["regime"] == "FAST" or compression["phase"] == "EXPANDING":
+        signal_modifier = "REDUCE_POSITION"
     else:
         signal_modifier = "NORMAL"
 
     return {
-        "volatility_regime": regime,
-        "time_compression": compression,
-        "signal_modifier": signal_modifier,
+        "volatility_regime":  regime,
+        "time_compression":   compression,
+        "signal_modifier":    signal_modifier,
     }

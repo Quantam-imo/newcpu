@@ -1,4 +1,4 @@
-def future_engine(state, phase, time_signal, harmonic, numerology):
+def future_engine(state, phase, time_signal, harmonic, numerology, compression=None):
     """
     Identify Gann cycle phase and project near-term direction.
     Produces human-readable cycle identification markers.
@@ -111,5 +111,18 @@ def future_engine(state, phase, time_signal, harmonic, numerology):
     prediction["cycle_progress_pct"] = phase_pct.get(phase, 50)
     prediction["numerology_energy"] = num_meaning if num_meaning else "NEUTRAL"
     prediction["timing_window"] = timing if timing else "NORMAL"
+
+    # ── Time compression override ─────────────────────────────────────────────
+    # Silence phase = maximum stored energy → cycle_event reflects imminent release
+    if compression:
+        if compression.get("silence_active"):
+            prediction["direction"]   = "BREAKOUT IMMINENT"
+            prediction["cycle_event"] = "SILENCE PHASE — Maximum compression, release imminent"
+            prediction["strength"]    = min(4, prediction["strength"] + 1)
+        elif compression.get("breakout_near") and compression.get("phase") == "CONTRACTING":
+            if prediction["direction"] not in ("BREAKOUT IMMINENT", "EXPANSION STARTING", "REVERSAL SOON"):
+                prediction["cycle_event"] = f"{prediction['cycle_event']} [COILING]"
+        elif compression.get("phase") == "EXPANDING":
+            prediction["strength"] = min(4, prediction["strength"] + 1)
 
     return prediction
