@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from datetime import datetime, timezone, timedelta
 
@@ -9,6 +10,74 @@ try:
     import MetaTrader5 as mt5
 except Exception:  # pragma: no cover - depends on local MT5 environment
     mt5 = None
+
+
+def _fetch_via_redis(symbol: str = "XAUUSD", timeframe: int = 5, count: int = 500) -> pd.DataFrame:
+    """
+    Fetch OHLCV candles from Redis — populated by the AstroQuant LiveSyncEngine
+    (Databento → CandleEngine → Redis keys: candle:{symbol}:{tf}:{epoch}).
+
+    This is the PRIMARY live-data path when the system is running with
+    astroquant_livesync.service active. Falls back to RuntimeError so the
+    caller can try the next source.
+    """
+    try:
+        import redis  # type: ignore[import]
+    except ImportError as exc:
+        raise RuntimeError("redis package not installed") from exc
+
+    host = os.environ.get("REDIS_HOST", "localhost")
+    port = int(os.environ.get("REDIS_PORT", 6379))
+    db_num = int(os.environ.get("REDIS_DB", 0))
+
+    try:
+        r = redis.Redis(host=host, port=port, db=db_num, socket_connect_timeout=2)
+        r.ping()
+    except Exception as exc:
+        raise RuntimeError(f"Redis unavailable: {exc}") from exc
+
+    # Scan timestamped candle keys: candle:{symbol}:{tf}:*
+    pattern = f"candle:{symbol}:{timeframe}:*"
+    keys = r.keys(pattern)
+    if not keys:
+        raise RuntimeError(
+            f"No Redis candle keys found for pattern '{pattern}'. "
+            "Is astroquant_livesync.service running?"
+        )
+
+    rows = []
+    for key in keys:
+        raw = r.get(key)
+        if not raw:
+            continue
+        try:
+            candle = json.loads(raw)
+            rows.append(candle)
+        except (json.JSONDecodeError, TypeError):
+            continue
+
+    if not rows:
+        raise RuntimeError(f"Redis returned {len(keys)} keys but all were empty/invalid")
+
+    df = pd.DataFrame(rows)
+
+    # Normalise time column
+    if "timestamp" in df.columns and "time" not in df.columns:
+        df["time"] = pd.to_datetime(df["timestamp"], utc=True)
+    elif "time" in df.columns:
+        df["time"] = pd.to_datetime(df["time"], unit="s", utc=True)
+
+    for col in ("open", "high", "low", "close", "volume"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    df = df.dropna(subset=["time", "open", "high", "low", "close"])
+    df = df.sort_values("time").reset_index(drop=True)
+
+    if df.empty:
+        raise RuntimeError("Redis candle data parsed to empty DataFrame")
+
+    return df[["time", "open", "high", "low", "close", "volume"]].tail(count).reset_index(drop=True)
 
 
 def _fetch_via_databento(count: int) -> pd.DataFrame:
@@ -78,26 +147,44 @@ def _fetch_via_databento(count: int) -> pd.DataFrame:
 
 
 def fetch_xauusd(count: int = 500, timeframe=None) -> pd.DataFrame:
-    if mt5 is None:
-        return _fetch_via_databento(count)
+    """
+    Fetch recent XAUUSD/GC candles for the MCL analysis pipeline.
 
-    tf = timeframe if timeframe is not None else mt5.TIMEFRAME_M5
+    Source priority (first success wins):
+      1. Redis  — AstroQuant LiveSyncEngine candles (zero-latency, always fresh)
+      2. MT5    — MetaTrader5 terminal (requires local MT5 running)
+      3. Databento Historical REST — fallback when both above are unavailable
 
-    if not mt5.initialize():
-        raise RuntimeError("Failed to initialize MetaTrader5 terminal")
+    The Redis path is populated by astroquant_livesync.service which subscribes
+    to the Databento GLBX.MDP3 live feed and aggregates ticks into 1m/5m/15m OHLCV.
+    """
+    # ── 1. Redis (live candles from AstroQuant LiveSyncEngine) ──────────────
+    tf_minutes = 5
+    if timeframe is not None and mt5 is not None:
+        _tf_map = {
+            mt5.TIMEFRAME_M1: 1, mt5.TIMEFRAME_M5: 5,
+            mt5.TIMEFRAME_M15: 15, mt5.TIMEFRAME_M30: 30,
+            mt5.TIMEFRAME_H1: 60,
+        }
+        tf_minutes = _tf_map.get(timeframe, 5)
 
-    rates = mt5.copy_rates_from_pos("XAUUSD", tf, 0, count)
-    if rates is None:
-        raise RuntimeError("MetaTrader5 returned no rates for XAUUSD")
+    try:
+        return _fetch_via_redis(symbol="XAUUSD", timeframe=tf_minutes, count=count)
+    except RuntimeError:
+        pass  # Redis unavailable or no data yet — try next source
 
-    df = pd.DataFrame(rates)
-    if df.empty:
-        raise RuntimeError("No XAUUSD rows returned from MetaTrader5")
+    # ── 2. MetaTrader5 ───────────────────────────────────────────────────────
+    if mt5 is not None:
+        tf = timeframe if timeframe is not None else mt5.TIMEFRAME_M5
+        if mt5.initialize():
+            rates = mt5.copy_rates_from_pos("XAUUSD", tf, 0, count)
+            if rates is not None:
+                df = pd.DataFrame(rates)
+                if not df.empty:
+                    df["time"] = pd.to_datetime(df["time"], unit="s")
+                    if "tick_volume" in df.columns and "volume" not in df.columns:
+                        df = df.rename(columns={"tick_volume": "volume"})
+                    return df
 
-    df["time"] = pd.to_datetime(df["time"], unit="s")
-
-    # Normalize to the internal naming used by the rest of the pipeline.
-    if "tick_volume" in df.columns and "volume" not in df.columns:
-        df = df.rename(columns={"tick_volume": "volume"})
-
-    return df
+    # ── 3. Databento Historical REST (last resort) ───────────────────────────
+    return _fetch_via_databento(count)

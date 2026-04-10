@@ -26,6 +26,10 @@ _module = None
 _cache_lock = threading.Lock()
 _cache_payloads: dict[str, dict[str, Any]] = {}
 _cache_ts_by_key: dict[str, float] = {}
+# Raw MCL full_system() payloads — keyed same as _cache_payloads.
+# Stored separately so /engines can serve all engine outputs without
+# going through the summary flattening layer.
+_cache_raw_payloads: dict[str, dict[str, Any]] = {}
 _CACHE_TTL_SECONDS = 300.0  # 5-minute cache — summaries take 40-90s to compute
 _SUMMARY_TIMEOUT_SECONDS = max(5.0, float(os.getenv("MCL_SUMMARY_TIMEOUT_SECONDS", "90")))
 _MATRIX_TIMEFRAMES = ("1d", "4h", "1h", "30m", "15m", "5m", "1m", "1w", "1month")
@@ -1039,6 +1043,7 @@ def _compute_summary(
     timeframe = _normalize_timeframe(timeframe)
     lookback_years = _normalize_lookback_years(lookback_years)
     source_mode = _normalize_source_mode(source_mode)
+    payload: dict[str, Any] | None = None  # initialised here so except-blocks can reference it
     key = _cache_key(symbol, timeframe, lookback_years, source_mode)
 
     now = time.time()
@@ -1150,6 +1155,98 @@ def _compute_summary(
             "analysis_lifecycle": payload.get("analysis_lifecycle"),
             "memory_size": payload.get("memory_size"),
             "ai_decision": payload.get("ai_decision"),
+            # ── MCL Engine Outputs (full integration) ──────────────────────────
+            # These are the raw outputs of all 9 MCL analytical frameworks,
+            # now surfaced in the summary response for UI, alerts, and trade logic.
+            "mcl_state": (payload.get("final") or {}),
+            "mcl_physics": payload.get("physics"),
+            "mcl_gann": (payload.get("final") or {}).get("phase") and payload.get("gann_adv"),
+            "mcl_gann_adv": payload.get("gann_adv"),
+            "mcl_gann_degree": ((payload.get("gann_adv") or {}).get("degree")),
+            "mcl_gann_zone": ((payload.get("gann_adv") or {}).get("zone")),
+            "mcl_gann_time_cycle": ((payload.get("gann_adv") or {}).get("time_cycle")),
+            "mcl_gann_price_time_equal": ((payload.get("gann_adv") or {}).get("price_time_equal")),
+            "mcl_gann_price_time_ratio": ((payload.get("gann_adv") or {}).get("price_time_ratio")),
+            "mcl_gann_nodes": payload.get("gann_nodes"),
+            "mcl_gann_node_active": ((payload.get("gann_nodes") or {}).get("node_active")),
+            "mcl_gann_node_type": ((payload.get("gann_nodes") or {}).get("node_type")),
+            "mcl_gann_node_price": ((payload.get("gann_nodes") or {}).get("node_price")),
+            "mcl_gann_time_harmonic": ((payload.get("gann_nodes") or {}).get("time_harmonic")),
+            "mcl_liquidity": payload.get("liquidity"),
+            "mcl_liquidity_type": ((payload.get("liquidity") or {}).get("type")),
+            "mcl_liquidity_above": ((payload.get("liquidity") or {}).get("above")),
+            "mcl_liquidity_below": ((payload.get("liquidity") or {}).get("below")),
+            "mcl_physics_force": ((payload.get("physics") or {}).get("force")),
+            "mcl_physics_velocity": ((payload.get("physics") or {}).get("velocity")),
+            "mcl_physics_energy": ((payload.get("physics") or {}).get("energy")),
+            "mcl_numerology": payload.get("numerology"),
+            "mcl_numerology_number": ((payload.get("numerology") or {}).get("number")),
+            "mcl_numerology_meaning": ((payload.get("numerology") or {}).get("meaning")),
+            "mcl_harmonic": payload.get("harmonic"),
+            "mcl_harmonic_pattern": ((payload.get("harmonic") or {}).get("pattern")),
+            "mcl_harmonic_ratio": ((payload.get("harmonic") or {}).get("ratio")),
+            "mcl_astro": payload.get("astro"),
+            "mcl_astro_nakshatra": ((payload.get("astro") or {}).get("nakshatra_name")),
+            "mcl_astro_nakshatra_cycle": ((payload.get("astro") or {}).get("nakshatra_cycle")),
+            "mcl_astro_strength": ((payload.get("astro") or {}).get("strength")),
+            "mcl_astro_moon_phase": ((payload.get("astro") or {}).get("moon") or {}).get("phase_key") if payload.get("astro") else None,
+            "mcl_astro_moon_illumination": (((payload.get("astro") or {}).get("moon") or {}).get("illumination")),
+            "mcl_astro_nearby_event": ((payload.get("astro") or {}).get("nearby_event")),
+            "mcl_compression": payload.get("compression"),
+            "mcl_compression_phase": ((payload.get("compression") or {}).get("phase")),
+            "mcl_compression_score": ((payload.get("compression") or {}).get("score")),
+            "mcl_compression_silence_active": ((payload.get("compression") or {}).get("silence_active")),
+            "mcl_compression_breakout_near": ((payload.get("compression") or {}).get("breakout_near")),
+            "mcl_compression_direction_bias": ((payload.get("compression") or {}).get("direction_bias")),
+            "mcl_compression_energy_stored": ((payload.get("compression") or {}).get("energy_stored")),
+            "mcl_time_signal": payload.get("time_signal"),
+            "mcl_time_timing": ((payload.get("time_signal") or {}).get("timing")),
+            "mcl_time_signals": ((payload.get("time_signal") or {}).get("signals")),
+            "mcl_future": payload.get("future"),
+            "mcl_future_direction": ((payload.get("future") or {}).get("direction")),
+            "mcl_future_cycle_event": ((payload.get("future") or {}).get("cycle_event")),
+            "mcl_future_strength": ((payload.get("future") or {}).get("strength")),
+            "mcl_future_cycle_progress_pct": ((payload.get("future") or {}).get("cycle_progress_pct")),
+            "mcl_future_numerology_energy": ((payload.get("future") or {}).get("numerology_energy")),
+            "mcl_future_timing_window": ((payload.get("future") or {}).get("timing_window")),
+            "mcl_psychology_emotion": ((payload.get("psychology") or {}).get("emotion")),
+            "mcl_behavior_next": ((payload.get("behavior") or {}).get("next")),
+            "mcl_trap_probability": ((payload.get("trap") or {}).get("probability")),
+            "mcl_signals": payload.get("signals"),
+            "mcl_dominance_score": payload.get("score"),
+            "mcl_weights": payload.get("weights"),
+            "mcl_updated_weights": payload.get("updated_weights"),
+            "mcl_probability": payload.get("probability"),
+            "mcl_scenarios": payload.get("scenarios"),
+            "mcl_backtest": payload.get("backtest"),
+            "mcl_backtest_winrate": ((payload.get("backtest") or {}).get("winrate")),
+            "mcl_backtest_wins": ((payload.get("backtest") or {}).get("wins")),
+            "mcl_backtest_losses": ((payload.get("backtest") or {}).get("losses")),
+            "mcl_data_quality": payload.get("data_quality"),
+            "mcl_data_quality_score": ((payload.get("data_quality") or {}).get("score")),
+            "mcl_data_quality_status": ((payload.get("data_quality") or {}).get("status")),
+            "mcl_latency": payload.get("latency"),
+            "mcl_latency_verdict": ((payload.get("latency") or {}).get("timing_verdict")),
+            "mcl_timescale": payload.get("timescale"),
+            "mcl_timescale_regime": (((payload.get("timescale") or {}).get("volatility_regime") or {}).get("regime")),
+            "mcl_overfit": payload.get("overfit"),
+            "mcl_overfit_risk": ((payload.get("overfit") or {}).get("overfit_risk")),
+            "mcl_execution": payload.get("execution"),
+            "mcl_execution_verdict": ((payload.get("execution") or {}).get("verdict")),
+            "mcl_execution_score": ((payload.get("execution") or {}).get("score")),
+            "mcl_execution_issues": ((payload.get("execution") or {}).get("issues")),
+            "mcl_failure": payload.get("failure"),
+            "mcl_failure_status": ((payload.get("failure") or {}).get("status")),
+            "mcl_failure_severity": ((payload.get("failure") or {}).get("severity")),
+            "mcl_failure_issues": ((payload.get("failure") or {}).get("issues")),
+            "mcl_universal": payload.get("universal"),
+            "mcl_universal_fib_levels": ((payload.get("universal") or {}).get("fib_levels")),
+            "mcl_universal_price_degree": ((payload.get("universal") or {}).get("price_degree")),
+            "mcl_universal_nakshatra": ((payload.get("universal") or {}).get("nakshatra")),
+            "mcl_cycle_event": (payload.get("future") or {}).get("cycle_event"),
+            "mcl_cycle_progress_pct": (payload.get("future") or {}).get("cycle_progress_pct"),
+            "mcl_clarity": ((payload.get("simple") or {}).get("clarity")),
+            "mcl_conviction": ((payload.get("simple") or {}).get("conviction")),
             "reasoning_display": payload.get("reasoning_display"),
             "reasoning_tone": ((payload.get("reasoning_display") or {}).get("tone")),
             "reasoning_summary": ((payload.get("reasoning_display") or {}).get("summary")),
@@ -1235,6 +1332,10 @@ def _compute_summary(
     with _cache_lock:
         _cache_payloads[key] = summary
         _cache_ts_by_key[key] = time.time()
+        # Also store the raw MCL payload so /engines can read all engine outputs.
+        # Only update when a fresh full_system() run succeeded (not stale/error fallback).
+        if summary.get("status") == "ok" and payload is not None:
+            _cache_raw_payloads[key] = payload
 
     # ── Auto-learning: record prediction + resolve expired predictions ────────
     if summary.get("status") == "ok":
@@ -2393,6 +2494,127 @@ def market_causality_status() -> dict[str, Any]:
         "total_predictions": cal["total_predictions"],
         "top_signal": max(cal["current_weights"], key=lambda k: cal["current_weights"][k]),
         "weakest_signal": min(cal["current_weights"], key=lambda k: cal["current_weights"][k]),
+    }
+
+
+@router.get("/engines")
+def market_causality_engines(
+    symbol: str = Query(default="XAUUSD"),
+    timeframe: str = Query(default="1d"),
+    lookback_years: int = Query(default=25, ge=1, le=100),
+    source_mode: str = Query(default="historical_first"),
+) -> dict[str, Any]:
+    """
+    Return the raw output of every MCL analytical engine for the current bar.
+
+    This endpoint exposes the full 9-framework intelligence stack as separate
+    structured objects — physics, gann, gann_advanced, gann_nodes, liquidity,
+    phase, trap, psychology, behavior, numerology, harmonic, astro, compression,
+    time_signal, future, sync, backtest, execution, failure, data_quality,
+    latency, timescale, overfit, universal, and the final consensus signal.
+
+    Designed for:
+    - Dashboard deep-dive panels
+    - Automated trading decision audit trail
+    - External consumers wanting structured per-engine data
+    """
+    symbol = _normalize_symbol(symbol)
+    timeframe = _normalize_timeframe(timeframe)
+    lookback_years = _normalize_lookback_years(lookback_years)
+    source_mode = _normalize_source_mode(source_mode)
+
+    cache_key = _cache_key(symbol, timeframe, lookback_years, source_mode)
+    with _cache_lock:
+        payload = _cache_raw_payloads.get(cache_key)
+
+    if payload is None:
+        return {
+            "status": "no_cache",
+            "detail": "No cached MCL result available. Call /market_causality/summary first to populate cache.",
+            "symbol": symbol,
+            "timeframe": timeframe,
+        }
+
+    def _safe(val: Any) -> Any:
+        """Return val if truthy-and-not-empty, else None."""
+        if val is None:
+            return None
+        if isinstance(val, dict) and not val:
+            return None
+        return val
+
+    return {
+        "status": "ok",
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "updated_at": int(time.time()),
+        # ── Core market state ─────────────────────────────────────────────
+        "state": _safe(payload.get("final")),
+        "signal": payload.get("filtered_signal"),
+        "confidence": payload.get("confidence"),
+        "quality": payload.get("quality"),
+        "bias_score": (payload.get("simple") or {}).get("bias_score"),
+        "bias_label": (payload.get("simple") or {}).get("bias_label"),
+        "clarity": (payload.get("simple") or {}).get("clarity"),
+        "conviction": (payload.get("simple") or {}).get("conviction"),
+        # ── Framework 1: Market Physics ───────────────────────────────────
+        "physics": {
+            "force": (payload.get("physics") or {}).get("force"),
+            "velocity": (payload.get("physics") or {}).get("velocity"),
+            "energy": (payload.get("physics") or {}).get("energy"),
+        },
+        # ── Framework 2: W.D. Gann ────────────────────────────────────────
+        "gann": _safe(payload.get("gann_adv")),
+        "gann_nodes": _safe(payload.get("gann_nodes")),
+        # ── Framework 3: ICT / SMC Liquidity ─────────────────────────────
+        "liquidity": _safe(payload.get("liquidity")),
+        # ── Framework 4: Wyckoff Phase ────────────────────────────────────
+        "phase": (payload.get("final") or {}).get("phase"),
+        # ── Framework 5: Vedic Astrology + Moon ──────────────────────────
+        "astro": _safe(payload.get("astro")),
+        # ── Framework 6: Time Compression (Gann Silence) ─────────────────
+        "compression": _safe(payload.get("compression")),
+        # ── Framework 7: Pythagorean Numerology ──────────────────────────
+        "numerology": _safe(payload.get("numerology")),
+        # ── Framework 8: Harmonic Patterns ───────────────────────────────
+        "harmonic": _safe(payload.get("harmonic")),
+        # ── Framework 9: Psychology / Trap / Behavior ─────────────────────
+        "psychology": _safe(payload.get("psychology")),
+        "trap": _safe(payload.get("trap")),
+        "behavior": _safe(payload.get("behavior")),
+        # ── Time Convergence Engine ───────────────────────────────────────
+        "time_signal": _safe(payload.get("time_signal")),
+        # ── Gann Cycle Future Projection ─────────────────────────────────
+        "future": _safe(payload.get("future")),
+        # ── Signal Aggregation Layer ──────────────────────────────────────
+        "signals": _safe(payload.get("signals")),
+        "dominance_score": _safe(payload.get("score")),
+        "weights": _safe(payload.get("weights")),
+        "scenarios": _safe(payload.get("scenarios")),
+        "probability": _safe(payload.get("probability")),
+        # ── Institutional / Macro Layer ───────────────────────────────────
+        "institutional": _safe(payload.get("institutional")),
+        # ── Trade Levels ──────────────────────────────────────────────────
+        "trade_levels": _safe(payload.get("trade_levels")),
+        # ── Precision / Realism Layer ─────────────────────────────────────
+        "data_quality": _safe(payload.get("data_quality")),
+        "latency": _safe(payload.get("latency")),
+        "timescale": _safe(payload.get("timescale")),
+        "overfit": _safe(payload.get("overfit")),
+        "execution": _safe(payload.get("execution")),
+        "failure": _safe(payload.get("failure")),
+        # ── Universal Conversion Engine ───────────────────────────────────
+        "universal": _safe(payload.get("universal")),
+        # ── Memory / Backtest ─────────────────────────────────────────────
+        "backtest": _safe(payload.get("backtest")),
+        "memory_size": payload.get("memory_size"),
+        # ── AI / Learning ─────────────────────────────────────────────────
+        "ai_decision": payload.get("ai_decision"),
+        "ai_model": _safe(payload.get("ai_model")),
+        # ── Timing ───────────────────────────────────────────────────────
+        "process_timing": _safe(payload.get("process_timing")),
+        "rows_analyzed": payload.get("rows_analyzed"),
+        "data_source": payload.get("data_source"),
     }
 
 
