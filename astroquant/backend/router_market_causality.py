@@ -3181,6 +3181,9 @@ def _build_compression_overlay(candles: list, cached_summary: dict | None = None
         phase = "OPEN"
     elif price_ratio > 1.4:
         phase = "EXPANDING"
+    elif layers_active >= 2 and price_ratio > 0.8:
+        # Energy released: was compressed, now range expanding through compression
+        phase = "RELEASED"
     else:
         phase = "OPEN"
 
@@ -3217,6 +3220,8 @@ def _build_compression_overlay(candles: list, cached_summary: dict | None = None
         )
     elif phase == "EXPANDING":
         signal = f"EXPANDING — Range expanding {price_ratio:.0%} above norm. Energy releasing {direction_bias}."
+    elif phase == "RELEASED":
+        signal = f"RELEASED — Breakout discharged. {direction_bias} move underway. Monitor for re-compression."
     else:
         signal = f"OPEN — No compression detected. Score {score:.2f}. Market in free range."
 
@@ -3299,15 +3304,17 @@ def chart_overlays(
                 })
 
     # ── 3. Lunar events (New Moon / Full Moon) ─────────────────────────────
-    # Known New Moon reference: 2026-03-29 UTC
-    _NEW_MOON_EPOCH = 1774828800  # 2026-03-29 00:00 UTC
-    _LUNAR_PERIOD = 29.53058 * 86400  # seconds
+    # Reference new moon: 2000-01-06 18:14 UTC (J2000, same as astro_engine.py)
+    _NEW_MOON_EPOCH = 947182440  # 2000-01-06 18:14 UTC
+    _LUNAR_PERIOD = 29.530588853 * 86400  # seconds
 
     first_ts = candles[0]["time"]
     last_ts = candles[-1]["time"]
 
-    # Walk backward from reference to find New Moon before chart start
-    ref = _NEW_MOON_EPOCH
+    # Walk forward from reference to first New Moon on or after chart start
+    # (fast path: skip directly by integer months)
+    months_ahead = max(0, (first_ts - _NEW_MOON_EPOCH) // _LUNAR_PERIOD)
+    ref = _NEW_MOON_EPOCH + months_ahead * _LUNAR_PERIOD
     while ref > first_ts:
         ref -= _LUNAR_PERIOD
     while ref < first_ts:
@@ -3331,12 +3338,18 @@ def chart_overlays(
     lunar_events = []
     t = ref
     half = _LUNAR_PERIOD / 2
+    # LightweightCharts needs timestamps in the SAME unit as the candle timescale.
+    # The chart endpoint returns candle["time"] as Unix epoch seconds for intraday
+    # and as Unix day-integers (epoch_secs // 86400) for daily+ bars.
+    # Detect which unit candles use: daily bars have time values < ~30000 (days since epoch).
+    _is_days_timescale = candle_times[-1] < 100_000 if candle_times else False
+
     while t <= last_ts + _LUNAR_PERIOD:
         # New Moon
         nm_ts = _nearest_candle_time(t)
         if first_ts <= nm_ts <= last_ts:
             lunar_events.append({
-                "time": int(nm_ts),
+                "time": int(nm_ts),   # already snapped to a real candle timestamp
                 "label": "🌑NM",
                 "color": "#94a3b8",
                 "shape": "circle",

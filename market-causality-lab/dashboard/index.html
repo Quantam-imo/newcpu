@@ -2991,7 +2991,8 @@
                         lineWidth: isActive ? 2 : 1,
                         lineStyle: isActive ? 0 /* solid */ : 2 /* dotted */,
                         axisLabelVisible: lvl.node_type === "CARDINAL",
-                        title: isActive ? `⬤ NODE ${lvl.degree}°` : `${lvl.node_type[0]}${lvl.degree}°`,
+                        // BUG FIX: server sends step*90 which can be negative; normalise to 0-360
+                        title: isActive ? `⬤ NODE ${((lvl.degree % 360) + 360) % 360}°` : `${lvl.node_type[0]}${((lvl.degree % 360) + 360) % 360}°`,
                     });
                     _nodePriceLines.push(pl);
                 } catch (_) {}
@@ -3211,6 +3212,7 @@
                 </div>
 
                 <!-- Layer ratios -->
+                <!-- BUG FIX: val can be undefined when compression=null; guard with != null -->
                 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:8px;">
                   ${[
                     ["Price", layers.price_ratio, layers.price_compressed],
@@ -3221,7 +3223,7 @@
                                 border-left:2px solid ${active ? phaseColor : "#334155"};">
                       <div style="font-size:10px;color:#64748b;">${lbl}</div>
                       <div style="font-size:12px;font-weight:700;color:${active ? phaseColor : "#94a3b8"};">
-                        ${((+(val||1))*100).toFixed(0)}% norm
+                        ${val != null ? (val * 100).toFixed(0) : "--"}% norm
                       </div>
                     </div>`).join("")}
                 </div>
