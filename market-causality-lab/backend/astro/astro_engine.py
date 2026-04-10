@@ -296,14 +296,7 @@ def astro_engine(df, cache: dict | None = None):
     if cache is None:
         cache = {}
 
-    # Base: nakshatra cycle
-    cycle = len(df) % 27  # 27 nakshatra cycle
-    if cycle in [0, 9, 18]:
-        strength = "HIGH"
-    else:
-        strength = "NORMAL"
-
-    # ── Moon phase (computed from latest bar timestamp) ───────────────────────
+    # ── Current bar timestamp ─────────────────────────────────────────────────
     current_bar_ts = df["time"].iloc[-1] if "time" in df.columns and not df.empty else pd.Timestamp.now("UTC")
     if isinstance(current_bar_ts, pd.Timestamp):
         bar_dt = current_bar_ts.to_pydatetime()
@@ -311,14 +304,42 @@ def astro_engine(df, cache: dict | None = None):
             bar_dt = bar_dt.replace(tzinfo=timezone.utc)
     else:
         bar_dt = datetime.now(timezone.utc)
+
+    # ── Moon phase ────────────────────────────────────────────────────────────
     moon_info = moon_phase(bar_dt)
 
-    # Update nakshatra strength if moon is at a key phase
+    # ── Load CSV events (needed for nakshatra + event detection) ─────────────
+    astro_events_df = load_astro_events(cache)
+
+    # ── Nakshatra cycle from CSV (swisseph-computed, not dataframe length) ────
+    # BUG FIX: was `len(df) % 27` — bar count % 27 has no astronomical meaning.
+    # The Moon moves through 27 nakshatras per sidereal month (~1 per day).
+    # We now look up the most recent nakshatra transition from the swisseph CSV.
+    from backend.universal_engine.astro_conversion import NAKSHATRAS
+    cycle = 0
+    nakshatra_name = "Unknown"
+    if not astro_events_df.empty:
+        nak_df = astro_events_df[astro_events_df["category"] == "nakshatra"]
+        nak_past = nak_df[nak_df["time"] <= current_bar_ts]
+        if not nak_past.empty:
+            last_nak_event = str(nak_past.iloc[-1]["event"])
+            for i, name in enumerate(NAKSHATRAS):
+                if name.lower() in last_nak_event.lower():
+                    cycle = i
+                    nakshatra_name = name
+                    break
+
+    # Strength: Gann-significant nakshatras at trikona positions (0°, 120°, 240°)
+    if cycle in [0, 9, 18]:
+        strength = "HIGH"
+    else:
+        strength = "NORMAL"
+
+    # Override: moon at cardinal phase always triggers HIGH window
     if moon_info["phase_key"] in ("NEW_MOON", "FULL_MOON"):
         strength = "HIGH"
 
     # Event detection: find nearby astro event within ±12 hours
-    astro_events_df = load_astro_events(cache)
 
     event_info = None
     if not astro_events_df.empty:
@@ -353,6 +374,7 @@ def astro_engine(df, cache: dict | None = None):
 
     return {
         "nakshatra_cycle": cycle,
+        "nakshatra_name": nakshatra_name,
         "strength": strength,
         "nearby_event": event_info,
         "moon": moon_info,

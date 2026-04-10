@@ -48,22 +48,25 @@ def analyze_gann_at_event(df: pd.DataFrame, event_time: pd.Timestamp) -> dict:
         if not time_diffs.empty:
             bars_since_event = int(time_diffs.idxmin())
     
-    # Check P=T: price move should equal bar count
+    # Check P=T: using Gann degree-units (consistent with gann_advanced.py fix).
+    # Raw dollar move vs bar count is meaningless for high-priced instruments.
+    # |Δsqrt(price)| × 180 / 10 bars ≈ 1.0 means Price=Time in degree space.
     if len(df) >= 10:
-        price_move = float(abs(df["close"].iloc[-1] - df["close"].iloc[-10]))
-        time_move = 10
-        p_equals_t = abs(price_move - time_move) < 0.5
+        _c_now  = float(df["close"].iloc[-1])
+        _c_prev = float(df["close"].iloc[-10])
+        _pt_ratio = abs(math.sqrt(max(_c_now, 1e-9)) - math.sqrt(max(_c_prev, 1e-9))) * 180.0 / 10.0
+        p_equals_t = bool(0.90 <= _pt_ratio <= 1.10)
     else:
         p_equals_t = False
     
-    # Check key Gann angles: 45°, 90°, 180°, 225°
-    key_angles = [45, 90, 180, 225, 315]
+    # Check key Gann angles: all 8 cardinal/ordinal positions on SQ9 wheel
+    key_angles = [45, 90, 135, 180, 225, 270, 315, 360]
     closest_angle = min(key_angles, key=lambda a: min(abs(gann_degree - a), 360 - abs(gann_degree - a)))
     angle_proximity = "EXACT" if abs(gann_degree - closest_angle) < 5 or abs(gann_degree - closest_angle) > 355 else "NEAR" if abs(gann_degree - closest_angle) < 15 else "NONE"
     
     return {
         "p_equals_t": p_equals_t,
-        "p_equals_degree": abs(price - gann_degree) < 10,  # Close proximity
+        "p_equals_degree": angle_proximity in ("EXACT", "NEAR"),  # price degree at key Gann angle
         "date_equals_price": False,  # TODO: implement date numerology = price match
         "current_degree": round(gann_degree, 2),
         "nearest_key_angle": closest_angle,

@@ -2998,7 +2998,7 @@ def _build_moon_overlay(candles: list) -> dict:
     from datetime import datetime, timezone as _tz
 
     # ── Pure-math moon phase (same formula as astro_engine.moon_phase) ───────
-    _KNOWN_NEW_MOON_TS = 947167440.0   # 2000-01-06 18:14 UTC in epoch seconds
+    _KNOWN_NEW_MOON_TS = 947182440.0   # 2000-01-06 18:14 UTC in epoch seconds (verified)
     _SYNODIC            = 29.530588853 * 86400.0  # seconds
 
     last_ts = candles[-1]["time"] if candles else int(datetime.now(_tz.utc).timestamp())
