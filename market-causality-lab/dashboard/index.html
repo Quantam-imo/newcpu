@@ -1337,6 +1337,10 @@
                  background:rgba(15,23,42,0.8);border:1px solid rgba(251,191,36,0.25);
                  border-radius:8px;backdrop-filter:blur(4px);">
             </div>
+            <!-- Gann Node Pressure Points Panel -->
+            <div id="gannNodePanel" style="display:none;margin:0 10px 10px;padding:0 4px 4px;
+                 backdrop-filter:blur(4px);">
+            </div>
         </div>
 
         <!-- AI Model Absorption Panel -->
@@ -2961,6 +2965,35 @@
             });
         }
 
+        // Draw SQ9 spiral node horizontal price lines on chart
+        let _nodePriceLines = [];
+        function _applyGannNodeLines(nodeData, candleSeries) {
+            // Remove old node lines
+            _nodePriceLines.forEach(pl => { try { candleSeries.removePriceLine(pl); } catch (_) {} });
+            _nodePriceLines = [];
+            if (!nodeData || !candleSeries) return;
+
+            const typeColors = { CARDINAL:"#f59e0b", ORDINAL:"#38bdf8", MINOR:"#334155" };
+            const sq9 = nodeData.sq9_levels || [];
+            const activePrice = nodeData.node_price || 0;
+
+            sq9.forEach(lvl => {
+                if (lvl.node_type === "MINOR") return;  // only draw CARDINAL and ORDINAL
+                const isActive = activePrice > 0 && Math.abs(lvl.price - activePrice) < 0.01;
+                try {
+                    const pl = candleSeries.createPriceLine({
+                        price: lvl.price,
+                        color: isActive ? "#22c55e" : typeColors[lvl.node_type] || "#334155",
+                        lineWidth: isActive ? 2 : 1,
+                        lineStyle: isActive ? 0 /* solid */ : 2 /* dotted */,
+                        axisLabelVisible: lvl.node_type === "CARDINAL",
+                        title: isActive ? `⬤ NODE ${lvl.degree}°` : `${lvl.node_type[0]}${lvl.degree}°`,
+                    });
+                    _nodePriceLines.push(pl);
+                } catch (_) {}
+            });
+        }
+
         function _applyMoonCyclePanel(moon) {
             /** Render the moon phase + Gann cycle identification panel. */
             const panelEl = document.getElementById("moonCyclePanel");
@@ -3049,6 +3082,99 @@
               </div>`;
         }
 
+        function _applyGannNodePanel(nodes) {
+            const panel = document.getElementById("gannNodePanel");
+            if (!panel) return;
+            if (!nodes) { panel.style.display = "none"; return; }
+            panel.style.display = "block";
+
+            const sq = nodes.signal_quality || "WATCH";
+            const sqColors = { REAL:"#22c55e", NOISE:"#ef4444", BUILDING:"#f59e0b", WATCH:"#64748b" };
+            const sqColor = sqColors[sq] || "#64748b";
+            const sqEmoji = { REAL:"🎯", NOISE:"🔇", BUILDING:"⏳", WATCH:"👁" }[sq] || "👁";
+
+            const nodeActive  = nodes.node_active;
+            const nodePrice   = nodes.node_price;
+            const nodeType    = nodes.node_type || "NONE";
+            const harmonic    = nodes.time_harmonic || 0;
+            const barsSwing   = nodes.bars_from_swing || 0;
+            const barsNext    = nodes.bars_to_next || 0;
+            const spiral      = nodes.spiral_expansion || "";
+            const narration   = nodes.narration || "";
+            const nextNodes   = nodes.next_nodes || [];
+            const rule        = nodes.rule || "TIME+PRICE=REAL | PRICE_ONLY=NOISE";
+
+            const spiralColor = spiral.includes("UP") ? "#22c55e" : spiral.includes("DOWN") ? "#ef4444" : "#f59e0b";
+            const spiralArrow = spiral.includes("UP") ? "↑" : spiral.includes("DOWN") ? "↓" : "↔";
+
+            // Active node banner
+            const activeBanner = nodeActive ? `
+              <div style="margin:6px 0;padding:6px 10px;border-radius:6px;
+                           background:#22c55e22;border:1px solid #22c55e66;
+                           color:#22c55e;font-size:12px;font-weight:700;text-align:center;">
+                🎯 NODE ACTIVE — ${nodeType} node @ $${nodePrice}  ×  ${harmonic}-bar harmonic
+              </div>` : "";
+
+            // Next nodes mini-table
+            const topNodes = nextNodes.slice(0, 6);
+            const nodeRows = topNodes.map(n => {
+                const typeColor = n.node_type === "CARDINAL" ? "#f59e0b"
+                                : n.node_type === "ORDINAL"  ? "#38bdf8" : "#64748b";
+                const dirArrow = n.direction === "above" ? "↑" : "↓";
+                return `<div style="display:flex;justify-content:space-between;align-items:center;
+                              padding:2px 6px;border-radius:3px;background:rgba(255,255,255,0.03);
+                              margin:1px 0;font-size:11px;color:#cbd5e1;">
+                    <span style="color:${typeColor};font-weight:600;min-width:70px;">${n.node_type}</span>
+                    <span style="color:#e2e8f0;font-weight:700;">${dirArrow} $${n.price}</span>
+                    <span style="color:#94a3b8;">${n.dist_pct}%</span>
+                    <span style="color:#64748b;">${n.degree}°</span>
+                  </div>`;
+            }).join("");
+
+            panel.innerHTML = `
+              <div style="border:1px solid ${sqColor}44;border-radius:8px;
+                           background:linear-gradient(135deg,rgba(15,23,42,0.95),rgba(30,41,59,0.95));
+                           padding:12px;margin-top:8px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                  <div style="font-size:13px;font-weight:700;color:#e2e8f0;">
+                    ${sqEmoji} Gann Node — Pressure Points
+                  </div>
+                  <span style="padding:3px 8px;border-radius:4px;font-size:11px;font-weight:700;
+                               background:${sqColor}22;color:${sqColor};border:1px solid ${sqColor}55;">
+                    ${sq}
+                  </span>
+                </div>
+
+                ${activeBanner}
+
+                <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+                  <div style="font-size:11px;color:#94a3b8;">
+                    ⏱ <b style="color:#e2e8f0;">${barsSwing}</b> bars from swing
+                    · next harmonic in <b style="color:#f59e0b;">${barsNext}</b> bars (${harmonic}-bar)
+                  </div>
+                  <div style="font-size:11px;">
+                    Spiral: <b style="color:${spiralColor};">${spiralArrow} ${spiral}</b>
+                  </div>
+                </div>
+
+                <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;
+                             padding:6px;background:rgba(0,0,0,0.2);border-radius:4px;
+                             border-left:2px solid ${sqColor}88;line-height:1.5;">
+                  ${narration}
+                </div>
+
+                <div style="font-size:10px;color:#475569;font-style:italic;margin-bottom:6px;">
+                  Rule: ${rule}
+                </div>
+
+                <div style="font-size:10px;color:#64748b;font-weight:700;
+                             text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">
+                  SQ9 Spiral Nodes
+                </div>
+                ${nodeRows}
+              </div>`;
+        }
+
         async function loadChartOverlays(symbol, timeframe) {
             if (!mclChart) return;
             const params = new URLSearchParams({
@@ -3094,6 +3220,8 @@
                 _applyPredictionSeries(data.prediction_zone || []);
                 _applyGannAngleSeries(data.gann_angles || []);
                 _applyMoonCyclePanel(data.moon || null);
+                _applyGannNodePanel(data.gann_nodes || null);
+                _applyGannNodeLines(data.gann_nodes || null, mclCandlesSeries);
 
                 // Update status
                 const meta = data.meta || {};

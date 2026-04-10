@@ -2846,6 +2846,150 @@ def market_causality_reset_weights(
 # Chart Overlays — Cycles · Lunar Events · Auto-Pattern Identification
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _build_node_overlay(candles: list, cached_summary: dict | None = None) -> dict:
+    """
+    Build Gann Node pressure-point overlay for dashboard chart.
+    Nodes = spiral intersections where TIME + PRICE converge.
+    Price-only hits = noise (filtered out).
+    """
+    import math as _math
+
+    if not candles:
+        return {"node_active": False, "signal_quality": "WATCH", "next_nodes": [], "sq9_levels": []}
+
+    last = candles[-1]
+    price = float(last.get("close", last.get("c", 0)) or 0)
+    if price <= 0:
+        return {"node_active": False, "signal_quality": "WATCH", "next_nodes": [], "sq9_levels": []}
+
+    # ── SQ9 spiral levels (each step = 90° arc on sqrt scale) ────────────────
+    _STEP = 0.5
+    root = _math.sqrt(price)
+    floor_n = int(root / _STEP)
+    sq9_levels = []
+    for i in range(-6, 7):
+        n = floor_n + i
+        if n <= 0:
+            continue
+        lvl = round((n * _STEP) ** 2, 2)
+        step_n = abs(i)
+        node_type = "CARDINAL" if step_n <= 4 else "ORDINAL" if step_n <= 6 else "MINOR"
+        direction = "above" if lvl > price else "below" if lvl < price else "exact"
+        sq9_levels.append({
+            "price": lvl,
+            "step": i,
+            "degree": i * 90,
+            "node_type": node_type,
+            "direction": direction,
+        })
+    sq9_levels.sort(key=lambda x: x["price"])
+
+    # ── Check price proximity to node ────────────────────────────────────────
+    price_node = None
+    for lvl in sq9_levels:
+        if lvl["price"] <= 0:
+            continue
+        dev = abs(price - lvl["price"]) / lvl["price"]
+        if dev <= 0.003:   # 0.3% tolerance
+            price_node = {**lvl, "deviation_pct": round(dev * 100, 3)}
+            break
+
+    # ── Bars from last swing (walk back through candles) ─────────────────────
+    bars_from_swing = 0
+    if len(candles) >= 6:
+        closes = [c.get("close", c.get("c", 0)) for c in candles]
+        highs  = [c.get("high",  c.get("h", 0)) for c in candles]
+        lows   = [c.get("low",   c.get("l", 0)) for c in candles]
+        for i in range(len(closes) - 2, 2, -1):
+            if highs[i] > highs[i - 1] and highs[i] > highs[i + 1]:
+                bars_from_swing = len(closes) - 1 - i
+                break
+            if lows[i] < lows[i - 1] and lows[i] < lows[i + 1]:
+                bars_from_swing = len(closes) - 1 - i
+                break
+
+    _HARMONICS = [45, 72, 90, 144, 180, 270, 360]
+    best_harmonic = min(_HARMONICS, key=lambda h: abs(h - bars_from_swing)) if bars_from_swing > 0 else 90
+    bars_away     = abs(best_harmonic - bars_from_swing)
+    time_at_node  = bars_away <= max(2, int(best_harmonic * 0.03))
+    price_at_node = price_node is not None
+
+    # ── Signal quality (the core rule) ───────────────────────────────────────
+    if time_at_node and price_at_node:
+        signal_quality = "REAL"
+        node_active = True
+    elif price_at_node:
+        signal_quality = "NOISE"      # price alone = ignore
+        node_active = False
+    elif time_at_node:
+        signal_quality = "BUILDING"   # time fires, await price
+        node_active = False
+    else:
+        signal_quality = "WATCH"
+        node_active = False
+
+    # ── Next nodes list for chart lines ──────────────────────────────────────
+    above = [x for x in sq9_levels if x["direction"] == "above"][:4]
+    below = [x for x in sq9_levels if x["direction"] == "below"][-4:]
+    next_harmonic = next((h for h in _HARMONICS if h > bars_from_swing), 360)
+    bars_to_next  = next_harmonic - bars_from_swing
+
+    def _enrich(n):
+        return {**n, "dist_pct": round(abs(n["price"] - price) / price * 100, 2),
+                "est_bars_to_reach": bars_to_next}
+
+    next_nodes = [_enrich(n) for n in (above + below)]
+    next_nodes.sort(key=lambda x: x["dist_pct"])
+
+    # ── Pull live node data from cached summary if available ─────────────────
+    live_narration = ""
+    live_spiral    = ""
+    if cached_summary:
+        gn = cached_summary.get("gann_nodes") or {}
+        live_narration = gn.get("narration", "")
+        live_spiral    = gn.get("spiral_expansion", "")
+
+    # ── Narration ─────────────────────────────────────────────────────────────
+    if not live_narration:
+        if signal_quality == "REAL":
+            live_narration = (
+                f"NODE CONFIRMED — ${price_node['price']} + {best_harmonic} bars converge. "
+                f"{price_node['node_type']} node. MOVE EXPECTED."
+            )
+        elif signal_quality == "NOISE":
+            live_narration = (
+                f"NOISE — Price at ${price_node['price']} but time is {bars_away} bars "
+                f"from harmonic {best_harmonic}. No action."
+            )
+        elif signal_quality == "BUILDING":
+            live_narration = (
+                f"TIME HARMONIC {best_harmonic} bars firing — price ${price:.2f} not yet at SQ9 node. "
+                f"Watch ${above[0]['price'] if above else 0}."
+            )
+        else:
+            live_narration = (
+                f"Spiral: {bars_from_swing} bars from swing, {bars_to_next} bars to harmonic {next_harmonic}. "
+                f"Next nodes: ↑${above[0]['price'] if above else 0}  ↓${below[-1]['price'] if below else 0}"
+            )
+
+    return {
+        "node_active":     node_active,
+        "signal_quality":  signal_quality,
+        "node_type":       price_node["node_type"] if price_node else "NONE",
+        "node_price":      price_node["price"]     if price_node else 0.0,
+        "time_harmonic":   best_harmonic,
+        "bars_from_swing": bars_from_swing,
+        "bars_to_next":    bars_to_next,
+        "price_at_node":   price_at_node,
+        "time_at_node":    time_at_node,
+        "spiral_expansion": live_spiral or ("UP_SPIRAL" if last.get("close", 0) > (candles[-20].get("close", 0) if len(candles) >= 20 else 0) else "DOWN_SPIRAL"),
+        "next_nodes":      next_nodes,
+        "sq9_levels":      sq9_levels,
+        "narration":       live_narration,
+        "rule":            "TIME+PRICE=REAL | PRICE_ONLY=NOISE | CYCLE_ENDS_AT_NODE",
+    }
+
+
 def _build_moon_overlay(candles: list) -> dict:
     """
     Compute the current moon phase from the last candle timestamp and return
@@ -3218,6 +3362,8 @@ def chart_overlays(
         "gann_angles": gann_angles,
         # ── Moon phase + Gann cycle identification (live) ──────────────────────
         "moon": _build_moon_overlay(candles),
+        # ── Gann Node pressure points (time+price spiral convergence) ──────────
+        "gann_nodes": _build_node_overlay(candles, _cache_payloads.get(f"{symbol}_{timeframe}")),
         "meta": {
             "swing_highs_found": len(swing_highs),
             "swing_lows_found":  len(swing_lows),

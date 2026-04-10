@@ -510,6 +510,18 @@ def record_observation(
                                  (result or {}).get("astro", {}).get("moon", {}).get("full_moon_peaked")),
         "cycle_event": ((result or {}).get("future") or {}).get("cycle_event"),
         "cycle_progress_pct": ((result or {}).get("future") or {}).get("cycle_progress_pct"),
+        # ── Gann Node pressure points ─────────────────────────────────────────
+        "node_active":       ((result or {}).get("gann_nodes") or {}).get("node_active", False),
+        "node_type":         ((result or {}).get("gann_nodes") or {}).get("node_type", "NONE"),
+        "node_price":        ((result or {}).get("gann_nodes") or {}).get("node_price", 0),
+        "node_degree":       ((result or {}).get("gann_nodes") or {}).get("node_degree", 0),
+        "node_time_harmonic":((result or {}).get("gann_nodes") or {}).get("time_harmonic", 0),
+        "node_time_label":   ((result or {}).get("gann_nodes") or {}).get("time_label", ""),
+        "node_bars_from_swing": ((result or {}).get("gann_nodes") or {}).get("bars_from_swing", 0),
+        "node_bars_to_next": ((result or {}).get("gann_nodes") or {}).get("bars_to_next_node", 0),
+        "node_signal_quality": ((result or {}).get("gann_nodes") or {}).get("signal_quality", "WATCH"),
+        "node_spiral":       ((result or {}).get("gann_nodes") or {}).get("spiral_expansion", ""),
+        "node_narration":    ((result or {}).get("gann_nodes") or {}).get("narration", ""),
         # ── Gann Square-of-9 levels + cycle position ──────────────────────────
         "gann_sq9_support": ((result or {}).get("universal") or {}).get("gann", {}).get("support_90"),
         "gann_sq9_resist":  ((result or {}).get("universal") or {}).get("gann", {}).get("resist_90"),

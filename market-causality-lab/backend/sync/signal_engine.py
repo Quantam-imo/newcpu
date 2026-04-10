@@ -4,27 +4,26 @@ def generate_signals(state, liquidity, gann, ai_decision):
     # Structure bias
     signals["structure"] = "BUY" if state["trend"] == "UP" else "SELL"
 
-    # Liquidity — sweep detection + directional bias when no sweep
+    # Liquidity — ICT/SMC sweep detection with price-zone proximity fallback
     if liquidity["type"] == "SELL_SIDE_SWEEP":
-        signals["liquidity"] = "BUY"   # sell-side swept → smart money buying
+        signals["liquidity"] = "BUY"   # swept sell-side lows → reversal up expected
     elif liquidity["type"] == "BUY_SIDE_SWEEP":
-        signals["liquidity"] = "SELL"  # buy-side swept → smart money distributing
+        signals["liquidity"] = "SELL"  # swept buy-side highs → reversal down expected
     else:
-        # No sweep: price between zones — use distance to nearest pool
-        price = float(state.get("price", 0))
-        above = float(liquidity.get("above") or 0)
-        below = float(liquidity.get("below") or 0)
-        if price > 0 and above > 0 and below > 0 and above != below:
-            # Price closer to upper pool → targeting upper liquidity (BUY bias)
-            # Price closer to lower pool → targeting lower liquidity (SELL bias)
-            dist_above = abs(above - price)
-            dist_below = abs(price - below)
-            if dist_above < dist_below * 0.8:
-                signals["liquidity"] = "SELL"  # near upper pool, risk of sell sweep
-            elif dist_below < dist_above * 0.8:
-                signals["liquidity"] = "BUY"   # near lower pool, risk of buy sweep
+        # No sweep: use price position relative to liquidity zones
+        price = float(state.get("price", 0) or 0)
+        above = float(liquidity.get("above", price + 1))
+        below = float(liquidity.get("below", price - 1))
+        if price > 0 and above > below:
+            dist_above = above - price
+            dist_below = price - below
+            if dist_above < dist_below:
+                # Price closer to upper pool — targeting upper liquidity
+                signals["liquidity"] = "BUY"
+            elif state.get("trend") == "DOWN":
+                signals["liquidity"] = "SELL"
             else:
-                signals["liquidity"] = "NEUTRAL"  # equidistant, no directional edge
+                signals["liquidity"] = "BUY"
         else:
             signals["liquidity"] = "NEUTRAL"
 
