@@ -320,7 +320,14 @@ def astro_engine(df, cache: dict | None = None):
     nakshatra_name = "Unknown"
     if not astro_events_df.empty:
         nak_df = astro_events_df[astro_events_df["category"] == "nakshatra"]
-        nak_past = nak_df[nak_df["time"] <= current_bar_ts]
+        # Normalize current_bar_ts timezone to match nak_df["time"] (UTC-aware)
+        _cmp_ts = current_bar_ts
+        if isinstance(_cmp_ts, pd.Timestamp):
+            if _cmp_ts.tzinfo is None:
+                _cmp_ts = _cmp_ts.tz_localize("UTC")
+        else:
+            _cmp_ts = pd.Timestamp(current_bar_ts, tz="UTC")
+        nak_past = nak_df[nak_df["time"] <= _cmp_ts]
         if not nak_past.empty:
             last_nak_event = str(nak_past.iloc[-1]["event"])
             for i, name in enumerate(NAKSHATRAS):
