@@ -137,18 +137,43 @@ fi
 # Wait for Chrome to start listening
 echo "      Waiting for Chrome CDP on 127.0.0.1:${CDP_PORT}..."
 _chrome_ready=false
-for i in $(seq 1 15); do
+for i in $(seq 1 20); do
   if curl -s --max-time 1 "http://127.0.0.1:${CDP_PORT}/json/version" > /dev/null 2>&1; then
     _chrome_ready=true; break
   fi
   sleep 1
 done
-if [ "$_chrome_ready" = false ]; then
-  echo "  ✗ Chrome CDP not responding on 127.0.0.1 after 15s."
-  echo "    Chrome may have started but CDP isn't ready — continuing anyway..."
+
+# ── SUCCESS: mirrored networking — 127.0.0.1 reaches Chrome directly ──────────
+if [ "$_chrome_ready" = true ]; then
+  echo ""
+  echo "✓ CDP LIVE at 127.0.0.1:${CDP_PORT} (WSL2 mirrored networking active)"
+  curl -s "http://127.0.0.1:${CDP_PORT}/json/version" | \
+    python3 -c "import sys,json; d=json.load(sys.stdin); print('  Browser:', d.get('Browser','?'))" 2>/dev/null || true
+
+  # Ensure .env uses 127.0.0.1
+  sed -i "s|ws://192\.168\.[0-9.]*:9222|ws://127.0.0.1:9222|g" .env
+  sed -i "s|http://192\.168\.[0-9.]*:9222|http://127.0.0.1:9222|g" .env
+  grep -E "^(CDP_ENDPOINT|EXECUTION_BROWSER_CDP_URL)" .env 2>/dev/null || true
+
+  echo ""
+  echo "========================================="
+  echo "  Chrome CDP ready!"
+  echo "========================================="
+  echo "  Log into your broker in the Chrome window on Windows."
+  echo "  Then run:"
+  echo "    pkill -f start_24h_fullstack.sh"
+  echo "    rm -f /tmp/astroquant_fullstack.lock"
+  echo "    bash npvps_auto_start.sh"
+  echo "  Then: curl -X POST http://localhost:8000/status/broker_bridge/recover?force_reconnect=true"
+  echo "========================================="
+  exit 0
 fi
 
-# ── Step 5b: Launch CDP proxy on Windows ──────────────────────────────────────
+echo "  ✗ Chrome CDP not responding on 127.0.0.1 after 20s."
+echo "    Trying via CDP proxy on $WIN_IP..."
+
+# ── Step 5b: Launch CDP proxy on Windows (fallback when mirrored not active) ──
 echo "      Launching CDP proxy on Windows ($WIN_IP:${CDP_PORT} → 127.0.0.1:${CDP_PORT})..."
 
 # Convert PROXY_WIN_PATH for use in powershell launch
