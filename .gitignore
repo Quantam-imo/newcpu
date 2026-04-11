@@ -38,3 +38,29 @@ AstroQuant_Phase1/browser_session/
 # Cache and tooling
 .pytest_cache/
 .mypy_cache/
+
+# Runtime data files — never commit these (pid files, tunnel urls, cached state)
+data/*.pid
+data/*.pid.*
+data/*.lock
+data/*.log
+data/*.hash
+data/*.pass
+data/tunnel_url.txt
+data/novpn_url.txt
+data/novnc_url.txt
+data/novnc_tunnel_url.txt
+data/vnc_password.txt
+data/contract_resolver_cache.json
+data/xvfb.pid
+data/fluxbox.pid
+data/cloudflare_tunnel.pid
+# Runtime JSON state files (regenerated at startup)
+data/capital_stats.json
+data/frequency_stats.json
+data/model_stats.json
+data/performance_memory.json
+data/prediction_tracker.json
+data/telegram_daemon_state.json
+data/last_known_chart_*.json
+data/x11vnc.*
