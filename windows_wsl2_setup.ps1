@@ -1,9 +1,8 @@
-# ============================================================
-#  AstroQuant - Windows WSL2 Full Setup Script
-#  Run this on your Windows PC as Administrator
-#  PowerShell: Right-click PowerShell -> "Run as Administrator"
-#  Then paste:  Set-ExecutionPolicy Bypass -Scope Process -Force; .\windows_wsl2_setup.ps1
-# ============================================================
+# AstroQuant - Windows WSL2 Full Setup Script
+# Run this on your Windows PC as Administrator
+# PowerShell: Right-click PowerShell -> "Run as Administrator"
+# Then paste:
+#   Set-ExecutionPolicy Bypass -Scope Process -Force; .\windows_wsl2_setup.ps1
 
 param(
     [string]$GithubRepo = "https://github.com/Quantam-imo/newcpu.git",
@@ -13,79 +12,66 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-function Write-Header($msg) {
+function Write-Header([string]$msg) {
     Write-Host ""
     Write-Host "============================================================" -ForegroundColor Cyan
     Write-Host "  $msg" -ForegroundColor Cyan
     Write-Host "============================================================" -ForegroundColor Cyan
 }
+function Write-OK([string]$msg)   { Write-Host "  [OK]  $msg" -ForegroundColor Green }
+function Write-WARN([string]$msg) { Write-Host "  [!!]  $msg" -ForegroundColor Yellow }
+function Write-STEP([string]$msg) { Write-Host "  -->   $msg" -ForegroundColor White }
 
-function Write-OK($msg)   { Write-Host "  [OK]  $msg" -ForegroundColor Green }
-function Write-WARN($msg) { Write-Host "  [!!]  $msg" -ForegroundColor Yellow }
-function Write-STEP($msg) { Write-Host "  -->   $msg" -ForegroundColor White }
-
-# ── 0. Must run as Admin ──────────────────────────────────────
+# --- 0. Must run as Admin ---
 if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Host "ERROR: Please run PowerShell as Administrator." -ForegroundColor Red
-    Write-Host "  Right-click PowerShell -> 'Run as Administrator'" -ForegroundColor Yellow
+    Write-Host "  Right-click PowerShell -> Run as Administrator" -ForegroundColor Yellow
     pause; exit 1
 }
 
-# ── 0b. OS and architecture validation ───────────────────────
+# --- 0b. OS and architecture check ---
 Write-Header "Pre-flight: System Compatibility Check"
 
-# Must be 64-bit OS
 if (-NOT [System.Environment]::Is64BitOperatingSystem) {
     Write-Host "ERROR: This machine is NOT 64-bit. AstroQuant requires a 64-bit Windows OS." -ForegroundColor Red
     pause; exit 1
 }
 Write-OK "64-bit OS confirmed"
 
-# Must be x64 processor (not ARM64)
 $cpuArch = (Get-WmiObject Win32_Processor).Architecture
-# Architecture: 9=x64, 12=ARM64, 0=x86
 if ($cpuArch -eq 12) {
-    Write-WARN "ARM64 processor detected. Chrome amd64 package will not run natively."
-    Write-WARN "Consider using Playwright Chromium instead: playwright install chromium"
+    Write-WARN "ARM64 processor detected. Chrome amd64 may not run natively."
 } elseif ($cpuArch -ne 9) {
     Write-Host "ERROR: Unsupported CPU architecture ($cpuArch). Requires x64 (Intel/AMD)." -ForegroundColor Red
     pause; exit 1
 }
-Write-OK "x64 (Intel/AMD) processor confirmed"
+Write-OK "x64 processor confirmed"
 
-# Windows version check — Win 10 build 19041+ or Win 11 required for WSL2
-$osVersion = [System.Environment]::OSVersion.Version
-$osBuild   = $osVersion.Build
+$osBuild    = [System.Environment]::OSVersion.Version.Build
 $winEdition = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").ProductName
 Write-OK "OS: $winEdition (Build $osBuild)"
 
 if ($osBuild -lt 19041) {
-    Write-Host "ERROR: WSL2 requires Windows 10 version 2004 (Build 19041) or later." -ForegroundColor Red
-    Write-Host "  Your build: $osBuild.  Please update Windows first." -ForegroundColor Yellow
+    Write-Host "ERROR: WSL2 requires Windows 10 Build 19041 or later." -ForegroundColor Red
     pause; exit 1
 }
-
-if ($osBuild -ge 22000) {
-    Write-OK "Windows 11 detected — full WSL2 support confirmed"
-} else {
-    Write-OK "Windows 10 (Build $osBuild) — WSL2 supported"
-}
+Write-OK "Windows version supported"
 
 Write-Header "AstroQuant WSL2 Installer"
 Write-Host "  This script will:"
-Write-Host "    1. Enable WSL2 on this Windows PC"
+Write-Host "    1. Enable WSL2"
 Write-Host "    2. Install Ubuntu 22.04"
-Write-Host "    3. Clone AstroQuant project inside WSL2"
-Write-Host "    4. Set up Python environment + install packages"
-Write-Host "    5. Configure autostart on Windows boot"
+Write-Host "    3. Clone AstroQuant from GitHub"
+Write-Host "    4. Install Python environment + all packages"
+Write-Host "    5. Configure autostart on every Windows reboot"
 Write-Host ""
 
-# ── 1. Enable WSL2 features ──────────────────────────────────
-Write-Header "Step 1/5 — Enabling WSL2 features"
+# --- 1. Enable WSL2 features ---
+Write-Header "Step 1/5 - Enabling WSL2"
 
 $wslFeature = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux
-$vmFeature   = Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform
+$vmFeature  = Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform
 
 if ($wslFeature.State -ne "Enabled") {
     Write-STEP "Enabling Windows Subsystem for Linux..."
@@ -103,223 +89,178 @@ if ($vmFeature.State -ne "Enabled") {
     Write-OK "VirtualMachinePlatform already enabled"
 }
 
-# ── 2. Set WSL default version to 2 ──────────────────────────
-Write-Header "Step 2/5 — Setting WSL2 as default"
+# --- 2. Set WSL2 as default ---
+Write-Header "Step 2/5 - Setting WSL2 as default"
 
-# Download and install WSL2 kernel update if needed
 $wslKernelUrl  = "https://wslstorestorage.blob.core.windows.net/wslblob/wsl_update_x64.msi"
 $wslKernelPath = "$env:TEMP\wsl_update_x64.msi"
 
-$wslVersion = & wsl --status 2>&1
-if ($wslVersion -notmatch "2") {
+$wslStatus = & wsl --status 2>&1
+if ("$wslStatus" -notmatch "2") {
     Write-STEP "Downloading WSL2 kernel update..."
     try {
         Invoke-WebRequest -Uri $wslKernelUrl -OutFile $wslKernelPath -UseBasicParsing
         Start-Process msiexec.exe -ArgumentList "/i `"$wslKernelPath`" /quiet /norestart" -Wait
         Write-OK "WSL2 kernel installed"
     } catch {
-        Write-WARN "Could not auto-download kernel. If WSL2 fails, visit: https://aka.ms/wsl2kernel"
+        Write-WARN "Could not auto-download kernel. Visit: https://aka.ms/wsl2kernel"
     }
 }
 
 & wsl --set-default-version 2 2>&1 | Out-Null
 Write-OK "Default WSL version set to 2"
 
-# ── 3. Install Ubuntu 22.04 ───────────────────────────────────
-Write-Header "Step 3/5 — Installing Ubuntu 22.04"
+# --- 3. Install Ubuntu 22.04 ---
+Write-Header "Step 3/5 - Installing Ubuntu 22.04"
 
-$distros = & wsl --list --quiet 2>&1
-if ($distros -match "Ubuntu-22.04") {
-    Write-OK "Ubuntu-22.04 already installed — skipping download"
+$distroList = & wsl --list --quiet 2>&1
+if ("$distroList" -match "Ubuntu-22.04") {
+    Write-OK "Ubuntu-22.04 already installed - skipping"
 } else {
-    Write-STEP "Installing Ubuntu 22.04 from Microsoft Store (this may take 3-5 min)..."
-
-    # Try winget first (Windows 11), fall back to wsl --install
+    Write-STEP "Installing Ubuntu 22.04 (this may take 3-5 min)..."
     $winget = Get-Command winget -ErrorAction SilentlyContinue
     if ($winget) {
         & winget install --id Canonical.Ubuntu.2204 --accept-package-agreements --accept-source-agreements --silent
     } else {
         & wsl --install -d Ubuntu-22.04 --no-launch
     }
-
     Write-OK "Ubuntu-22.04 installed"
-    Write-WARN "Ubuntu needs a first-launch setup. A window will open — create a Linux username"
-    Write-WARN "IMPORTANT: Use username:  $WslUser"
-    Write-WARN "           Set any password you like"
+    Write-WARN "Ubuntu needs first-time setup. A window will open."
+    Write-WARN "IMPORTANT: Use Linux username: $WslUser"
     Write-Host ""
     Write-Host "  Press ENTER to launch Ubuntu first-time setup..." -ForegroundColor Yellow
     Read-Host
     & wsl -d Ubuntu-22.04
 }
 
-# ── 4. Bootstrap project inside WSL2 ─────────────────────────
-Write-Header "Step 4/5 — Setting up AstroQuant inside WSL2"
+# --- 4. Setup AstroQuant inside WSL2 ---
+Write-Header "Step 4/5 - Setting up AstroQuant inside WSL2"
 
-Write-STEP "Creating WSL2 setup script..."
+$nl = "`n"
 
-# Inject the full .env securely from Codespaces helper file if present on Desktop
+$ls  = '#!/bin/bash' + $nl
+$ls += 'set -e' + $nl
+$ls += 'echo "==================================================="' + $nl
+$ls += 'echo "  AstroQuant WSL2 Linux Setup"' + $nl
+$ls += 'echo "==================================================="' + $nl
+$ls += 'echo "[1/6] Installing system packages..."' + $nl
+$ls += 'sudo apt-get update -qq 2>/dev/null' + $nl
+$ls += 'sudo apt-get install -y -qq python3 python3-pip python3-venv redis-server git curl wget unzip build-essential libssl-dev libffi-dev 2>/dev/null' + $nl
+$ls += 'echo "  [OK] System packages installed"' + $nl
+$ls += 'echo "[2/6] Installing Google Chrome..."' + $nl
+$ls += 'if ! command -v google-chrome &>/dev/null && ! command -v google-chrome-stable &>/dev/null; then' + $nl
+$ls += '    curl -fsSL https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -o /tmp/chrome.deb 2>/dev/null' + $nl
+$ls += '    sudo dpkg -i /tmp/chrome.deb 2>/dev/null || sudo apt-get install -f -y -qq 2>/dev/null' + $nl
+$ls += '    rm -f /tmp/chrome.deb' + $nl
+$ls += '    echo "  [OK] Google Chrome installed"' + $nl
+$ls += 'else' + $nl
+$ls += '    echo "  [OK] Google Chrome already present"' + $nl
+$ls += 'fi' + $nl
+$ls += 'echo "[3/6] Cloning AstroQuant project..."' + $nl
+$ls += 'INSTALL_DIR="' + $InstallDir + '"' + $nl
+$ls += 'if [ -d "$INSTALL_DIR/.git" ]; then' + $nl
+$ls += '    echo "  Already cloned - pulling latest..."' + $nl
+$ls += '    cd "$INSTALL_DIR" && git pull' + $nl
+$ls += 'else' + $nl
+$ls += '    git clone ' + $GithubRepo + ' "$INSTALL_DIR"' + $nl
+$ls += 'fi' + $nl
+$ls += 'cd "$INSTALL_DIR"' + $nl
+$ls += 'mkdir -p data/logs' + $nl
+$ls += 'echo "  [OK] Project ready"' + $nl
+$ls += 'echo "[4/6] Setting up Python virtual environment..."' + $nl
+$ls += 'python3 -m venv .venv' + $nl
+$ls += 'source .venv/bin/activate' + $nl
+$ls += 'pip install --upgrade pip -q' + $nl
+$ls += 'echo "  Installing Python packages (3-5 min)..."' + $nl
+$ls += 'pip install -r requirements.txt -q' + $nl
+$ls += 'python -m playwright install chromium 2>/dev/null || true' + $nl
+$ls += 'echo "  [OK] Python environment ready"' + $nl
+$ls += 'echo "[5/6] Configuring WSL2 systemd boot..."' + $nl
+$ls += 'printf "[boot]\nsystemd=true\ncommand=/bin/bash ' + $InstallDir + '/non_systemd_autostart_bootstrap.sh\n\n[automount]\nenabled = true\n" | sudo tee /etc/wsl.conf > /dev/null' + $nl
+$ls += 'echo "  [OK] /etc/wsl.conf configured"' + $nl
+$ls += 'chmod +x "$INSTALL_DIR"/*.sh 2>/dev/null || true' + $nl
+$ls += 'echo "[6/6] Registering autostart hooks..."' + $nl
+$ls += 'AQ_WORKSPACE="$INSTALL_DIR" bash "$INSTALL_DIR/enable_boot_autostart.sh" || true' + $nl
+$ls += 'echo "  [OK] Autostart registered"' + $nl
+$ls += 'echo "==================================================="' + $nl
+$ls += 'echo "  WSL2 Linux Setup COMPLETE"' + $nl
+$ls += 'echo "==================================================="' + $nl
+
+Write-STEP "Writing setup script to WSL2..."
+$ls | & wsl -d Ubuntu-22.04 -- bash -c "cat > /tmp/aq_linux_setup.sh && chmod +x /tmp/aq_linux_setup.sh"
+
 $envSourcePath = "$env:USERPROFILE\Desktop\astroquant_env.txt"
-$envExists     = Test-Path $envSourcePath
-
-$envInjectBlock = if ($envExists) {
+$envExists = Test-Path $envSourcePath
+if ($envExists) {
+    Write-STEP "Copying .env from Desktop into WSL2..."
     $envContent = Get-Content $envSourcePath -Raw
-    # Escape for PowerShell heredoc passing to bash
-    $envEscaped = $envContent -replace "'", "'\'''"
-    "echo '$envEscaped' > $InstallDir/.env && echo '  [OK] .env injected from Desktop/astroquant_env.txt'"
+    $envContent | & wsl -d Ubuntu-22.04 -- bash -c "mkdir -p $InstallDir && cat > $InstallDir/.env"
+    Write-OK ".env injected from Desktop\astroquant_env.txt"
 } else {
-    "echo '  [WARN] astroquant_env.txt not found on Desktop — .env not configured yet'"
+    Write-WARN "astroquant_env.txt not found on Desktop - .env will be copied later"
 }
 
-$linuxSetupScript = @"
-#!/bin/bash
-set -e
-echo '============================================================'
-echo '  AstroQuant WSL2 Linux Setup'
-echo '============================================================'
-
-# System packages
-echo '--> Installing system packages...'
-sudo apt-get update -qq
-sudo apt-get install -y -qq \
-    python3 python3-pip python3-venv \
-    redis-server git curl wget unzip \
-    build-essential libssl-dev libffi-dev \
-    google-chrome-stable 2>/dev/null || true
-
-# Install Google Chrome if not present
-if ! command -v google-chrome &>/dev/null && ! command -v google-chrome-stable &>/dev/null; then
-    echo '--> Installing Google Chrome...'
-    curl -fsSL https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -o /tmp/chrome.deb
-    sudo dpkg -i /tmp/chrome.deb 2>/dev/null || sudo apt-get install -f -y -qq
-    rm -f /tmp/chrome.deb
-fi
-echo '  [OK] System packages ready'
-
-# Clone project
-echo '--> Cloning AstroQuant project...'
-if [ -d '$InstallDir/.git' ]; then
-    echo '  Already cloned — pulling latest...'
-    cd $InstallDir && git pull
-else
-    git clone $GithubRepo $InstallDir
-fi
-cd $InstallDir
-echo '  [OK] Project cloned'
-
-# Python venv
-echo '--> Creating Python virtual environment...'
-python3 -m venv .venv
-source .venv/bin/activate
-echo '--> Installing Python packages (may take 3-5 min)...'
-pip install --upgrade pip -q
-pip install -r requirements.txt -q
-playwright install chromium 2>/dev/null || true
-echo '  [OK] Python environment ready'
-
-# Enable systemd in WSL2 (required for systemd autostart)
-echo '--> Configuring WSL2 for systemd...'
-sudo tee /etc/wsl.conf > /dev/null <<'WSLCONF'
-[boot]
-systemd=true
-command=/bin/bash /home/astroquant/newcpu/non_systemd_autostart_bootstrap.sh
-
-[automount]
-enabled = true
-options = "metadata"
-WSLCONF
-echo '  [OK] /etc/wsl.conf configured'
-
-# Make all scripts executable
-chmod +x $InstallDir/*.sh 2>/dev/null || true
-echo '  [OK] Scripts made executable'
-
-# .env file
-$envInjectBlock
-
-# Register autostart hooks in shell
-echo '--> Registering autostart...'
-AQ_WORKSPACE=$InstallDir bash $InstallDir/enable_boot_autostart.sh || true
-echo '  [OK] Autostart registered'
-
-echo ''
-echo '============================================================'
-echo '  Setup complete!'
-echo '  WSL2 will need a restart to activate systemd:'
-echo '    In PowerShell (as Admin):  wsl --shutdown'
-echo '    Then reopen Ubuntu.'
-echo '============================================================'
-"@
-
-# Write the linux script into WSL2 temp location
-$linuxSetupScript | & wsl -d Ubuntu-22.04 -- bash -c "cat > /tmp/aq_linux_setup.sh && chmod +x /tmp/aq_linux_setup.sh"
-
-Write-STEP "Running Linux setup inside WSL2 (this takes 5-10 min)..."
+Write-STEP "Running Linux setup inside WSL2 (5-10 min)..."
 & wsl -d Ubuntu-22.04 -- bash /tmp/aq_linux_setup.sh
-
 Write-OK "Linux environment configured"
 
-# ── 5. Windows autostart via Task Scheduler ───────────────────
-Write-Header "Step 5/5 — Configuring Windows autostart"
+# --- 5. Windows autostart ---
+Write-Header "Step 5/5 - Configuring Windows autostart"
 
-Write-STEP "Creating Task Scheduler entry to start AstroQuant on Windows login..."
+$vbsLines  = 'Set oShell = CreateObject("WScript.Shell")' + "`r`n"
+$vbsLines += 'oShell.Run "wsl -d Ubuntu-22.04 -- bash -c ""cd ' + $InstallDir + ' && bash non_systemd_autostart_bootstrap.sh >> data/logs/windows_autostart.log 2>&1""", 0, False' + "`r`n"
 
-# VBScript wrapper to run WSL silently (no console window)
-$startupVbs = @"
-Set oShell = CreateObject("WScript.Shell")
-oShell.Run "wsl -d Ubuntu-22.04 -- bash -c 'cd $InstallDir && bash non_systemd_autostart_bootstrap.sh >> data/logs/windows_autostart.log 2>&1'", 0, False
-"@
+$startupFolder = [System.IO.Path]::Combine($env:APPDATA, "Microsoft", "Windows", "Start Menu", "Programs", "Startup")
+$vbsPath = [System.IO.Path]::Combine($startupFolder, "AstroQuant_Autostart.vbs")
 
-$vbsPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\AstroQuant_Autostart.vbs"
-$startupVbs | Set-Content -Path $vbsPath -Encoding ASCII
-Write-OK "Startup VBScript created: $vbsPath"
+if (-not (Test-Path $startupFolder)) {
+    New-Item -ItemType Directory -Path $startupFolder -Force | Out-Null
+}
+Set-Content -Path $vbsPath -Value $vbsLines -Encoding ASCII
+Write-OK "Startup VBScript created"
 
-# Also register as Task Scheduler entry so it runs at any user login and on system start
-$taskName   = "AstroQuant_WSL2_Autostart"
-$taskAction = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$vbsPath`""
+$taskName     = "AstroQuant_WSL2_Autostart"
+$taskAction   = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$vbsPath`""
 $taskTrigger1 = New-ScheduledTaskTrigger -AtLogOn
 $taskTrigger2 = New-ScheduledTaskTrigger -AtStartup
 $taskSettings = New-ScheduledTaskSettingsSet `
     -ExecutionTimeLimit (New-TimeSpan -Hours 0) `
-    -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) `
+    -RestartCount 3 `
+    -RestartInterval (New-TimeSpan -Minutes 1) `
     -StartWhenAvailable
 
-# Remove existing if any
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
 
 Register-ScheduledTask `
     -TaskName $taskName `
     -Action $taskAction `
-    -Trigger $taskTrigger1,$taskTrigger2 `
+    -Trigger $taskTrigger1, $taskTrigger2 `
     -Settings $taskSettings `
     -RunLevel Highest `
     -Force | Out-Null
 
-Write-OK "Task Scheduler entry '$taskName' registered"
+Write-OK "Task Scheduler entry registered: $taskName"
 
-# ── Summary ───────────────────────────────────────────────────
-Write-Header "COMPLETE"
+# --- Done ---
+Write-Header "SETUP COMPLETE"
 Write-Host ""
-Write-Host "  AstroQuant is now configured for 24/7 auto-start on this Windows PC!" -ForegroundColor Green
+Write-Host "  AstroQuant is configured for 24/7 auto-start on this Windows PC!" -ForegroundColor Green
 Write-Host ""
 Write-Host "  NEXT STEPS:" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "  1. Restart WSL2 to activate systemd:"   -ForegroundColor White
-Write-Host "       wsl --shutdown"                     -ForegroundColor Cyan
-Write-Host "       (then reopen Ubuntu or restart PC)" -ForegroundColor White
+Write-Host "  1. Restart WSL2 to activate systemd:" -ForegroundColor White
+Write-Host "       wsl --shutdown" -ForegroundColor Cyan
+Write-Host "       Then restart Windows" -ForegroundColor White
 Write-Host ""
-
 if (-not $envExists) {
-    Write-Host "  2. IMPORTANT: Copy your .env file to WSL2:" -ForegroundColor Red
-    Write-Host "     a) Download the .env from Codespaces (see instructions below)" -ForegroundColor Yellow
-    Write-Host "     b) Save it to Desktop as:  astroquant_env.txt" -ForegroundColor Yellow
-    Write-Host "     c) Then in WSL2 Ubuntu terminal run:" -ForegroundColor Yellow
-    Write-Host "          cp /mnt/c/Users/$env:USERNAME/Desktop/astroquant_env.txt $InstallDir/.env" -ForegroundColor Cyan
+    Write-Host "  2. IMPORTANT - Copy your .env into WSL2:" -ForegroundColor Red
+    Write-Host "     Save .env to your Desktop as: astroquant_env.txt" -ForegroundColor Yellow
+    Write-Host "     Then in WSL2 Ubuntu terminal run:" -ForegroundColor Yellow
+    Write-Host "       cp /mnt/c/Users/$env:USERNAME/Desktop/astroquant_env.txt $InstallDir/.env" -ForegroundColor Cyan
     Write-Host ""
 }
-
-Write-Host "  3. After restart, verify with (inside WSL2 Ubuntu):" -ForegroundColor White
-Write-Host "       curl http://localhost:8000/status"              -ForegroundColor Cyan
+Write-Host "  3. After restart verify (in WSL2 Ubuntu terminal):" -ForegroundColor White
+Write-Host "       curl http://localhost:8000/health" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  Auto-start confirmed: On every Windows reboot/login AstroQuant starts"  -ForegroundColor Green
-Write-Host "  in WSL2 background automatically with NO console window."                -ForegroundColor Green
+Write-Host "  On every Windows reboot, AstroQuant starts automatically in WSL2." -ForegroundColor Green
 Write-Host ""
