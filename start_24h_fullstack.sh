@@ -23,6 +23,8 @@ STARTUP_TIMEOUT=60
 NO_CHROME=false
 NO_TUNNEL=false
 NO_NOVPN=false
+# AQ_ENABLE_VNC=false in .env disables VNC/noVPN stack (required for WSL2/headless)
+[ "${AQ_ENABLE_VNC:-true}" = "false" ] && NO_NOVPN=true
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -215,7 +217,7 @@ if [ "$NO_CHROME" != true ]; then
   AQ_API_BASE="http://127.0.0.1:8000" \
   AQ_CHROME_PROFILE_DIR="$DATA_DIR/browser_session/chrome-profile" \
   AQ_XVFB_DISPLAY="${AQ_XVFB_DISPLAY:-:99}" \
-  AQ_USE_XVFB=true \
+  AQ_USE_XVFB="${AQ_USE_XVFB:-true}" \
   nohup bash "$WORKSPACE/start_chrome_remote_debug.sh" > "$LOG_DIR/chrome.log" 2>&1 &
 
   # Wait for Chrome CDP to become reachable
@@ -473,7 +475,7 @@ while true; do
       AQ_API_BASE="http://127.0.0.1:8000" \
       AQ_CHROME_PROFILE_DIR="$DATA_DIR/browser_session/chrome-profile" \
       AQ_XVFB_DISPLAY="${AQ_XVFB_DISPLAY:-:99}" \
-      AQ_USE_XVFB=true \
+      AQ_USE_XVFB="${AQ_USE_XVFB:-true}" \
       nohup bash "$WORKSPACE/start_chrome_remote_debug.sh" >> "$LOG_DIR/chrome.log" 2>&1 &
     fi
   fi
