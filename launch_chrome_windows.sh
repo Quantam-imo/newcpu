@@ -23,15 +23,16 @@ for p in "${CHROME_PATHS[@]}"; do
   fi
 done
 
-# Step 1: Kill any existing Chrome using the debug port or our profile
-echo "Killing any existing Chrome debug instances..."
-taskkill.exe /F /FI "IMAGENAME eq chrome.exe" /FI "WINDOWTITLE eq *astroquant*" 2>/dev/null || true
-# Kill anything holding port 9222
+# Step 1: Kill ALL Chrome instances so new launch gets --remote-debugging-address=0.0.0.0
+echo "Killing ALL Chrome instances (required for clean debug launch)..."
+taskkill.exe /F /IM chrome.exe 2>/dev/null || true
+# Also kill anything holding port 9222 via PowerShell
 powershell.exe -Command "
   \$pids = (Get-NetTCPConnection -LocalPort 9222 -ErrorAction SilentlyContinue).OwningProcess | Sort-Object -Unique
   foreach (\$p in \$pids) { Stop-Process -Id \$p -Force -ErrorAction SilentlyContinue }
 " 2>/dev/null || true
-sleep 2
+echo "Waiting 5s for Chrome to fully exit..."
+sleep 5
 
 # Step 2: Remove SingletonLock so Chrome doesn't refuse to start
 if [ -d "$PROFILE_MOUNT" ]; then
@@ -73,17 +74,25 @@ for i in $(seq 1 20); do
     echo "Then run:  curl -X POST http://localhost:8000/status/broker_bridge/recover?force_reconnect=true"
     exit 0
   fi
-  # Also try Windows host IP (WSL2 NAT mode)
-  WIN_IP=$(ip route show default 2>/dev/null | awk '/default/{print $3}' | head -1)
-  if [ -n "$WIN_IP" ] && curl -s --max-time 1 "http://${WIN_IP}:${PORT}/json/version" > /dev/null 2>&1; then
-    echo "✓ Chrome CDP reachable via Windows host IP: ${WIN_IP}:${PORT}"
-    echo "  Updating .env CDP endpoints to use ${WIN_IP}..."
-    sed -i "s|ws://127.0.0.1:9222|ws://${WIN_IP}:9222|g" .env 2>/dev/null || true
-    echo "  CDP_ENDPOINT=ws://${WIN_IP}:9222"
-    echo ""
-    echo "Restart the stack: pkill -f start_24h_fullstack.sh; rm -f /tmp/astroquant_fullstack.lock; bash npvps_auto_start.sh"
-    exit 0
-  fi
+  # Also try Windows host IP (WSL2 NAT mode) — try both resolv.conf and ip route
+  WIN_IP=$(grep nameserver /etc/resolv.conf 2>/dev/null | awk '{print $2}' | head -1)
+  WIN_IP2=$(ip route show default 2>/dev/null | awk '/default/{print $3}' | head -1)
+  for _wip in "$WIN_IP" "$WIN_IP2"; do
+    [ -z "$_wip" ] && continue
+    if curl -s --max-time 1 "http://${_wip}:${PORT}/json/version" > /dev/null 2>&1; then
+      echo "✓ Chrome CDP reachable via Windows host IP: ${_wip}:${PORT}"
+      echo "  Updating .env CDP endpoints to use ${_wip}..."
+      sed -i "s|ws://127.0.0.1:9222|ws://${_wip}:9222|g" .env 2>/dev/null || true
+      echo "  Creating socat bridge: 127.0.0.1:9222 → ${_wip}:9222"
+      pkill -f "socat TCP-LISTEN:9222" 2>/dev/null || true
+      sleep 1
+      nohup socat TCP-LISTEN:9222,fork,reuseaddr TCP:"${_wip}":9222 </dev/null >/tmp/socat_cdp.log 2>&1 &
+      echo "  socat bridge PID: $!"
+      echo ""
+      echo "Restart stack: pkill -f start_24h_fullstack.sh; rm -f /tmp/astroquant_fullstack.lock; bash npvps_auto_start.sh"
+      exit 0
+    fi
+  done
   sleep 1
 done
 
