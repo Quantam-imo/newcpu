@@ -203,106 +203,54 @@ done
 echo ""
 echo "✗ CDP proxy not reachable at $WIN_IP:${CDP_PORT} after 15s."
 echo ""
-echo "Check proxy log:  cat /mnt/c/Users/Public/cdp_proxy.log"
+
+# ── Diagnose ──────────────────────────────────────────────────────────────────
+echo "=== Diagnostics ==="
+echo "Proxy log:"
+cat /mnt/c/Users/Public/cdp_proxy.log 2>/dev/null | tail -10 || echo "  (log not found)"
 echo ""
-echo "Possible causes:"
-echo "  • Windows Firewall blocking port 9222 — run in PowerShell (admin):"
-echo "    New-NetFirewallRule -DisplayName AstroQuant-CDP -Direction Inbound -Protocol TCP -LocalPort 9222 -Action Allow"
-echo "  • Python not found or proxy crashed — check the log above"
+echo "Port 9222 on Windows:"
+netstat.exe -ano 2>/dev/null | grep -i "9222" || echo "  (nothing listening on 9222)"
+echo ""
+echo "Python processes:"
+tasklist.exe /FI "IMAGENAME eq pythonw.exe" 2>/dev/null | grep -i python || echo "  (no pythonw running)"
+echo "==================="
+echo ""
 
+# ── Option A: WSL2 mirrored networking (best — no firewall needed) ────────────
+WSL_VER=$(wsl.exe --version 2>/dev/null | grep -i "WSL version" | grep -oP '[\d.]+' | head -1)
+WSLCONFIG="/mnt/c/Users/${WIN_USER}/.wslconfig"
+echo "WSL version: ${WSL_VER:-unknown}"
+echo ""
 
-# Common Chrome install paths on Windows
-CHROME_PATHS=(
-  "/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"
-  "/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe"
-  "/mnt/c/Users/${WIN_USER}/AppData/Local/Google/Chrome/Application/chrome.exe"
-)
-
-CHROME_BIN=""
-for p in "${CHROME_PATHS[@]}"; do
-  if [ -f "$p" ]; then
-    CHROME_BIN="$p"
-    break
-  fi
-done
-
-# Step 1: Kill ALL Chrome instances so new launch gets --remote-debugging-address=0.0.0.0
-echo "Killing ALL Chrome instances (required for clean debug launch)..."
-taskkill.exe /F /IM chrome.exe 2>/dev/null || true
-# Also kill anything holding port 9222 via PowerShell
-powershell.exe -Command "
-  \$pids = (Get-NetTCPConnection -LocalPort 9222 -ErrorAction SilentlyContinue).OwningProcess | Sort-Object -Unique
-  foreach (\$p in \$pids) { Stop-Process -Id \$p -Force -ErrorAction SilentlyContinue }
-" 2>/dev/null || true
-echo "Waiting 5s for Chrome to fully exit..."
-sleep 5
-
-# Step 2: Remove SingletonLock so Chrome doesn't refuse to start
-if [ -d "$PROFILE_MOUNT" ]; then
-  rm -f "$PROFILE_MOUNT/SingletonLock" \
-        "$PROFILE_MOUNT/SingletonCookie" \
-        "$PROFILE_MOUNT/SingletonSocket" 2>/dev/null || true
-  echo "Cleaned profile locks in $PROFILE_MOUNT"
-fi
-
-if [ -z "$CHROME_BIN" ]; then
-  echo "Chrome not found in standard paths. Trying via PowerShell..."
-  powershell.exe -Command "Start-Process 'chrome.exe' -ArgumentList '--remote-debugging-port=${PORT} --remote-debugging-address=0.0.0.0 --user-data-dir=${PROFILE_DIR} --no-first-run ${BROKER_URL}'"
+# Check if mirrored networking already configured
+if grep -q "networkingMode=mirrored" "$WSLCONFIG" 2>/dev/null; then
+  echo "--- WSL2 mirrored networking already configured but CDP still unreachable."
+  echo "    The firewall rule is blocking it. See Option B below."
 else
-  echo "Launching: $CHROME_BIN"
-  echo "  CDP port    : $PORT (all interfaces)"
-  echo "  Profile     : $PROFILE_DIR"
-  echo "  URL         : $BROKER_URL"
-  "$CHROME_BIN" \
-    "--remote-debugging-port=${PORT}" \
-    "--remote-debugging-address=0.0.0.0" \
-    "--user-data-dir=${PROFILE_DIR}" \
-    --no-first-run \
-    --no-default-browser-check \
-    --no-sandbox \
-    --disable-background-mode \
-    "$BROKER_URL" \
-    > /tmp/chrome_windows.log 2>&1 &
-  echo "Chrome started (PID: $!)."
+  echo "--- RECOMMENDED FIX: Enable WSL2 mirrored networking (one-time, no admin needed)"
+  echo "    This makes 127.0.0.1 in WSL2 loop back to Windows — Chrome CDP just works."
+  echo ""
+  echo "    Run these 3 commands in WSL2:"
+  echo ""
+  echo "    cat >> /mnt/c/Users/${WIN_USER}/.wslconfig << 'EOF'"
+  echo "    [wsl2]"
+  echo "    networkingMode=mirrored"
+  echo "    EOF"
+  echo ""
+  echo "    wsl.exe --shutdown    # run this in Windows PowerShell/cmd"
+  echo "    # Then reopen Ubuntu and run: bash launch_chrome_windows.sh"
+  echo ""
+  echo "    === OR run this one-liner ==="
+  echo "    echo -e '[wsl2]\nnetworkingMode=mirrored' >> /mnt/c/Users/${WIN_USER}/.wslconfig && echo 'Done — now run: wsl.exe --shutdown in Windows, then reopen WSL2'"
 fi
 
-# Step 3: Wait for CDP to be reachable
-echo "Waiting for Chrome CDP on port ${PORT}..."
-for i in $(seq 1 20); do
-  if curl -s --max-time 1 "http://127.0.0.1:${PORT}/json/version" > /dev/null 2>&1; then
-    echo "✓ Chrome CDP is live on 127.0.0.1:${PORT}"
-    curl -s "http://127.0.0.1:${PORT}/json/version" | python3 -c "import sys,json; d=json.load(sys.stdin); print('  Browser:', d.get('Browser','?'))" 2>/dev/null || true
-    echo ""
-    echo "Now log into your broker in the Chrome window."
-    echo "Then run:  curl -X POST http://localhost:8000/status/broker_bridge/recover?force_reconnect=true"
-    exit 0
-  fi
-  # Also try Windows host IP (WSL2 NAT mode) — try both resolv.conf and ip route
-  WIN_IP=$(grep nameserver /etc/resolv.conf 2>/dev/null | awk '{print $2}' | head -1)
-  WIN_IP2=$(ip route show default 2>/dev/null | awk '/default/{print $3}' | head -1)
-  for _wip in "$WIN_IP" "$WIN_IP2"; do
-    [ -z "$_wip" ] && continue
-    if curl -s --max-time 1 "http://${_wip}:${PORT}/json/version" > /dev/null 2>&1; then
-      echo "✓ Chrome CDP reachable via Windows host IP: ${_wip}:${PORT}"
-      echo "  Updating .env CDP endpoints to use ${_wip}..."
-      sed -i "s|ws://127.0.0.1:9222|ws://${_wip}:9222|g" .env 2>/dev/null || true
-      echo "  Creating socat bridge: 127.0.0.1:9222 → ${_wip}:9222"
-      pkill -f "socat TCP-LISTEN:9222" 2>/dev/null || true
-      sleep 1
-      nohup socat TCP-LISTEN:9222,fork,reuseaddr TCP:"${_wip}":9222 </dev/null >/tmp/socat_cdp.log 2>&1 &
-      echo "  socat bridge PID: $!"
-      echo ""
-      echo "Restart stack: pkill -f start_24h_fullstack.sh; rm -f /tmp/astroquant_fullstack.lock; bash npvps_auto_start.sh"
-      exit 0
-    fi
-  done
-  sleep 1
-done
+echo ""
+echo "--- Option B: Add Windows Firewall rule (requires admin once)"
+echo "    Copy add_cdp_firewall_rule.bat to Windows Desktop and double-click it:"
+echo "    cp /home/win/newcpu/add_cdp_firewall_rule.bat /mnt/c/Users/${WIN_USER}/Desktop/"
+echo "    Then double-click it on Windows (will prompt for admin password)."
+echo "    After that, rerun: bash launch_chrome_windows.sh"
 
-echo ""
-echo "✗ Chrome CDP not responding after 20s. Check log:"
-cat /tmp/chrome_windows.log 2>/dev/null | tail -20
-echo ""
-echo "Try manually opening Chrome with:"
-echo "  powershell.exe -Command \"Start-Process 'chrome.exe' -ArgumentList '--remote-debugging-port=9222 --remote-debugging-address=0.0.0.0 --user-data-dir=C:\\\\Users\\\\${WIN_USER}\\\\AppData\\\\Local\\\\astroquant-profile ${BROKER_URL}'\""
+
 
