@@ -919,6 +919,39 @@
                     import { openSystemHealthPanel } from "./system_health_panel.js?v=aq-v20260351";
                     window.createPropChallengePanel = createPropChallengePanel;
                     document.getElementById("systemHealthToggleBtn").onclick = openSystemHealthPanel;
+                    // Populate MCL model status badges on load
+                    (async function initMclBadges() {
+                        try {
+                            const [tsRes, calRes] = await Promise.allSettled([
+                                fetch("/market_causality/system/training-status"),
+                                fetch("/market_causality/system/model-calibration"),
+                            ]);
+                            const statusColors = { ALL_READY:"#10b981", PARTIAL:"#fbbf24", NOT_READY:"#ef4444", CALIBRATED:"#10b981", LEARNING:"#fbbf24", ABSORBING:"#60a5fa", DEGRADED:"#ef4444" };
+                            if (tsRes.status === "fulfilled" && tsRes.value.ok) {
+                                const d = await tsRes.value.json();
+                                const badge = document.getElementById("mclModelBadge");
+                                if (badge) { badge.style.color = statusColors[d.status] || "#6b7280"; badge.textContent = `🤖 ${d.status || "?"}(${d.ready_models || 0}/${d.total_models || 0})`; }
+                            }
+                            if (calRes.status === "fulfilled" && calRes.value.ok) {
+                                const d = await calRes.value.json();
+                                const badge = document.getElementById("mclCalibrationBadge");
+                                if (badge) {
+                                    const drift = d.drift_percentage != null ? ` ${d.drift_percentage.toFixed(0)}%` : "";
+                                    badge.style.color = statusColors[d.calibration_status] || "#6b7280";
+                                    badge.textContent = `📈 ${d.calibration_status || "?"}${drift}`;
+                                }
+                            }
+                        } catch (_) {}
+                        // Refresh badges every 2 minutes
+                        setInterval(async () => {
+                            try {
+                                const [tsRes, calRes] = await Promise.allSettled([fetch("/market_causality/system/training-status"), fetch("/market_causality/system/model-calibration")]);
+                                const statusColors = { ALL_READY:"#10b981", PARTIAL:"#fbbf24", NOT_READY:"#ef4444", CALIBRATED:"#10b981", LEARNING:"#fbbf24", ABSORBING:"#60a5fa", DEGRADED:"#ef4444" };
+                                if (tsRes.status === "fulfilled" && tsRes.value.ok) { const d = await tsRes.value.json(); const b = document.getElementById("mclModelBadge"); if (b) { b.style.color = statusColors[d.status]||"#6b7280"; b.textContent = `🤖 ${d.status||"?"}(${d.ready_models||0}/${d.total_models||0})`; } }
+                                if (calRes.status === "fulfilled" && calRes.value.ok) { const d = await calRes.value.json(); const b = document.getElementById("mclCalibrationBadge"); if (b) { const drift = d.drift_percentage != null ? ` ${d.drift_percentage.toFixed(0)}%` : ""; b.style.color = statusColors[d.calibration_status]||"#6b7280"; b.textContent = `📈 ${d.calibration_status||"?"}${drift}`; } }
+                            } catch (_) {}
+                        }, 120000);
+                    })();
                 </script>
             <div class="row">
                 <div class="badge">Balance: <span id="balance">--</span></div>
@@ -926,6 +959,8 @@
                 <div class="badge">Phase: <span id="phase">--</span></div>
                 <div class="badge">News: <span id="news-status">--</span></div>
                 <div class="badge" id="volatilityBar">VOL: NORMAL</div>
+                <div class="badge" id="mclModelBadge" title="MCL AI Model Training Status — click MCL Lab to view details" style="cursor:pointer;color:#6b7280;" onclick="document.getElementById('mclDashboardBtn') && openMCLDashboard()">🤖 --</div>
+                <div class="badge" id="mclCalibrationBadge" title="MCL Model Calibration Status" style="cursor:pointer;color:#6b7280;">📈 --</div>
                 <div class="connection-status good" id="connectionStatus">
                     <span class="status-dot"></span>Backend Connected
                 </div>
@@ -1061,6 +1096,24 @@
                             <div class="vp-levels" id="vpTopLevels">--</div>
                         </div>
                         <div id="chart"></div>
+                    </div>
+                    <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
+                        <div style="font-size:12px;color:var(--muted);margin-bottom:6px;">MCL Overlay + AI Absorption</div>
+                        <div class="row-list" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                            <div><span>Cycles</span><strong id="mclOvCycles">--</strong></div>
+                            <div><span>Lunar Events</span><strong id="mclOvLunar">--</strong></div>
+                            <div><span>Patterns</span><strong id="mclOvPatterns">--</strong></div>
+                            <div><span>Projection Pts</span><strong id="mclOvProjection">--</strong></div>
+                            <div><span>Overlay Accuracy</span><strong id="mclOvAccuracy">--</strong></div>
+                            <div><span>AI State</span><strong id="mclAiState">--</strong></div>
+                            <div><span>Calibration</span><strong id="mclAiCalibration">--</strong></div>
+                            <div><span>Top Model</span><strong id="mclAiTopModel">--</strong></div>
+                            <div><span>Cycle Alignment</span><strong id="mclAiCycle">--</strong></div>
+                            <div><span>Predictions</span><strong id="mclAiPreds">--</strong></div>
+                            <div><span>Outcomes</span><strong id="mclAiOutcomes">--</strong></div>
+                            <div><span>Model Weights</span><strong id="mclAiWeights">--</strong></div>
+                            <div><span>Win Rates</span><strong id="mclAiWinRates">--</strong></div>
+                        </div>
                     </div>
                 </div>
 
@@ -1501,7 +1554,6 @@
         </div>
     </aside>
 
-    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
     <script>
         /**
          * Open Market Causality Lab Dashboard
@@ -1521,6 +1573,43 @@
         };
 
         (function () {
+            const ensureLightweightCharts = (done) => {
+                if (window.LightweightCharts) {
+                    done(true);
+                    return;
+                }
+                const urls = [
+                    "https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js",
+                    "https://cdn.jsdelivr.net/npm/lightweight-charts@5.1.0/dist/lightweight-charts.standalone.production.js",
+                ];
+                let idx = 0;
+
+                const tryNext = () => {
+                    if (window.LightweightCharts) {
+                        done(true);
+                        return;
+                    }
+                    if (idx >= urls.length) {
+                        done(false);
+                        return;
+                    }
+                    const s = document.createElement("script");
+                    s.src = urls[idx++];
+                    s.async = true;
+                    s.onload = () => {
+                        if (window.LightweightCharts) {
+                            done(true);
+                        } else {
+                            tryNext();
+                        }
+                    };
+                    s.onerror = () => tryNext();
+                    document.head.appendChild(s);
+                };
+
+                tryNext();
+            };
+
             const existingBase = String(window.AQ_API_BASE || "").trim();
             window.AQ_API_BASE = existingBase || window.location.origin;
             // Always load canonical frontend assets from /frontend.
@@ -1537,7 +1626,19 @@
                 document.body.appendChild(script);
             };
 
-            load(0);
+            ensureLightweightCharts((ok) => {
+                if (!ok) {
+                    const state = document.getElementById("chartState");
+                    if (state) {
+                        state.style.display = "block";
+                        state.style.color = "#fca5a5";
+                        state.textContent = "Chart library failed to load (CDN unavailable).";
+                    }
+                    console.error("Failed to load Lightweight Charts from all CDNs");
+                    return;
+                }
+                load(0);
+            });
         })();
     </script>
 </body>

@@ -177,6 +177,7 @@ let vwapSeries;
 let atrUpperSeries;
 let atrLowerSeries;
 let cumDeltaSeries;
+let predictionSeries;
 let lastRenderKey = "";
 let lastRenderedTime = 0;
 let cachedPayload = null;
@@ -188,6 +189,8 @@ let chartRequestSerial = 0;
 let chartAppliedSerial = 0;
 let chartInitialLoadDone = false;
 let chartInteractionTimer = null;
+let mclOverlayMarkers = [];
+let mclOverlayFetchSerial = 0;
 const chartInteractionState = {
 	isUserInteracting: false,
 	lastInteractionAt: 0,
@@ -743,6 +746,14 @@ function createChartIfNeeded() {
 		color: "#93c5fd",
 		lineWidth: 2,
 		lineStyle: LightweightCharts.LineStyle.Solid,
+		priceLineVisible: false,
+		lastValueVisible: false,
+	});
+	predictionSeries = addLineSeriesCompat(chart, {
+		priceScaleId: "right",
+		color: "#facc15",
+		lineWidth: 2,
+		lineStyle: LightweightCharts.LineStyle.Dotted,
 		priceLineVisible: false,
 		lastValueVisible: false,
 	});
@@ -1815,9 +1826,140 @@ function buildMarkers(payload) {
 		color: String(m.direction || "").toUpperCase() === "BUY" ? "#22c55e" : "#ef4444",
 		text: m.model || "SIG",
 	}));
-	return [...signals]
+	const merged = [...signals, ...(Array.isArray(mclOverlayMarkers) ? mclOverlayMarkers : [])];
+	const dedup = new Map();
+	for (const marker of merged) {
+		const t = Number(marker?.time || 0);
+		if (!Number.isFinite(t) || t <= 0) continue;
+		const text = String(marker?.text || "");
+		const shape = String(marker?.shape || "circle");
+		const pos = String(marker?.position || "aboveBar");
+		dedup.set(`${t}|${shape}|${pos}|${text}`, {
+			time: t,
+			shape,
+			position: pos,
+			color: String(marker?.color || "#94a3b8"),
+			text,
+		});
+	}
+	return [...dedup.values()]
 		.filter(m => Number.isFinite(Number(m?.time)) && Number(m.time) > 0)
 		.sort((a, b) => a.time - b.time);
+}
+
+function buildMclOverlayMarkers(overlayPayload) {
+	if (!overlayPayload || overlayPayload.status !== "ok") return [];
+	const out = [];
+	const pushMarker = (src, fallbackText) => {
+		const t = Number(src?.time || 0);
+		if (!Number.isFinite(t) || t <= 0) return;
+		out.push({
+			time: t,
+			position: String(src?.position || "aboveBar"),
+			shape: String(src?.shape || "circle"),
+			color: String(src?.color || "#94a3b8"),
+			text: String(src?.label || fallbackText || "MCL"),
+		});
+	};
+
+	const gannCycles = Array.isArray(overlayPayload.gann_cycles) ? overlayPayload.gann_cycles : [];
+	const lunarEvents = Array.isArray(overlayPayload.lunar_events) ? overlayPayload.lunar_events : [];
+	const autoPatterns = Array.isArray(overlayPayload.auto_patterns) ? overlayPayload.auto_patterns : [];
+
+	for (const row of gannCycles.slice(-40)) pushMarker(row, "CY");
+	for (const row of lunarEvents.slice(-32)) pushMarker(row, "MOON");
+	for (const row of autoPatterns.slice(-40)) pushMarker(row, "PAT");
+
+	return out.sort((a, b) => Number(a.time) - Number(b.time));
+}
+
+function updateMclAiPanel(overlaysPayload, absorptionPayload) {
+	const setText = (id, value) => {
+		const el = document.getElementById(id);
+		if (!el) return;
+		el.innerText = value;
+	};
+
+	const overlaysOk = overlaysPayload && overlaysPayload.status === "ok";
+	const absorbOk = absorptionPayload && absorptionPayload.status === "ok";
+
+	setText("mclOvCycles", overlaysOk ? String((overlaysPayload.gann_cycles || []).length) : "--");
+	setText("mclOvLunar", overlaysOk ? String((overlaysPayload.lunar_events || []).length) : "--");
+	setText("mclOvPatterns", overlaysOk ? String((overlaysPayload.auto_patterns || []).length) : "--");
+	setText("mclOvProjection", overlaysOk ? String((overlaysPayload.prediction_zone || []).length) : "--");
+	setText("mclOvAccuracy", overlaysOk ? String(Number(overlaysPayload?.meta?.astro_gann_display_accuracy || 0).toFixed(3)) : "--");
+
+	if (!absorbOk) {
+		setText("mclAiState", "--");
+		setText("mclAiCalibration", "--");
+		setText("mclAiTopModel", "--");
+		setText("mclAiCycle", "--");
+		setText("mclAiPreds", "--");
+		setText("mclAiOutcomes", "--");
+		setText("mclAiWeights", "--");
+		setText("mclAiWinRates", "--");
+		return;
+	}
+
+	setText("mclAiState", String(absorptionPayload.learning_state || "--"));
+	setText("mclAiCalibration", absorptionPayload.calibration_score != null ? String(Number(absorptionPayload.calibration_score).toFixed(3)) : "--");
+	setText("mclAiTopModel", String(absorptionPayload.top_model || "--"));
+	setText("mclAiCycle", String(absorptionPayload.cycle_alignment || "--"));
+	setText("mclAiPreds", String(absorptionPayload.total_predictions ?? "--"));
+	setText("mclAiOutcomes", String(absorptionPayload.total_outcomes ?? "--"));
+
+	const weights = absorptionPayload.model_weights && typeof absorptionPayload.model_weights === "object"
+		? Object.entries(absorptionPayload.model_weights)
+			.slice(0, 4)
+			.map(([k, v]) => `${k}:${Number(v || 0).toFixed(2)}`)
+			.join(" | ")
+		: "--";
+	setText("mclAiWeights", weights || "--");
+
+	const wins = absorptionPayload.model_win_rates && typeof absorptionPayload.model_win_rates === "object"
+		? Object.entries(absorptionPayload.model_win_rates)
+			.filter(([, v]) => v != null)
+			.slice(0, 4)
+			.map(([k, v]) => `${k}:${(Number(v || 0) * 100).toFixed(0)}%`)
+			.join(" | ")
+		: "--";
+	setText("mclAiWinRates", wins || "--");
+}
+
+async function refreshMclEnhancements(symbol, timeframe) {
+	if (!symbol || !timeframe) return;
+	const serial = ++mclOverlayFetchSerial;
+	const tf = String(timeframe || "1m");
+	const lookbackYears = tf === "1m" ? 1 : 5;
+	const limit = tf === "1m" ? 3000 : 8000;
+	const params = new URLSearchParams({
+		symbol: String(symbol),
+		timeframe: tf,
+		lookback_years: String(lookbackYears),
+		limit: String(limit),
+	});
+
+	const [overlayRes, absorptionRes] = await Promise.allSettled([
+		fetchJson(`/market_causality/chart/overlays?${params.toString()}`, 35000),
+		fetchJson("/market_causality/chart/ai-absorption", 15000),
+	]);
+
+	if (serial !== mclOverlayFetchSerial) return;
+	if (selectedSymbol() !== symbol || selectedTimeframe() !== timeframe) return;
+
+	const overlaysPayload = overlayRes.status === "fulfilled" ? overlayRes.value : null;
+	const absorptionPayload = absorptionRes.status === "fulfilled" ? absorptionRes.value : null;
+
+	mclOverlayMarkers = buildMclOverlayMarkers(overlaysPayload);
+	if (predictionSeries) {
+		const predictionRows = sanitizeLineRows((overlaysPayload && overlaysPayload.status === "ok" ? overlaysPayload.prediction_zone : []) || []);
+		predictionSeries.setData(predictionRows);
+	}
+	if (candlesSeries && cachedPayload) {
+		setSeriesMarkersCompat(candlesSeries, buildMarkers(cachedPayload));
+	}
+	updateMclAiPanel(overlaysPayload, absorptionPayload);
+	applyOverlayVisibility();
 }
 
 function updateChartMeta(payload, timeframe, candles) {
@@ -2214,6 +2356,13 @@ function applyOverlayVisibility() {
 	show(gannLines, on("toggleGann"));
 	show(astroLines, on("toggleAstro"));
 	show(vpLines, on("toggleVP"));
+	try {
+		if (predictionSeries) {
+			predictionSeries.applyOptions({
+				visible: on("toggleGann") || on("toggleAstro"),
+			});
+		}
+	} catch (_) {}
 	if (on("toggleVP")) {
 		if (!latestVpProfile && Array.isArray(latestCandleSnapshot) && latestCandleSnapshot.length) {
 			renderVolumeProfile(latestCandleSnapshot);
@@ -2254,7 +2403,7 @@ async function loadInstitutionalChart() {
 	const renderKey = `${symbol}|${timeframe}`;
 	updateChartWatermark(symbol, timeframe);
 	let requestLimit;
-	if (timeframe === "1") {
+	if (timeframe === "1m") {
 		requestLimit = 2880; // 2 days of 1-minute candles
 	} else {
 		requestLimit = chartInitialLoadDone ? 220 : 80;
@@ -2337,10 +2486,13 @@ async function loadInstitutionalChart() {
 		       clearPriceLines(astroLines);
 		       clearPriceLines(vpLines);
 		       clearPriceLines(tradeLines);
+		       if (predictionSeries) predictionSeries.setData([]);
+		       mclOverlayMarkers = [];
 		       latestVpProfile = null;
 		       clearVpOverlay();
 		       setSeriesMarkersCompat(candlesSeries, []);
 		       updateVpLegend(null, false);
+		       updateMclAiPanel(null, null);
 		       updateChartMeta(payload, timeframe, candles);
 		       renderMicrostructureTables(payload, candles);
 		       lastRenderKey = renderKey;
@@ -2361,6 +2513,7 @@ async function loadInstitutionalChart() {
 	updateChartMeta(payload, timeframe, candles);
 	renderMicrostructureTables(payload, candles);
 	applyOverlayVisibility();
+	void refreshMclEnhancements(symbol, timeframe);
 	chartInitialLoadDone = true;
 	setChartStateMessage("", "");
 	paintLiveCandleFromQuote(timeframe);
