@@ -1865,10 +1865,32 @@ function buildMclOverlayMarkers(overlayPayload) {
 	const gannCycles = Array.isArray(overlayPayload.gann_cycles) ? overlayPayload.gann_cycles : [];
 	const lunarEvents = Array.isArray(overlayPayload.lunar_events) ? overlayPayload.lunar_events : [];
 	const autoPatterns = Array.isArray(overlayPayload.auto_patterns) ? overlayPayload.auto_patterns : [];
+	const elliottWaves = Array.isArray(overlayPayload.elliott_waves) ? overlayPayload.elliott_waves : [];
+	const cycleAlignVertical = Array.isArray(overlayPayload?.cycle_alignment?.vertical_lines)
+		? overlayPayload.cycle_alignment.vertical_lines
+		: [];
 
 	for (const row of gannCycles.slice(-40)) pushMarker(row, "CY");
 	for (const row of lunarEvents.slice(-32)) pushMarker(row, "MOON");
 	for (const row of autoPatterns.slice(-40)) pushMarker(row, "PAT");
+	for (const row of elliottWaves.slice(-36)) {
+		pushMarker({
+			time: row?.time,
+			position: row?.direction_up ? "belowBar" : "aboveBar",
+			shape: row?.direction_up ? "arrowUp" : "arrowDown",
+			color: row?.color || "#f59e0b",
+			label: row?.wave_label ? `EW${row.wave_label}` : "EW",
+		}, "EW");
+	}
+	for (const row of cycleAlignVertical.slice(-24)) {
+		pushMarker({
+			time: row?.time,
+			position: "aboveBar",
+			shape: "circle",
+			color: row?.color || "#60a5fa",
+			label: row?.label || "ALIGN",
+		}, "ALIGN");
+	}
 
 	return out.sort((a, b) => Number(a.time) - Number(b.time));
 }
