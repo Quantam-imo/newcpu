@@ -87,7 +87,7 @@ def test_market_causality_status_exposes_cache_metadata():
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload.get("cache_ttl_seconds") == 30.0
+    assert payload.get("cache_ttl_seconds") == 300.0
     assert payload.get("cache_entries") == 1
     assert payload.get("cache_keys") == ["XAUUSD|1m|25|historical_only"]
 
