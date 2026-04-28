@@ -1,0 +1,23 @@
+[Unit]
+Description=AstroQuant MT5 Bridge Sync (CSV -> MCL live bridge)
+After=network-online.target astroquant_tradingbot.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__SERVICE_USER__
+WorkingDirectory=__WORKSPACE__
+EnvironmentFile=-__WORKSPACE__/.env
+Environment=PYTHONPATH=__WORKSPACE__/tools
+Environment=PYTHONUNBUFFERED=1
+ExecStart=__WORKSPACE__/.venv/bin/python3 __WORKSPACE__/tools/mt5_bridge_sync_daemon.py
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=120
+StartLimitBurst=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=astroquant-mt5-bridge-sync
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=AstroQuant Scheduled AI Retraining
+After=network-online.target astroquant_livesync.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__SERVICE_USER__
+WorkingDirectory=__WORKSPACE__
+EnvironmentFile=-__WORKSPACE__/.env
+Environment=PYTHONPATH=__WORKSPACE__
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/bin/bash __WORKSPACE__/run_ai_retrain.sh
+TimeoutStartSec=8h
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=astroquant-ai-retrain

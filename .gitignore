@@ -64,3 +64,7 @@ data/prediction_tracker.json
 data/telegram_daemon_state.json
 data/last_known_chart_*.json
 data/x11vnc.*
+
+# Local data offload archives
+transfer_out/*.tar.gz
+transfer_out/*.tar.gz.sha256

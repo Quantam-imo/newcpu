@@ -8,19 +8,25 @@ def print_record(record):
 def print_error(exception):
     print("EXCEPTION:", exception)
 
-client = db.Live(key="REDACTED")
 
-client.subscribe(
-    dataset="GLBX.MDP3",
-    schema="trades",
-    symbols="ES.FUT",
-    stype_in="parent",
-    start="2023-04-17T09:00:00",
-)
+def main() -> None:
+    client = db.Live(key="REDACTED")
 
-client.add_callback(print_record, exception_callback=print_error)
+    client.subscribe(
+        dataset="GLBX.MDP3",
+        schema="trades",
+        symbols="ES.FUT",
+        stype_in="parent",
+        start="2023-04-17T09:00:00",
+    )
 
-print("Starting live session. Waiting for data or errors...")
-client.start()
-client.block_for_close(timeout=10)  # Wait up to 10 seconds for data
-print("Session ended or timed out.")
+    client.add_callback(print_record, exception_callback=print_error)
+
+    print("Starting live session. Waiting for data or errors...")
+    client.start()
+    client.block_for_close(timeout=10)  # Wait up to 10 seconds for data
+    print("Session ended or timed out.")
+
+
+if __name__ == "__main__":
+    main()

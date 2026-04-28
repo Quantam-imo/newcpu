@@ -10,11 +10,37 @@ LOG_DIR="$WORKSPACE/data/logs"
 LOG_FILE="$LOG_DIR/watchdog.log"
 LOCK_DIR="/tmp/astroquant_watchdog.lock"
 BOOTSTRAP="$WORKSPACE/non_systemd_autostart_bootstrap.sh"
+AI_HEALTH_CHECK="$WORKSPACE/check_ai_retrain_health.sh"
+MT5_STATUS_CHECK="$WORKSPACE/check_mt5_bridge_freshness.sh"
+MT5_START_SYNC="$WORKSPACE/start_mt5_bridge_sync.sh"
+MT5_STOP_SYNC="$WORKSPACE/stop_mt5_bridge_sync.sh"
 
 mkdir -p "$LOG_DIR"
 
 log() {
   printf '[%s] %s\n' "$(date -u '+%Y-%m-%d %H:%M:%S UTC')" "$*" >> "$LOG_FILE"
+}
+
+restart_mt5_bridge() {
+  local reason="$1"
+  log "mt5 bridge restart requested: ${reason}"
+  if [ -x "$MT5_STOP_SYNC" ]; then
+    AQ_WORKSPACE="$WORKSPACE" /bin/bash "$MT5_STOP_SYNC" >> "$LOG_FILE" 2>&1 || true
+  fi
+  sleep 1
+  if [ -x "$MT5_START_SYNC" ]; then
+    AQ_WORKSPACE="$WORKSPACE" /bin/bash "$MT5_START_SYNC" >> "$LOG_FILE" 2>&1 || true
+  fi
+  if [ -x "$MT5_STATUS_CHECK" ]; then
+    if AQ_WORKSPACE="$WORKSPACE" /bin/bash "$MT5_STATUS_CHECK" >> "$LOG_FILE" 2>&1; then
+      log "mt5 bridge recovery success"
+      FORCE_ALERT=1 bash "$WORKSPACE/send_telegram_alert.sh" mt5-bridge-recovered >> "$LOG_FILE" 2>&1 || true
+      return 0
+    fi
+  fi
+  log "mt5 bridge recovery incomplete"
+  FORCE_ALERT=1 bash "$WORKSPACE/send_telegram_alert.sh" mt5-bridge-recovery-failed >> "$LOG_FILE" 2>&1 || true
+  return 1
 }
 
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -49,6 +75,24 @@ done
 if ! curl -s -m 5 http://127.0.0.1:8000/status >/dev/null 2>&1; then
   log "backend status check failed"
   need_recover=1
+fi
+
+# AI retrain freshness check (alert-only, does not trigger full stack restart).
+if [ -x "$AI_HEALTH_CHECK" ]; then
+  if ! AQ_WORKSPACE="$WORKSPACE" /bin/bash "$AI_HEALTH_CHECK" >/tmp/astroquant_ai_retrain_health.out 2>&1; then
+    _msg="$(cat /tmp/astroquant_ai_retrain_health.out 2>/dev/null || echo 'AI retrain health stale')"
+    log "ai retrain health warning: ${_msg}"
+    FORCE_ALERT=1 bash "$WORKSPACE/send_telegram_alert.sh" ai-retrain-stale >> "$LOG_FILE" 2>&1 || true
+  fi
+fi
+
+# MT5 bridge freshness check (targeted recovery only).
+if [ -x "$MT5_STATUS_CHECK" ]; then
+  if ! AQ_WORKSPACE="$WORKSPACE" /bin/bash "$MT5_STATUS_CHECK" >/tmp/astroquant_mt5_bridge_health.out 2>&1; then
+    _mt5_msg="$(cat /tmp/astroquant_mt5_bridge_health.out 2>/dev/null || echo 'MT5 bridge stale/unhealthy')"
+    log "mt5 bridge health warning: ${_mt5_msg}"
+    restart_mt5_bridge "freshness check failed" || true
+  fi
 fi
 
 if [ "$need_recover" -eq 0 ]; then

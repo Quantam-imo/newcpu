@@ -734,7 +734,7 @@ def test_chart_overlays_returns_required_keys():
     assert resp.status_code == 200
     data = resp.json()
     assert data.get("status") == "ok"
-    for key in ("gann_cycles", "lunar_events", "auto_patterns", "prediction_zone", "gann_angles", "meta"):
+    for key in ("gann_cycles", "lunar_events", "auto_patterns", "turtle_soup", "prediction_zone", "gann_angles", "meta"):
         assert key in data, f"Missing key: {key}"
 
 
@@ -781,6 +781,70 @@ def test_chart_overlays_prediction_zone_is_forward():
         for point in zone:
             assert point["time"] > last_candle_time, "Prediction point is before last candle"
         assert len(zone) == 30
+
+
+def test_chart_overlays_turtle_soup_structure():
+    """Turtle Soup overlay rows should include liquidity + AI metadata when present."""
+    client = TestClient(app)
+    resp = client.get(
+        "/market_causality/chart/overlays",
+        params={"symbol": "XAUUSD", "timeframe": "1h", "lookback_years": 1, "limit": 2000},
+    )
+    assert resp.status_code == 200
+    rows = resp.json().get("turtle_soup", [])
+    assert isinstance(rows, list)
+    if rows:
+        row = rows[0]
+        for field in ("time", "type", "direction", "liquidity_type", "liquidity_score", "ai_confidence"):
+            assert field in row, f"Turtle Soup row missing field: {field}"
+
+
+def test_chart_overlays_turtle_profile_auto_resolution_contract():
+    """Overlay response must expose requested/applied Turtle profile across top-level, meta, and learning nodes."""
+    client = TestClient(app)
+    resp = client.get(
+        "/market_causality/chart/overlays",
+        params={
+            "symbol": "XAUUSD",
+            "timeframe": "5m",
+            "lookback_years": 1,
+            "limit": 2000,
+            "turtle_profile": "auto",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("status") == "ok"
+    assert data.get("turtle_profile_requested") == "auto"
+    assert data.get("turtle_profile_applied") in ("strict", "balanced", "aggressive")
+
+    learning = data.get("turtle_soup_learning") or {}
+    meta = data.get("meta") or {}
+    assert learning.get("turtle_profile_requested") == "auto"
+    assert learning.get("turtle_profile_applied") == data.get("turtle_profile_applied")
+    assert meta.get("turtle_profile_requested") == "auto"
+    assert meta.get("turtle_profile_applied") == data.get("turtle_profile_applied")
+
+
+def test_chart_overlays_turtle_profile_invalid_normalizes_to_auto():
+    """Invalid Turtle profile values should normalize to auto, then resolve by timeframe."""
+    client = TestClient(app)
+    resp = client.get(
+        "/market_causality/chart/overlays",
+        params={
+            "symbol": "XAUUSD",
+            "timeframe": "1m",
+            "lookback_years": 1,
+            "limit": 2000,
+            "turtle_profile": "invalid_profile",
+        },
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data.get("status") == "ok"
+    assert data.get("turtle_profile_requested") == "auto"
+    # Auto profile currently resolves to strict on 1m.
+    assert data.get("turtle_profile_applied") == "strict"
 
 
 def test_chart_ai_absorption_returns_required_keys():

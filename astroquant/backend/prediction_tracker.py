@@ -162,7 +162,10 @@ class PredictionTracker:
             return doc
 
     def _write(self, data: dict[str, Any]) -> None:
-        tmp = self._path.with_suffix(".tmp")
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self._path.with_name(
+            f"{self._path.stem}.{os.getpid()}.{threading.get_ident()}.{time.time_ns()}.tmp"
+        )
         try:
             tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
             os.replace(tmp, self._path)

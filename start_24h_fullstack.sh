@@ -18,6 +18,7 @@ source "$WORKSPACE/.venv/bin/activate" 2>/dev/null || true
 DATA_DIR="$WORKSPACE/data"
 LOG_DIR="$DATA_DIR/logs"
 LOCK_FILE="/tmp/astroquant_fullstack.lock"
+LIVESYNC_DISABLE_MARKER="$LOG_DIR/livesync.disabled"
 HEALTHCHECK_INTERVAL=30
 STARTUP_TIMEOUT=60
 NO_CHROME=false
@@ -172,8 +173,9 @@ cd "$WORKSPACE"
 # Enforce singleton backend across repeated boots/recovery runs.
 pkill -f "uvicorn.*astroquant.backend.main:app" 2>/dev/null || true
 sleep 1
-# Auto-scale workers: use env override, or detect CPU cores (capped at 4 for trading stability).
-_AQ_WORKERS="${FASTAPI_WORKERS:-$(python3 -c "import os; print(min(4, max(2, os.cpu_count() or 2)))" 2>/dev/null || echo 2)}"
+# Prefer a single worker for long-lived websocket/polling stability.
+# Override with FASTAPI_WORKERS only if you explicitly need multi-worker mode.
+_AQ_WORKERS="${FASTAPI_WORKERS:-1}"
 _AQ_LOG_LEVEL="${FASTAPI_LOG_LEVEL:-warning}"
 nohup python -m uvicorn astroquant.backend.main:app \
   --host 0.0.0.0 \
@@ -188,7 +190,8 @@ log GREEN "✓ Backend starting with $_AQ_WORKERS workers"
 _backend_ok=false
 for _i in 1 2 3 4 5 6 7 8 9; do
   sleep 5
-  if curl -s http://127.0.0.1:8000/status > /dev/null 2>&1; then
+  if curl -fsS http://127.0.0.1:8000/health > /dev/null 2>&1 \
+     || curl -fsS http://127.0.0.1:8000/status/feed > /dev/null 2>&1; then
     _backend_ok=true
     break
   fi
@@ -267,20 +270,46 @@ fi
 
 # Step 6: Live Sync Engine (Databento real-time candle feed → Redis)
 if [ -f "$WORKSPACE/start_live_sync.py" ] && [ -n "$DATABENTO_API_KEY" ]; then
-  log BLUE "Starting Databento live sync engine..."
-  pkill -f "start_live_sync.py" 2>/dev/null || true
-  sleep 1
-  nohup env PYTHONUNBUFFERED=1 python "$WORKSPACE/start_live_sync.py" >> "$LOG_DIR/livesync.log" 2>&1 &
-  sleep 3
-  if pgrep -f "start_live_sync.py" > /dev/null; then
-    log GREEN "✓ Live sync engine running (candles → Redis)"
+  if [ -f "$LIVESYNC_DISABLE_MARKER" ]; then
+    log YELLOW "⚠ Live sync disabled: $(cat "$LIVESYNC_DISABLE_MARKER" 2>/dev/null || echo databento_auth_failure)"
+    log YELLOW "  Fix DATABENTO_API_KEY and remove $LIVESYNC_DISABLE_MARKER to re-enable live sync"
   else
-    log YELLOW "⚠ Live sync engine failed to start — check $LOG_DIR/livesync.log"
+    log BLUE "Starting Databento live sync engine..."
+    pkill -f "start_live_sync.py" 2>/dev/null || true
+    sleep 1
+    nohup env PYTHONUNBUFFERED=1 python "$WORKSPACE/start_live_sync.py" >> "$LOG_DIR/livesync.log" 2>&1 &
+    sleep 3
+    if pgrep -f "start_live_sync.py" > /dev/null; then
+      log GREEN "✓ Live sync engine running (candles → Redis)"
+    elif [ -f "$LIVESYNC_DISABLE_MARKER" ]; then
+      log YELLOW "⚠ Live sync disabled after startup: $(cat "$LIVESYNC_DISABLE_MARKER" 2>/dev/null || echo databento_auth_failure)"
+    else
+      log YELLOW "⚠ Live sync engine failed to start — check $LOG_DIR/livesync.log"
+    fi
   fi
 else
   if [ -z "$DATABENTO_API_KEY" ]; then
     log YELLOW "⚠ DATABENTO_API_KEY not set — live sync skipped (chart will use historical fallback)"
   fi
+fi
+
+# Step 7: MT5 bridge sync (MetaEditor CSV -> canonical timeframe datasets)
+if [ -f "$WORKSPACE/start_mt5_bridge_sync.sh" ]; then
+  log BLUE "Starting MT5 bridge sync daemon..."
+  bash "$WORKSPACE/start_mt5_bridge_sync.sh" >> "$LOG_DIR/mt5_bridge_sync.log" 2>&1 || true
+  sleep 2
+  if [ -x "$WORKSPACE/status_mt5_bridge_sync.sh" ]; then
+    if bash "$WORKSPACE/status_mt5_bridge_sync.sh" > /tmp/astroquant_mt5_bridge_status.out 2>&1; then
+      log GREEN "✓ MT5 bridge sync running"
+    else
+      _mt5_status_msg="$(cat /tmp/astroquant_mt5_bridge_status.out 2>/dev/null || echo 'status check failed')"
+      log YELLOW "⚠ MT5 bridge sync status warning: $_mt5_status_msg"
+    fi
+  else
+    log GREEN "✓ MT5 bridge sync start command issued"
+  fi
+else
+  log YELLOW "⚠ start_mt5_bridge_sync.sh not found — MT5 bridge sync skipped"
 fi
 
 # Step 8: CF Auto-Unblock
@@ -408,7 +437,9 @@ while true; do
 
   # Check Live Sync Engine (Databento candle feed)
   if [ -f "$WORKSPACE/start_live_sync.py" ] && [ -n "$DATABENTO_API_KEY" ]; then
-    if ! pgrep -f "start_live_sync.py" > /dev/null; then
+    if [ -f "$LIVESYNC_DISABLE_MARKER" ]; then
+      :
+    elif ! pgrep -f "start_live_sync.py" > /dev/null; then
       log RED "✗ Live sync engine down! Restarting..."
       nohup env PYTHONUNBUFFERED=1 python "$WORKSPACE/start_live_sync.py" >> "$LOG_DIR/livesync.log" 2>&1 &
     fi
@@ -431,29 +462,14 @@ while true; do
     sleep 3
   fi
   
-  # Check Backend — detect down OR duplicate instances
-  BACKEND_PIDS="$(pgrep -f "uvicorn.*astroquant.backend.main:app" || true)"
-  BACKEND_COUNT="$(printf "%s\n" "$BACKEND_PIDS" | sed '/^$/d' | wc -l)"
-  if [ "$BACKEND_COUNT" -gt 1 ]; then
-    log RED "✗ Backend duplicate instances detected ($BACKEND_COUNT). Restarting singleton..."
-    pkill -9 -f "uvicorn.*astroquant.backend.main:app" 2>/dev/null || true
-    sleep 2
-    cd "$WORKSPACE"
-    _AQ_WORKERS="${FASTAPI_WORKERS:-$(python3 -c "import os; print(min(4, max(2, os.cpu_count() or 2)))" 2>/dev/null || echo 2)}"
-    nohup python -m uvicorn astroquant.backend.main:app \
-      --host 0.0.0.0 \
-      --port 8000 \
-      --workers "$_AQ_WORKERS" \
-      --log-level "${FASTAPI_LOG_LEVEL:-warning}" \
-      > "$LOG_DIR/backend.log" 2>&1 &
-    echo $! > "$LOG_DIR/backend.pid"
-    sleep 3
-  elif ! curl -s http://127.0.0.1:8000/status > /dev/null 2>&1; then
+  # Check Backend — restart only when health endpoints fail.
+  if ! curl -fsS http://127.0.0.1:8000/health > /dev/null 2>&1 \
+       && ! curl -fsS http://127.0.0.1:8000/status/feed > /dev/null 2>&1; then
     log RED "✗ Backend down! Restarting..."
     pkill -9 -f "uvicorn.*main:app" 2>/dev/null || true
     sleep 2
     cd "$WORKSPACE"
-    _AQ_WORKERS="${FASTAPI_WORKERS:-$(python3 -c "import os; print(min(4, max(2, os.cpu_count() or 2)))" 2>/dev/null || echo 2)}"
+    _AQ_WORKERS="${FASTAPI_WORKERS:-1}"
     nohup python -m uvicorn astroquant.backend.main:app \
       --host 0.0.0.0 \
       --port 8000 \

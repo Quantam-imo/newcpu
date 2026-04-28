@@ -1,0 +1,758 @@
+{
+  "generated_at_utc": "2026-04-24T01:32:32Z",
+  "models_processed": 18,
+  "named_aspect_features": [
+    "news_aspect_event_count",
+    "news_conjunction_count",
+    "news_square_count",
+    "news_opposition_count",
+    "news_trine_count",
+    "news_sextile_count",
+    "news_ingress_event_count",
+    "news_nakshatra_event_count",
+    "news_gann_event_count",
+    "news_eclipse_event_count"
+  ],
+  "summaries": [
+    {
+      "pointer": "latest_15m__all_bars__first_touch_buy.json",
+      "version": "memory-20260423T165334Z",
+      "timeframe": "15m",
+      "setup_mode": "all_bars",
+      "label_mode": "first_touch_buy",
+      "model_name": "logistic_gd",
+      "brier": 0.034333,
+      "accuracy": 0.96254,
+      "log_loss": 0.147581,
+      "top10": [
+        {
+          "feature": "base_volatility",
+          "weight": 0.06715489569304912,
+          "rank": 1,
+          "abs_weight": 0.06715489569304912
+        },
+        {
+          "feature": "physics_force",
+          "weight": 0.057287178708242216,
+          "rank": 2,
+          "abs_weight": 0.057287178708242216
+        },
+        {
+          "feature": "compression_energy_stored",
+          "weight": -0.03701503164683783,
+          "rank": 3,
+          "abs_weight": 0.03701503164683783
+        },
+        {
+          "feature": "participation_newyork_open",
+          "weight": 0.02490075351717171,
+          "rank": 4,
+          "abs_weight": 0.02490075351717171
+        },
+        {
+          "feature": "participation_score",
+          "weight": 0.01613542474261965,
+          "rank": 5,
+          "abs_weight": 0.01613542474261965
+        },
+        {
+          "feature": "gann_tangent_angle_deg",
+          "weight": 0.014682311029884923,
+          "rank": 6,
+          "abs_weight": 0.014682311029884923
+        },
+        {
+          "feature": "gann_tangent_expansion_strength",
+          "weight": 0.014682311029134911,
+          "rank": 7,
+          "abs_weight": 0.014682311029134911
+        },
+        {
+          "feature": "state_price",
+          "weight": -0.014355737445358027,
+          "rank": 8,
+          "abs_weight": 0.014355737445358027
+        },
+        {
+          "feature": "structure_trend_strength",
+          "weight": 0.008295577322843252,
+          "rank": 9,
+          "abs_weight": 0.008295577322843252
+        },
+        {
+          "feature": "compression_score",
+          "weight": -0.007814713855442659,
+          "rank": 10,
+          "abs_weight": 0.007814713855442659
+        }
+      ],
+      "named_aspects": [
+        {
+          "feature": "news_aspect_event_count",
+          "weight": 0.003138768340892103,
+          "rank": 43,
+          "abs_weight": 0.003138768340892103
+        },
+        {
+          "feature": "news_conjunction_count",
+          "weight": 0.005181543199216282,
+          "rank": 18,
+          "abs_weight": 0.005181543199216282
+        },
+        {
+          "feature": "news_square_count",
+          "weight": 0.005540525897720517,
+          "rank": 15,
+          "abs_weight": 0.005540525897720517
+        },
+        {
+          "feature": "news_opposition_count",
+          "weight": -0.004842232137244679,
+          "rank": 21,
+          "abs_weight": 0.004842232137244679
+        },
+        {
+          "feature": "news_trine_count",
+          "weight": -0.001542488213467587,
+          "rank": 64,
+          "abs_weight": 0.001542488213467587
+        },
+        {
+          "feature": "news_sextile_count",
+          "weight": 0.0012261715554404238,
+          "rank": 72,
+          "abs_weight": 0.0012261715554404238
+        },
+        {
+          "feature": "news_ingress_event_count",
+          "weight": -0.0013023960273835246,
+          "rank": 68,
+          "abs_weight": 0.0013023960273835246
+        },
+        {
+          "feature": "news_nakshatra_event_count",
+          "weight": -0.0012126629879151002,
+          "rank": 74,
+          "abs_weight": 0.0012126629879151002
+        },
+        {
+          "feature": "news_gann_event_count",
+          "weight": -0.00038198632299985295,
+          "rank": 105,
+          "abs_weight": 0.00038198632299985295
+        },
+        {
+          "feature": "news_eclipse_event_count",
+          "weight": -1.3003310843927401e-05,
+          "rank": 111,
+          "abs_weight": 1.3003310843927401e-05
+        }
+      ],
+      "skipped_reason": null
+    },
+    {
+      "pointer": "latest_15m__all_bars__first_touch_sell.json",
+      "version": "memory-20260423T174450Z",
+      "timeframe": "15m",
+      "setup_mode": "all_bars",
+      "label_mode": "first_touch_sell",
+      "model_name": "logistic_gd",
+      "brier": 0.035152,
+      "accuracy": 0.961678,
+      "log_loss": 0.151204,
+      "top10": [
+        {
+          "feature": "base_volatility",
+          "weight": 0.0745551249586465,
+          "rank": 1,
+          "abs_weight": 0.0745551249586465
+        },
+        {
+          "feature": "physics_force",
+          "weight": 0.05346004931347592,
+          "rank": 2,
+          "abs_weight": 0.05346004931347592
+        },
+        {
+          "feature": "compression_energy_stored",
+          "weight": -0.03400866740178125,
+          "rank": 3,
+          "abs_weight": 0.03400866740178125
+        },
+        {
+          "feature": "participation_newyork_open",
+          "weight": 0.02729477955738028,
+          "rank": 4,
+          "abs_weight": 0.02729477955738028
+        },
+        {
+          "feature": "gann_tangent_angle_deg",
+          "weight": 0.017190862505831562,
+          "rank": 5,
+          "abs_weight": 0.017190862505831562
+        },
+        {
+          "feature": "gann_tangent_expansion_strength",
+          "weight": 0.017190862505082262,
+          "rank": 6,
+          "abs_weight": 0.017190862505082262
+        },
+        {
+          "feature": "participation_score",
+          "weight": 0.015278092312407706,
+          "rank": 7,
+          "abs_weight": 0.015278092312407706
+        },
+        {
+          "feature": "trigger_confirmed",
+          "weight": 0.01069065792296018,
+          "rank": 8,
+          "abs_weight": 0.01069065792296018
+        },
+        {
+          "feature": "participation_london_open",
+          "weight": -0.009212111167657787,
+          "rank": 9,
+          "abs_weight": 0.009212111167657787
+        },
+        {
+          "feature": "structure_trend_strength",
+          "weight": 0.008973579858404758,
+          "rank": 10,
+          "abs_weight": 0.008973579858404758
+        }
+      ],
+      "named_aspects": [
+        {
+          "feature": "news_aspect_event_count",
+          "weight": -9.632647671788085e-05,
+          "rank": 104,
+          "abs_weight": 9.632647671788085e-05
+        },
+        {
+          "feature": "news_conjunction_count",
+          "weight": -0.0003077354446190741,
+          "rank": 99,
+          "abs_weight": 0.0003077354446190741
+        },
+        {
+          "feature": "news_square_count",
+          "weight": -0.0014064299561935883,
+          "rank": 73,
+          "abs_weight": 0.0014064299561935883
+        },
+        {
+          "feature": "news_opposition_count",
+          "weight": 0.0019779002282498044,
+          "rank": 58,
+          "abs_weight": 0.0019779002282498044
+        },
+        {
+          "feature": "news_trine_count",
+          "weight": 0.0009490953258025029,
+          "rank": 82,
+          "abs_weight": 0.0009490953258025029
+        },
+        {
+          "feature": "news_sextile_count",
+          "weight": -0.0008447586078237306,
+          "rank": 84,
+          "abs_weight": 0.0008447586078237306
+        },
+        {
+          "feature": "news_ingress_event_count",
+          "weight": 0.0022235616169390135,
+          "rank": 51,
+          "abs_weight": 0.0022235616169390135
+        },
+        {
+          "feature": "news_nakshatra_event_count",
+          "weight": -0.00014664149400979082,
+          "rank": 103,
+          "abs_weight": 0.00014664149400979082
+        },
+        {
+          "feature": "news_gann_event_count",
+          "weight": -0.002082441028352837,
+          "rank": 55,
+          "abs_weight": 0.002082441028352837
+        },
+        {
+          "feature": "news_eclipse_event_count",
+          "weight": -0.0041693783958340995,
+          "rank": 25,
+          "abs_weight": 0.0041693783958340995
+        }
+      ],
+      "skipped_reason": null
+    },
+    {
+      "pointer": "latest_1d__all_bars__first_touch_buy.json",
+      "version": "memory-20260424T005550Z",
+      "timeframe": "1d",
+      "setup_mode": "all_bars",
+      "label_mode": "first_touch_buy",
+      "model_name": "prior",
+      "brier": 0.246524,
+      "accuracy": 0.558959,
+      "log_loss": 0.686179,
+      "top10": [],
+      "named_aspects": [],
+      "skipped_reason": "best_model_not_logistic"
+    },
+    {
+      "pointer": "latest_1d__all_bars__first_touch_sell.json",
+      "version": "memory-20260424T005956Z",
+      "timeframe": "1d",
+      "setup_mode": "all_bars",
+      "label_mode": "first_touch_sell",
+      "model_name": "prior",
+      "brier": 0.230793,
+      "accuracy": 0.638591,
+      "log_loss": 0.654225,
+      "top10": [],
+      "named_aspects": [],
+      "skipped_reason": "best_model_not_logistic"
+    },
+    {
+      "pointer": "latest_1h__all_bars__first_touch_buy.json",
+      "version": "memory-20260423T170234Z",
+      "timeframe": "1h",
+      "setup_mode": "all_bars",
+      "label_mode": "first_touch_buy",
+      "model_name": "prior",
+      "brier": 0.143516,
+      "accuracy": 0.826321,
+      "log_loss": 0.461676,
+      "top10": [],
+      "named_aspects": [],
+      "skipped_reason": "best_model_not_logistic"
+    },
+    {
+      "pointer": "latest_1h__buy_trigger_candidate__first_touch_buy.json",
+      "version": "memory-20260422T101340Z",
+      "timeframe": "1h",
+      "setup_mode": "buy_trigger_candidate",
+      "label_mode": "first_touch_buy",
+      "model_name": "logistic_gd",
+      "brier": 0.182292,
+      "accuracy": 0.746667,
+      "log_loss": 0.552094,
+      "top10": [
+        {
+          "feature": "participation_score",
+          "weight": 0.1761053054599923,
+          "rank": 1,
+          "abs_weight": 0.1761053054599923
+        },
+        {
+          "feature": "trigger_sweep_buy_side",
+          "weight": -0.16704309427506292,
+          "rank": 2,
+          "abs_weight": 0.16704309427506292
+        },
+        {
+          "feature": "time_nakshatra_transition_active",
+          "weight": -0.1620429445902199,
+          "rank": 3,
+          "abs_weight": 0.1620429445902199
+        },
+        {
+          "feature": "time_moon_full_active",
+          "weight": 0.12339587057096871,
+          "rank": 4,
+          "abs_weight": 0.12339587057096871
+        },
+        {
+          "feature": "participation_volume_spike",
+          "weight": 0.1224896404626102,
+          "rank": 5,
+          "abs_weight": 0.1224896404626102
+        },
+        {
+          "feature": "time_moon_phase_active",
+          "weight": 0.11593919586713275,
+          "rank": 6,
+          "abs_weight": 0.11593919586713275
+        },
+        {
+          "feature": "location_bearish_order_block_near",
+          "weight": -0.11296152108354386,
+          "rank": 7,
+          "abs_weight": 0.11296152108354386
+        },
+        {
+          "feature": "time_gann_synodic_active",
+          "weight": 0.10936442797142353,
+          "rank": 8,
+          "abs_weight": 0.10936442797142353
+        },
+        {
+          "feature": "participation_strong",
+          "weight": 0.10863103552962994,
+          "rank": 9,
+          "abs_weight": 0.10863103552962994
+        },
+        {
+          "feature": "cycle_moon_phase_position",
+          "weight": 0.10715688913804175,
+          "rank": 10,
+          "abs_weight": 0.10715688913804175
+        }
+      ],
+      "named_aspects": [
+        {
+          "feature": "news_aspect_event_count",
+          "weight": 0.03708023656363163,
+          "rank": 65,
+          "abs_weight": 0.03708023656363163
+        },
+        {
+          "feature": "news_conjunction_count",
+          "weight": -0.0137383560674876,
+          "rank": 88,
+          "abs_weight": 0.0137383560674876
+        },
+        {
+          "feature": "news_square_count",
+          "weight": 0.1054651457861256,
+          "rank": 12,
+          "abs_weight": 0.1054651457861256
+        },
+        {
+          "feature": "news_opposition_count",
+          "weight": -0.09079774371932034,
+          "rank": 20,
+          "abs_weight": 0.09079774371932034
+        },
+        {
+          "feature": "news_trine_count",
+          "weight": 0.047311400105461185,
+          "rank": 48,
+          "abs_weight": 0.047311400105461185
+        },
+        {
+          "feature": "news_sextile_count",
+          "weight": -6.258231963113618e-05,
+          "rank": 99,
+          "abs_weight": 6.258231963113618e-05
+        },
+        {
+          "feature": "news_ingress_event_count",
+          "weight": -0.049453047926701355,
+          "rank": 43,
+          "abs_weight": 0.049453047926701355
+        },
+        {
+          "feature": "news_nakshatra_event_count",
+          "weight": 0.10659350181793126,
+          "rank": 11,
+          "abs_weight": 0.10659350181793126
+        },
+        {
+          "feature": "news_gann_event_count",
+          "weight": 0.05278176393065414,
+          "rank": 40,
+          "abs_weight": 0.05278176393065414
+        },
+        {
+          "feature": "news_eclipse_event_count",
+          "weight": 0.0,
+          "rank": 100,
+          "abs_weight": 0.0
+        }
+      ],
+      "skipped_reason": null
+    },
+    {
+      "pointer": "latest_1h__sell_trigger_candidate__first_touch_sell.json",
+      "version": "memory-20260422T102043Z",
+      "timeframe": "1h",
+      "setup_mode": "sell_trigger_candidate",
+      "label_mode": "first_touch_sell",
+      "model_name": "prior",
+      "brier": 0.137482,
+      "accuracy": 0.835443,
+      "log_loss": 0.447164,
+      "top10": [],
+      "named_aspects": [],
+      "skipped_reason": "best_model_not_logistic"
+    },
+    {
+      "pointer": "latest_1month__all_bars__first_touch_buy.json",
+      "version": "memory-20260422T100212Z",
+      "timeframe": "1month",
+      "setup_mode": "all_bars",
+      "label_mode": "first_touch_buy",
+      "model_name": "momentum_rule",
+      "brier": 0.231597,
+      "accuracy": 0.73913,
+      "log_loss": 0.741992,
+      "top10": [],
+      "named_aspects": [],
+      "skipped_reason": "best_model_not_logistic"
+    },
+    {
+      "pointer": "latest_1month__all_bars__first_touch_sell.json",
+      "version": "memory-20260422T090153Z",
+      "timeframe": "1month",
+      "setup_mode": "all_bars",
+      "label_mode": "first_touch_sell",
+      "model_name": "prior",
+      "brier": 0.231388,
+      "accuracy": 0.695652,
+      "log_loss": 0.655783,
+      "top10": [],
+      "named_aspects": [],
+      "skipped_reason": "best_model_not_logistic"
+    },
+    {
+      "pointer": "latest_1w__all_bars__first_touch_buy.json",
+      "version": "memory-20260422T100230Z",
+      "timeframe": "1w",
+      "setup_mode": "all_bars",
+      "label_mode": "first_touch_buy",
+      "model_name": "prior",
+      "brier": 0.248928,
+      "accuracy": 0.532751,
+      "log_loss": 0.691002,
+      "top10": [],
+      "named_aspects": [],
+      "skipped_reason": "best_model_not_logistic"
+    },
+    {
+      "pointer": "latest_1w__all_bars__first_touch_sell.json",
+      "version": "memory-20260422T030053Z",
+      "timeframe": "1w",
+      "setup_mode": "all_bars",
+      "label_mode": "first_touch_sell",
+      "model_name": "prior",
+      "brier": 0.238554,
+      "accuracy": 0.606987,
+      "log_loss": 0.670077,
+      "top10": [],
+      "named_aspects": [],
+      "skipped_reason": "best_model_not_logistic"
+    },
+    {
+      "pointer": "latest_30m__all_bars__first_touch_buy.json",
+      "version": "memory-20260423T155807Z",
+      "timeframe": "30m",
+      "setup_mode": "all_bars",
+      "label_mode": "first_touch_buy",
+      "model_name": "logistic_gd",
+      "brier": 0.070476,
+      "accuracy": 0.9186,
+      "log_loss": 0.260092,
+      "top10": [
+        {
+          "feature": "base_volatility",
+          "weight": 0.08251251654777197,
+          "rank": 1,
+          "abs_weight": 0.08251251654777197
+        },
+        {
+          "feature": "participation_volume_spike",
+          "weight": 0.07563890505313926,
+          "rank": 2,
+          "abs_weight": 0.07563890505313926
+        },
+        {
+          "feature": "physics_force",
+          "weight": 0.061642418364023586,
+          "rank": 3,
+          "abs_weight": 0.061642418364023586
+        },
+        {
+          "feature": "participation_score",
+          "weight": 0.05854114436929661,
+          "rank": 4,
+          "abs_weight": 0.05854114436929661
+        },
+        {
+          "feature": "participation_newyork_open",
+          "weight": 0.051075064154743936,
+          "rank": 5,
+          "abs_weight": 0.051075064154743936
+        },
+        {
+          "feature": "compression_energy_stored",
+          "weight": -0.040866199906011424,
+          "rank": 6,
+          "abs_weight": 0.040866199906011424
+        },
+        {
+          "feature": "gann_tangent_angle_deg",
+          "weight": 0.028799737733685712,
+          "rank": 7,
+          "abs_weight": 0.028799737733685712
+        },
+        {
+          "feature": "gann_tangent_expansion_strength",
+          "weight": 0.02879973773342303,
+          "rank": 8,
+          "abs_weight": 0.02879973773342303
+        },
+        {
+          "feature": "participation_london_open",
+          "weight": -0.017200837675440343,
+          "rank": 9,
+          "abs_weight": 0.017200837675440343
+        },
+        {
+          "feature": "news_square_count",
+          "weight": 0.01530943749303428,
+          "rank": 10,
+          "abs_weight": 0.01530943749303428
+        }
+      ],
+      "named_aspects": [
+        {
+          "feature": "news_aspect_event_count",
+          "weight": -0.0008622699934716518,
+          "rank": 92,
+          "abs_weight": 0.0008622699934716518
+        },
+        {
+          "feature": "news_conjunction_count",
+          "weight": 0.0011671833998084266,
+          "rank": 89,
+          "abs_weight": 0.0011671833998084266
+        },
+        {
+          "feature": "news_square_count",
+          "weight": 0.01530943749303428,
+          "rank": 10,
+          "abs_weight": 0.01530943749303428
+        },
+        {
+          "feature": "news_opposition_count",
+          "weight": -0.009989668661008207,
+          "rank": 15,
+          "abs_weight": 0.009989668661008207
+        },
+        {
+          "feature": "news_trine_count",
+          "weight": -0.008821966256061737,
+          "rank": 19,
+          "abs_weight": 0.008821966256061737
+        },
+        {
+          "feature": "news_sextile_count",
+          "weight": -0.0041904287715963775,
+          "rank": 42,
+          "abs_weight": 0.0041904287715963775
+        },
+        {
+          "feature": "news_ingress_event_count",
+          "weight": -0.005470054355365255,
+          "rank": 32,
+          "abs_weight": 0.005470054355365255
+        },
+        {
+          "feature": "news_nakshatra_event_count",
+          "weight": -0.0003428904543753983,
+          "rank": 101,
+          "abs_weight": 0.0003428904543753983
+        },
+        {
+          "feature": "news_gann_event_count",
+          "weight": -0.001333015782672311,
+          "rank": 84,
+          "abs_weight": 0.001333015782672311
+        },
+        {
+          "feature": "news_eclipse_event_count",
+          "weight": -0.006396008428816014,
+          "rank": 27,
+          "abs_weight": 0.006396008428816014
+        }
+      ],
+      "skipped_reason": null
+    },
+    {
+      "pointer": "latest_30m__all_bars__first_touch_sell.json",
+      "version": "memory-20260423T161448Z",
+      "timeframe": "30m",
+      "setup_mode": "all_bars",
+      "label_mode": "first_touch_sell",
+      "model_name": "prior",
+      "brier": 0.06609,
+      "accuracy": 0.928861,
+      "log_loss": 0.25666,
+      "top10": [],
+      "named_aspects": [],
+      "skipped_reason": "best_model_not_logistic"
+    },
+    {
+      "pointer": "latest_4h__all_bars__first_touch_buy.json",
+      "version": "memory-20260424T011655Z",
+      "timeframe": "4h",
+      "setup_mode": "all_bars",
+      "label_mode": "first_touch_buy",
+      "model_name": "prior",
+      "brier": 0.192232,
+      "accuracy": 0.74035,
+      "log_loss": 0.57269,
+      "top10": [],
+      "named_aspects": [],
+      "skipped_reason": "best_model_not_logistic"
+    },
+    {
+      "pointer": "latest_4h__all_bars__first_touch_sell.json",
+      "version": "memory-20260424T013047Z",
+      "timeframe": "4h",
+      "setup_mode": "all_bars",
+      "label_mode": "first_touch_sell",
+      "model_name": "prior",
+      "brier": 0.167486,
+      "accuracy": 0.787253,
+      "log_loss": 0.517575,
+      "top10": [],
+      "named_aspects": [],
+      "skipped_reason": "best_model_not_logistic"
+    },
+    {
+      "pointer": "latest_4h__buy_trigger_candidate__first_touch_buy.json",
+      "version": "memory-20260422T021608Z",
+      "timeframe": "4h",
+      "setup_mode": "buy_trigger_candidate",
+      "label_mode": "first_touch_buy",
+      "model_name": "logistic_gd",
+      "brier": 0.162066,
+      "accuracy": 0.829268,
+      "log_loss": 0.50363,
+      "top10": [],
+      "named_aspects": [],
+      "skipped_reason": "weight_vector_missing_or_mismatch"
+    },
+    {
+      "pointer": "latest_4h__sell_trigger_candidate__first_touch_sell.json",
+      "version": "memory-20260422T021700Z",
+      "timeframe": "4h",
+      "setup_mode": "sell_trigger_candidate",
+      "label_mode": "first_touch_sell",
+      "model_name": "prior",
+      "brier": 0.211206,
+      "accuracy": 0.69697,
+      "log_loss": 0.613418,
+      "top10": [],
+      "named_aspects": [],
+      "skipped_reason": "best_model_not_logistic"
+    },
+    {
+      "pointer": "latest_5m__all_bars__first_touch_buy.json",
+      "version": "memory-20260422T123611Z",
+      "timeframe": "5m",
+      "setup_mode": "all_bars",
+      "label_mode": "first_touch_buy",
+      "model_name": "prior",
+      "brier": 0.010528,
+      "accuracy": 0.989359,
+      "log_loss": 0.058935,
+      "top10": [],
+      "named_aspects": [],
+      "skipped_reason": "best_model_not_logistic"
+    }
+  ]
+}

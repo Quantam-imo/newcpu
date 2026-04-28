@@ -22,6 +22,10 @@ pkill -f "cloudflared tunnel" || echo "Tunnel not running"
 pkill -f "python cloudflare_unblock.py" || echo "CF unblock not running"
 pkill -f "$TELEGRAM_PATTERN" || echo "Telegram daemon not running"
 pkill -f "chrome-remote-debug" 2>/dev/null || echo "Chrome not running"
+pkill -f "tools/mt5_bridge_sync_daemon.py" 2>/dev/null || echo "MT5 bridge sync not running"
+if [ -x "$WORKSPACE/stop_mt5_bridge_sync.sh" ]; then
+  bash "$WORKSPACE/stop_mt5_bridge_sync.sh" >/dev/null 2>&1 || true
+fi
 
 # Stop Redis
 redis-cli shutdown 2>/dev/null || echo "Redis not running"

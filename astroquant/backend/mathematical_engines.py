@@ -520,7 +520,8 @@ class LearningFeedbackEngine:
                          stop_price: float,
                          target_price: float,
                          forecast_horizon_days: int,
-                         confluence_signal: bool = False) -> dict[str, Any]:
+                         confluence_signal: bool = False,
+                         features: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Record a prediction to learn from later.
         
@@ -556,6 +557,7 @@ class LearningFeedbackEngine:
             "forecast_horizon_days": forecast_horizon_days,
             "prediction_timestamp": int(time.time()),
             "accuracy": None,  # Will be filled in when outcome recorded
+            "features": dict(features or {}),
         }
         
         # Upsert: if a prediction with this ID already exists (e.g. re-run batch),

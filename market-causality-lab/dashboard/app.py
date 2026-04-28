@@ -16,11 +16,48 @@ No database needed—dashboard is purely frontend, pulling live analysis
 from the backend router which calls the core intelligence pipeline.
 """
 
-from flask import Flask
+from flask import Flask, request, Response
 from pathlib import Path
 import os
+import urllib.request
+import urllib.error
 
 app = Flask(__name__, static_folder=None)
+
+BACKEND_BASE = os.environ.get("BACKEND_BASE", "http://127.0.0.1:8000")
+
+
+def _proxy(path):
+    """Forward a request to the FastAPI backend and stream the response back."""
+    qs = request.query_string.decode()
+    url = f"{BACKEND_BASE}/{path}"
+    if qs:
+        url += "?" + qs
+    try:
+        req = urllib.request.Request(
+            url,
+            data=request.get_data() or None,
+            method=request.method,
+            headers={k: v for k, v in request.headers if k.lower() not in ("host", "content-length")},
+        )
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            body = resp.read()
+            ct = resp.headers.get("Content-Type", "application/json")
+            return Response(body, status=resp.status, content_type=ct)
+    except urllib.error.HTTPError as e:
+        return Response(e.read(), status=e.code, content_type="application/json")
+    except Exception as e:
+        return Response(f'{{"error":"{e}"}}', status=502, content_type="application/json")
+
+
+@app.route("/market_causality/<path:subpath>", methods=["GET", "POST"])
+def proxy_market_causality(subpath):
+    return _proxy(f"market_causality/{subpath}")
+
+
+@app.route("/api/astro/<path:subpath>", methods=["GET", "POST"])
+def proxy_api_astro(subpath):
+    return _proxy(f"api/astro/{subpath}")
 
 
 @app.route("/")

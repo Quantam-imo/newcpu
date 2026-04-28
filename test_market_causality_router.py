@@ -147,6 +147,15 @@ def test_compute_summary_exposes_top_level_fallback_fields(monkeypatch):
                     {"name": "memory_probability_stack", "elapsed_ms": 12.5},
                     {"name": "signal_synchronization", "elapsed_ms": 8.0},
                 ],
+                "ai_model": {
+                    "used_model": True,
+                    "version": "memory-20260421T165302Z",
+                    "resolved_model_scope": "1h__buy_trigger_candidate__first_touch_buy",
+                    "model_trade_direction": "BUY",
+                    "trigger_direction": "BUY",
+                    "bundle_source": "scoped:1h__buy_trigger_candidate__first_touch_buy",
+                    "drift": {"drift_detected": False},
+                },
             }
 
     monkeypatch.setattr(mcl_router, "_load_module", lambda: _DummyModule())
@@ -192,12 +201,239 @@ def test_compute_summary_exposes_top_level_fallback_fields(monkeypatch):
     assert payload["reasoning_chain"][0].startswith("Market structure")
     assert payload["reasoning_tone"] == "bullish"
     assert payload["reasoning_top_drivers"][0]["label"] == "dominant_force"
+    assert payload["ai_model_used"] is True
+    assert payload["ai_model_version"] == "memory-20260421T165302Z"
+    assert payload["ai_model_scope"] == "1h__buy_trigger_candidate__first_touch_buy"
+    assert payload["ai_model_trade_direction"] == "BUY"
+    assert payload["ai_trigger_direction"] == "BUY"
+    assert payload["ai_bundle_source"] == "scoped:1h__buy_trigger_candidate__first_touch_buy"
     assert payload["reasoning_delta"]["has_previous"] is False
     assert payload["reasoning_delta"]["previous_signal"] is None
     assert payload["reasoning_delta"]["signal_changed"] is False
     assert payload["reasoning_delta"]["top_driver_deltas"] == []
     assert payload["slowest_process_stage"]["name"] == "memory_probability_stack"
     assert payload["process_timing"][0]["elapsed_ms"] == 12.5
+
+
+def test_build_ai_phase_forecast_exposes_directional_model_metadata():
+    forecast = mcl_router._build_ai_phase_forecast({
+        "phase": "expansion",
+        "signal": "BUY",
+        "bias_label": "bullish",
+        "confidence": 0.72,
+        "reliability_score": 0.68,
+        "mcl_future_direction": "BUY",
+        "mcl_compression_direction_bias": "UP",
+        "ai_model": {
+            "used_model": True,
+            "version": "memory-20260421T165302Z",
+            "resolved_model_scope": "1h__buy_trigger_candidate__first_touch_buy",
+            "model_trade_direction": "BUY",
+            "trigger_direction": "BUY",
+            "bundle_source": "scoped:1h__buy_trigger_candidate__first_touch_buy",
+            "p_buy": 0.61,
+            "p_sell": 0.39,
+        },
+    })
+
+    assert forecast["ai_model_used"] is True
+    assert forecast["ai_model_version"] == "memory-20260421T165302Z"
+    assert forecast["ai_model_scope"] == "1h__buy_trigger_candidate__first_touch_buy"
+    assert forecast["ai_model_trade_direction"] == "BUY"
+    assert forecast["ai_trigger_direction"] == "BUY"
+    assert forecast["ai_bundle_source"] == "scoped:1h__buy_trigger_candidate__first_touch_buy"
+
+
+def test_compute_summary_timeout_fallback_enriches_intraday_fields(monkeypatch, tmp_path):
+    mcl_router._cache_payloads.clear()
+    mcl_router._cache_ts_by_key.clear()
+
+    latest_ts = mcl_router._to_epoch_seconds("2026-04-15T12:00:00Z")
+    assert latest_ts is not None
+    latest_ts = int(latest_ts)
+
+    candles = []
+    base_close = 3220.0
+    for index in range(60):
+        ts = latest_ts - ((59 - index) * 900)
+        close = base_close + (index * 0.35)
+        candles.append({
+            "time": ts,
+            "open": close - 0.2,
+            "high": close + 0.6,
+            "low": close - 0.7,
+            "close": close,
+        })
+
+    cycles_csv = tmp_path / "master_cycles_25y.csv"
+    cycles_csv.write_text(
+        "\n".join([
+            "row_num,event_time,start_time,end_time,duration_days,cycle_type,sub_type,planet,degree_at_event,degree_end,gann_key_angle,gann_quality,nakshatra,nak_sequence,phase_sequence,label,impact,detail",
+            "1,2026-04-15 10:30:00,2026-04-15 10:30:00,2026-04-16 10:30:00,1.0,nakshatra,Ashwini,,0.0,13.3,,,Ashwini,0.0,0.0,Nak 1/27: Ashwini,medium,Moon nakshatra active",
+            "2,2026-04-15 11:00:00,2026-04-15 11:00:00,2026-04-15 13:00:00,0.08,moon,Full Moon,,180.0,,,,Ashwini,,0.0,Full Moon window,high,Full moon reversal window",
+            "3,2026-04-15 13:00:00,2026-04-15 13:00:00,2026-04-16 13:00:00,1.0,planetary,Mars ingress to Aries,Mars,0.0,,,,Ashwini,,0.0,Mars ingress to Aries,medium,Planetary ingress",
+        ]),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        mcl_router,
+        "_run_full_system_with_timeout",
+        lambda *a, **kw: (_ for _ in ()).throw(TimeoutError("forced timeout")),
+    )
+    monkeypatch.setattr(
+        mcl_router,
+        "_compute_chart",
+        lambda **kw: {
+            "candles": candles,
+            "applied_timeframe": "15m",
+            "timeframe_fallback_applied": False,
+            "timeframe_fallback_reason": None,
+        },
+    )
+    monkeypatch.setattr(
+        mcl_router,
+        "market_causality_live_price",
+        lambda **kw: {"price": candles[-1]["close"], "status": "ok", "source": "test-live"},
+    )
+    monkeypatch.setattr(mcl_router, "_master_cycles_csv_path", lambda: cycles_csv)
+
+    payload = mcl_router._compute_summary(
+        refresh=True,
+        symbol="XAUUSD",
+        timeframe="15m",
+        lookback_years=25,
+        source_mode="live_first",
+    )
+
+    assert payload["status"] == "stale_timeout"
+    assert payload["astro"]["strength"] is not None
+    assert payload["compression"]["phase"]
+    assert payload["future"]["direction"] in {"BUY", "SELL", "WAIT"}
+    assert payload["future"]["timing_window"]
+    assert payload["mcl_astro_strength"] == payload["astro"]["strength"]
+    assert payload["mcl_astro_moon_phase"] == payload["astro"]["moon"]["phase_key"]
+    assert payload["mcl_astro_nakshatra"] == "Ashwini"
+    assert payload["mcl_future_direction"] == payload["future"]["direction"]
+    assert payload["mcl_future_timing_window"] == payload["future"]["timing_window"]
+    assert payload["observation_gann_nearest_key_angle"] is not None
+    assert payload["observation_gann_angle_proximity"] in {"EXACT", "NEAR", "WATCH", "NONE"}
+    assert payload["observation"]["gann_nearest_key_angle"] == payload["observation_gann_nearest_key_angle"]
+    assert payload["trade_levels"]["stop_loss"] is not None
+    assert payload["trade_levels"]["take_profit"] is not None
+
+
+def test_timeframe_matrix_timeout_uses_enriched_fallback_rows(monkeypatch):
+    started = []
+
+    def _fake_compute_summary(refresh, symbol, timeframe, lookback_years, source_mode):
+        started.append(timeframe)
+        if timeframe in {"15m", "5m", "1m"}:
+            raise AssertionError("matrix should synthesize fallback instead of reading late future")
+        return {
+            "status": "ok",
+            "signal": "BUY",
+            "requested_timeframe": timeframe,
+            "applied_timeframe": timeframe,
+            "trade_levels": {"entry": 1.0, "stop_loss": 0.9, "take_profit": 1.1},
+            "observation": {},
+        }
+
+    class _ImmediateFuture:
+        def __init__(self, fn, args):
+            self._fn = fn
+            self._args = args
+            self._done = False
+
+        def result(self):
+            self._done = True
+            return self._fn(*self._args)
+
+        def done(self):
+            return self._done
+
+        def cancel(self):
+            return False
+
+    class _PendingFuture:
+        def __init__(self):
+            self._done = False
+
+        def result(self):
+            raise RuntimeError("should not fetch result for pending future")
+
+        def done(self):
+            return self._done
+
+        def cancel(self):
+            return True
+
+    class _Executor:
+        def __init__(self, max_workers):
+            self.max_workers = max_workers
+
+        def submit(self, fn, *args):
+            tf = args[2]
+            if tf in {"15m", "5m", "1m"}:
+                return _PendingFuture()
+            return _ImmediateFuture(fn, args)
+
+        def shutdown(self, wait=False, cancel_futures=True):
+            return None
+
+    def _fake_as_completed(future_map, timeout=None):
+        yielded = 0
+        for future, tf in future_map.items():
+            if tf in {"15m", "5m", "1m"}:
+                continue
+            yielded += 1
+            yield future
+        raise mcl_router.concurrent.futures.TimeoutError()
+
+    def _fake_fallback_summary(*, symbol, timeframe, lookback_years, source_mode, started_at, error_text, fast_mode=False):
+        return {
+            "status": "stale_timeout",
+            "signal": "SELL",
+            "requested_timeframe": timeframe,
+            "applied_timeframe": timeframe,
+            "astro": {"strength": 66.0, "moon": {"phase_key": "WANING_CRESCENT"}},
+            "future": {"direction": "SELL", "timing_window": "Ashwini within 2.0h"},
+            "compression": {"direction_bias": "DOWN", "breakout_near": True},
+            "observation": {
+                "gann_nearest_key_angle": 135.0,
+                "gann_angle_proximity": "NEAR",
+            },
+            "trade_levels": {"entry": 10.0, "stop_loss": 11.0, "take_profit": 8.0},
+            "mcl_astro_strength": 66.0,
+            "mcl_astro_moon_phase": "WANING_CRESCENT",
+            "mcl_astro_nakshatra": "Ashwini",
+            "mcl_future_direction": "SELL",
+            "mcl_future_timing_window": "Ashwini within 2.0h",
+            "mcl_compression_direction_bias": "DOWN",
+            "mcl_compression_breakout_near": True,
+            "observation_gann_nearest_key_angle": 135.0,
+            "observation_gann_angle_proximity": "NEAR",
+        }
+
+    monkeypatch.setattr(mcl_router, "_compute_summary", _fake_compute_summary)
+    monkeypatch.setattr(mcl_router.concurrent.futures, "ThreadPoolExecutor", _Executor)
+    monkeypatch.setattr(mcl_router.concurrent.futures, "as_completed", _fake_as_completed)
+    monkeypatch.setattr(mcl_router, "_build_timeout_fallback_summary", _fake_fallback_summary)
+
+    result = mcl_router._compute_timeframe_matrix(
+        refresh=True,
+        symbol="XAUUSD",
+        lookback_years=25,
+        source_mode="live_first",
+    )
+
+    rows = {row["timeframe"]: row for row in result["rows"]}
+    assert rows["15m"]["status"] == "stale_timeout"
+    assert rows["15m"]["mcl_astro_strength"] == 66.0
+    assert rows["15m"]["mcl_future_timing_window"] == "Ashwini within 2.0h"
+    assert rows["15m"]["observation_gann_nearest_key_angle"] == 135.0
+    assert rows["5m"]["status"] == "stale_timeout"
+    assert rows["1m"]["status"] == "stale_timeout"
 
 
 def test_compute_summary_reasoning_delta_consecutive_runs(monkeypatch):
@@ -452,6 +688,8 @@ def test_compute_summary_cache_expires_after_ttl(monkeypatch):
         lambda: Path("/workspaces/newcpu/market-causality-lab/main.py"),
     )
     monkeypatch.setattr(mcl_router.time, "time", _fake_time)
+    # Prevent the snapshot fast path from intercepting the TTL-expiry call
+    monkeypatch.setattr(mcl_router, "_is_snapshot_fast_path_timeframe", lambda tf: False)
 
     first = mcl_router._compute_summary(
         refresh=True,
@@ -631,10 +869,13 @@ def test_live_price_endpoint_schema_keys_always_present(monkeypatch):
 def test_live_price_endpoint_ok_path_via_stooq(monkeypatch):
     """When stooq returns a valid CSV row, status must be 'ok' with the parsed price."""
     import urllib.request as _url_req
+    import pandas as _pd
     import astroquant.backend.router_market_causality as _r
 
     # Return a valid stooq-format CSV with a known close price.
-    _CSV = b"Symbol,Date,Time,Open,High,Low,Close,Volume\nXAUUSD,2026-04-03,12:00:00,3118.00,3125.00,3110.00,3120.50,0\n"
+    _CSV = b"Symbol,Date,Time,Open,High,Low,Close,Volume\nXAUUSD,2026-04-22,12:00:00,3118.00,3125.00,3110.00,3120.50,0\n"
+    # Compute the timestamp of the fake CSV row so we can freeze time at that instant
+    _CSV_TS = int(_pd.Timestamp("2026-04-22 12:00:00").timestamp())
 
     class _FakeResp:
         def __enter__(self):
@@ -645,6 +886,8 @@ def test_live_price_endpoint_ok_path_via_stooq(monkeypatch):
             return _CSV
 
     monkeypatch.setattr(_url_req, "urlopen", lambda *a, **kw: _FakeResp())
+    # Freeze time to the CSV timestamp so the age check passes (age == 0)
+    monkeypatch.setattr(_r.time, "time", lambda: float(_CSV_TS))
 
     result = _r.market_causality_live_price(symbol="XAUUSD")
 
@@ -1019,13 +1262,15 @@ def test_gann_qa_rows_include_q5_news_question(monkeypatch):
 
 
 def test_weights_signal_accuracy_is_dict_of_floats():
-    """signal_accuracy in /weights response must be a dict of float values in [0, 1]."""
+    """signal_accuracy in /weights response must be a dict of float-or-None values in [0, 1]."""
     result = mcl_router.market_causality_weights()
     sig_acc = result.get("signal_accuracy", {})
     assert isinstance(sig_acc, dict), "signal_accuracy must be a dict"
     for key, val in sig_acc.items():
-        assert isinstance(val, float), f"signal_accuracy[{key}] must be float, got {type(val)}"
-        assert 0.0 <= val <= 1.0, f"signal_accuracy[{key}]={val} out of [0..1]"
+        # None means the signal never fired — valid sentinel value
+        assert val is None or isinstance(val, float), f"signal_accuracy[{key}] must be float or None, got {type(val)}"
+        if val is not None:
+            assert 0.0 <= val <= 1.0, f"signal_accuracy[{key}]={val} out of [0..1]"
 
 
 # ---- /history endpoint -------------------------------------------------------

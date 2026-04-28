@@ -1,4 +1,5 @@
 import os
+import logging
 from fastapi import APIRouter, Response, Request
 from typing import Any
 import sqlite3
@@ -8,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 from datetime import datetime, timezone
 
 router = APIRouter()
+_log = logging.getLogger(__name__)
 
 # Last-known-good chart data endpoint for institutional reliability
 @router.get("/chart/last_known")
@@ -17,6 +19,34 @@ def get_last_known_chart(symbol: str = "GC.FUT", timeframe: str = "1", limit: in
 	"""
 	from astroquant.engine.candle.candle_reader import get_candle_series
 	import json
+	from datetime import datetime, timezone
+
+	def _to_epoch_seconds(value):
+		if value is None:
+			return None
+		try:
+			if isinstance(value, (int, float)):
+				num = float(value)
+				if num > 1_000_000_000_000:
+					num = num / 1000.0
+				return int(num)
+			text = str(value).strip()
+			if not text:
+				return None
+			dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+			return int(dt.timestamp())
+		except Exception:
+			return None
+
+	def _redis_rows_usable(rows, min_rows):
+		if not rows or len(rows) < min_rows:
+			return False
+		last = rows[-1] if isinstance(rows[-1], dict) else {}
+		ts = _to_epoch_seconds(last.get("time") or last.get("timestamp"))
+		if ts is None:
+			return False
+		age = int(datetime.now(timezone.utc).timestamp()) - ts
+		return age <= 3600  # 1h freshness bar for fallback quality
 
 	# Canonical → futures-feed alias mapping (for file fallback)
 	_SYMBOL_ALIASES = {
@@ -30,7 +60,8 @@ def get_last_known_chart(symbol: str = "GC.FUT", timeframe: str = "1", limit: in
 	if _redis_reachable():
 		try:
 			candles = get_candle_series(symbol, timeframe, limit)
-			if candles and len(candles):
+			_min_rows = max(10, min(int(limit or 80), 40))
+			if _redis_rows_usable(candles, _min_rows):
 				return {
 					"candles": candles,
 					"meta": {"count": len(candles), "source": "redis"},
@@ -47,6 +78,8 @@ def get_last_known_chart(symbol: str = "GC.FUT", timeframe: str = "1", limit: in
 	if alias and alias != sym_upper:
 		candidates.append(alias)
 
+	best_payload = None
+	best_count = -1
 	for sym_try in candidates:
 		for tf_try in [timeframe, timeframe.rstrip("m").rstrip("s"), f"{timeframe.rstrip('m')}m"] if "m" not in timeframe.lower() else [timeframe]:
 			fname = f"data/last_known_chart_{sym_try}_{tf_try}.json"
@@ -55,9 +88,18 @@ def get_last_known_chart(symbol: str = "GC.FUT", timeframe: str = "1", limit: in
 					with open(fname, "r", encoding="utf-8") as f:
 						payload = json.load(f)
 					if payload and isinstance(payload, dict) and payload.get("candles"):
-						return payload
+						count = len(payload.get("candles") or [])
+						if count > best_count:
+							best_payload = payload
+							best_count = count
 				except Exception:
 					pass
+
+	if best_payload and best_count > 0:
+		meta = dict(best_payload.get("meta") or {})
+		meta["source"] = "file_cache"
+		best_payload["meta"] = meta
+		return best_payload
 
 	# If all else fails, return empty
 	return {
@@ -209,6 +251,65 @@ def get_chart_data(symbol: str = "GC.FUT", timeframe: str = "1", limit: int = 80
 	from astroquant.backend.services.databento_utility import fetch_candles_unified
 	import json
 
+	def _timeframe_to_minutes(value: str) -> int | None:
+		tf = str(value or "").strip().lower()
+		if not tf:
+			return None
+		if tf.endswith("m"):
+			try:
+				return int(tf[:-1])
+			except Exception:
+				return None
+		if tf.endswith("h"):
+			try:
+				return int(tf[:-1]) * 60
+			except Exception:
+				return None
+		if tf in {"d", "1d", "day"}:
+			return 1440
+		if tf in {"w", "1w", "week"}:
+			return 10080
+		if tf in {"month", "1month", "1mo", "mo"}:
+			return 43200
+		if tf.isdigit():
+			return int(tf)
+		return None
+
+	def _aggregate_candles(rows: list[dict], bucket_minutes: int) -> list[dict]:
+		if not rows or bucket_minutes <= 1:
+			return list(rows or [])
+		out: list[dict] = []
+		bucket_seconds = int(bucket_minutes) * 60
+		for row in sorted(rows, key=lambda r: int(_to_epoch_seconds(r.get("time") or r.get("timestamp")) or 0)):
+			ts = _to_epoch_seconds(row.get("time") or row.get("timestamp"))
+			if ts is None:
+				continue
+			try:
+				o = float(row.get("open"))
+				h = float(row.get("high"))
+				l = float(row.get("low"))
+				c = float(row.get("close"))
+				v = float(row.get("volume") or 0.0)
+			except Exception:
+				continue
+			bucket_time = int(ts // bucket_seconds) * bucket_seconds
+			if not out or out[-1]["time"] != bucket_time:
+				out.append({
+					"time": bucket_time,
+					"open": o,
+					"high": h,
+					"low": l,
+					"close": c,
+					"volume": max(0.0, v),
+				})
+			else:
+				curr = out[-1]
+				curr["high"] = max(float(curr["high"]), h)
+				curr["low"] = min(float(curr["low"]), l)
+				curr["close"] = c
+				curr["volume"] = float(curr.get("volume") or 0.0) + max(0.0, v)
+		return out
+
 	def _to_epoch_seconds(value):
 		if value is None:
 			return None
@@ -240,6 +341,7 @@ def get_chart_data(symbol: str = "GC.FUT", timeframe: str = "1", limit: int = 80
 			return None
 
 	symbol = _normalize_trading_symbol(symbol)
+	timeframe = str(timeframe or "1").strip()
 	if symbol not in set(TRADING_FUTURES_SYMBOLS):
 		return {
 			"candles": [],
@@ -258,12 +360,20 @@ def get_chart_data(symbol: str = "GC.FUT", timeframe: str = "1", limit: int = 80
 	_REDIS_STALE_SECONDS = 600  # 10 minutes
 
 	error_msgs = []
-	if _redis_reachable():
+	redis_timeframe_ok = bool(
+		timeframe.isdigit()
+		or timeframe.lower().endswith("m")
+		or timeframe.lower().endswith("h")
+	)
+	if _redis_reachable() and redis_timeframe_ok:
 		try:
 			candles = get_candle_series(symbol, timeframe, limit)
 		except Exception as exc:
 			candles = []
 			error_msgs.append(f"Redis error: {exc}")
+	elif _redis_reachable() and not redis_timeframe_ok:
+		candles = []
+		error_msgs.append(f"Redis skip: unsupported timeframe '{timeframe}'")
 	else:
 		candles = []
 		error_msgs.append("Redis unavailable: fast-skip")
@@ -315,7 +425,8 @@ def get_chart_data(symbol: str = "GC.FUT", timeframe: str = "1", limit: int = 80
 		try:
 			pool = ThreadPoolExecutor(max_workers=1)
 			future = pool.submit(fetch_candles_unified, symbol=symbol, limit=limit)
-			candles, fetch_meta = future.result(timeout=15.0)
+			# Keep chart endpoint responsive; fall back to last-known if live fetch is slow.
+			candles, fetch_meta = future.result(timeout=6.0)
 			meta = {
 				"source": "databento_final_engine",
 				"count": len(candles),
@@ -366,6 +477,32 @@ def get_chart_data(symbol: str = "GC.FUT", timeframe: str = "1", limit: int = 80
 				"count": len(candles),
 				"fallback": dict(last_known.get("meta") or {}),
 			}
+
+	# If direct high-timeframe cache is empty, resample from lower-timeframe
+	# last-known data so timeframe switches keep rendering candles.
+	if not candles:
+		target_minutes = _timeframe_to_minutes(timeframe)
+		if target_minutes and target_minutes > 1:
+			for base_tf in ("1", "5"):
+				base_minutes = _timeframe_to_minutes(base_tf)
+				if not base_minutes or base_minutes > target_minutes:
+					continue
+				base_limit = max(int(limit or 80) * max(4, int(target_minutes / max(1, base_minutes))), 600)
+				base_payload = get_last_known_chart(symbol=symbol, timeframe=base_tf, limit=base_limit) or {}
+				base_candles = list(base_payload.get("candles") or [])
+				if not base_candles:
+					continue
+				agg = _aggregate_candles(base_candles, target_minutes)
+				if agg:
+					candles = agg[-max(1, int(limit or 80)):]
+					meta = {
+						"source": "last_known_resampled",
+						"count": len(candles),
+						"requested_timeframe": timeframe,
+						"resampled_from": base_tf,
+						"fallback": dict(base_payload.get("meta") or {}),
+					}
+					break
 
 	# If candles exist but are stale or degraded, try direct market-feed refresh from the
 	# active resolver symbol before returning the cached payload.
@@ -554,6 +691,7 @@ def get_chart_data(symbol: str = "GC.FUT", timeframe: str = "1", limit: int = 80
 
 		enriched_meta.update({
 			"source": enriched_meta.get("source") or "runtime",
+			"timeframe": str(timeframe),
 			"data_source": enriched_meta.get("source") or market_mode,
 			"auto_mode": "AUTO" if bool(getattr(runner, "auto_trading_enabled", True)) else "MANUAL",
 			"risk_percent": float(ACCOUNT_CONFIG.get("risk_per_trade_phase1", 0.005)) * 100.0,

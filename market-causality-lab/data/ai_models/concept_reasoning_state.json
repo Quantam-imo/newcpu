@@ -1,0 +1,457 @@
+{
+  "version": 1,
+  "meta": {
+    "updates": 137,
+    "last_update": "2026-04-28T09:47:33.630782+00:00"
+  },
+  "pending": {
+    "timestamp": "2026-04-24T00:00:00+00:00",
+    "direction": "BUY",
+    "price": 4708.06,
+    "concepts": [
+      "astro:EVENT_IMPACT_LOW",
+      "astro:MOON_WAXING_CRESCENT",
+      "astro:STRENGTH_HIGH",
+      "factor:elliott:BUY",
+      "factor:harmonic:SELL",
+      "factor:phase_primary:BUY",
+      "gann:HARMONIC_NEAR",
+      "gann_adv:DEG_BIN_90",
+      "gann_adv:ZONE_NORMAL",
+      "liquidity:NO_SWEEP",
+      "orderflow:AGGRESSIVE_BUY",
+      "orderflow:IMBALANCE_BUY",
+      "phase:EXPANSION",
+      "regime:RANGE",
+      "structure:DOWN",
+      "volatility:LOW"
+    ]
+  },
+  "concept_stats": {
+    "astro:MOON_FULL_MOON": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      }
+    },
+    "astro:STRENGTH_HIGH": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 50.0
+      }
+    },
+    "factor:liquidity_primary:BUY": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      }
+    },
+    "factor:phase_primary:BUY": {
+      "BUY": {
+        "tp": 2.0,
+        "fp": 0.0,
+        "neutral": 97.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 27.0
+      }
+    },
+    "gann:HARMONIC_NEAR": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 84.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 13.0
+      }
+    },
+    "gann:MAJOR_TURN": {
+      "BUY": {
+        "tp": 2.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 14.0
+      }
+    },
+    "gann_adv:DEG_BIN_180": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      }
+    },
+    "gann_adv:PRICE_TIME_EQUAL": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      }
+    },
+    "gann_adv:ZONE_REVERSAL": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      }
+    },
+    "liquidity:SELL_SIDE_SWEEP": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      }
+    },
+    "liquidity:SWEEP": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      }
+    },
+    "news:EVENT_ACTIVE": {
+      "BUY": {
+        "tp": 2.0,
+        "fp": 0.0,
+        "neutral": 14.0
+      }
+    },
+    "news:GANN_EVENT": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 14.0
+      }
+    },
+    "phase:ACCUMULATION": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      }
+    },
+    "regime:TREND": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      }
+    },
+    "structure:UP": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 47.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 18.0
+      }
+    },
+    "volatility:MED": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 1.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 1.0
+      }
+    },
+    "astro:EVENT_IMPACT_LOW": {
+      "BUY": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 85.0
+      }
+    },
+    "astro:MOON_WAXING_CRESCENT": {
+      "BUY": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 50.0
+      }
+    },
+    "factor:elliott:BUY": {
+      "BUY": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 62.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 38.0
+      }
+    },
+    "factor:harmonic:SELL": {
+      "BUY": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 84.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 13.0
+      }
+    },
+    "gann_adv:DEG_BIN_90": {
+      "BUY": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 97.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 38.0
+      }
+    },
+    "gann_adv:ZONE_NORMAL": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 97.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 38.0
+      }
+    },
+    "liquidity:NO_SWEEP": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 97.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 38.0
+      }
+    },
+    "news:ASPECT_EVENT": {
+      "BUY": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 14.0
+      }
+    },
+    "news:HIGH_IMPACT": {
+      "BUY": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 14.0
+      }
+    },
+    "news:NAKSHATRA_EVENT": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 14.0
+      }
+    },
+    "orderflow:AGGRESSIVE_BUY": {
+      "BUY": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 85.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 16.0
+      }
+    },
+    "orderflow:IMBALANCE_BUY": {
+      "BUY": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 85.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 16.0
+      }
+    },
+    "phase:EXPANSION": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 97.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 38.0
+      }
+    },
+    "regime:RANGE": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 62.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 20.0
+      }
+    },
+    "structure:DOWN": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 50.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 20.0
+      }
+    },
+    "volatility:LOW": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 62.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 37.0
+      }
+    },
+    "astro:EVENT_IMPACT_MEDIUM": {
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 38.0
+      },
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 12.0
+      }
+    },
+    "astro:MOON_FIRST_QUARTER": {
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 38.0
+      },
+      "BUY": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 12.0
+      }
+    },
+    "astro:STRENGTH_NORMAL": {
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 38.0
+      },
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 47.0
+      }
+    },
+    "astro:MOON_WAXING_GIBBOUS": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 35.0
+      }
+    },
+    "factor:elliott:SELL": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 34.0
+      }
+    },
+    "regime:TREND_WEAK": {
+      "BUY": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 35.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 18.0
+      }
+    },
+    "volatility:HIGH": {
+      "BUY": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 34.0
+      }
+    },
+    "factor:model:BUY": {
+      "BUY": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 27.0
+      }
+    },
+    "orderflow:AGGRESSIVE_SELL": {
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 11.0
+      },
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 12.0
+      }
+    },
+    "orderflow:IMBALANCE_SELL": {
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 11.0
+      },
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 12.0
+      }
+    },
+    "factor:phase_primary:SELL": {
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 11.0
+      }
+    },
+    "gann_adv:DEG_BIN_300": {
+      "BUY": {
+        "tp": 1.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      }
+    }
+  }
+}

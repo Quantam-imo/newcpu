@@ -14,7 +14,14 @@ from backend.ai.modeling.calibration import (
     log_loss,
 )
 from backend.ai.modeling.feature_pipeline import (
+    DEFAULT_LABEL_MODE,
+    DEFAULT_SETUP_MODE,
+    DEFAULT_STOP_RETURN_PCT,
+    DEFAULT_TARGET_RETURN_PCT,
     build_dataset_from_memory,
+    feature_names_for_version,
+    label_config,
+    setup_config,
     standardize_fit,
     standardize_transform,
 )
@@ -35,8 +42,38 @@ def _time_split(X: np.ndarray, y: np.ndarray, train_ratio: float = 0.8):
     return X[:cut], y[:cut], X[cut:], y[cut:]
 
 
-def train_and_register_from_memory(memory: list[dict[str, Any]], horizon: int = 1) -> TrainResult:
-    X, y = build_dataset_from_memory(memory, horizon=horizon)
+def _model_scope(timeframe: str | None, setup_mode: str, label_mode: str) -> str | None:
+    tf = str(timeframe or "").strip().lower()
+    setup = str(setup_mode or "").strip().lower()
+    label = str(label_mode or "").strip().lower()
+    if not tf:
+        return None
+    if setup and label:
+        return f"{tf}__{setup}__{label}"
+    return tf
+
+
+def train_and_register_from_memory(
+    memory: list[dict[str, Any]],
+    horizon: int = 1,
+    timeframe: str | None = None,
+    dataset_path: str | None = None,
+    lookback_years: int | None = None,
+    label_mode: str = DEFAULT_LABEL_MODE,
+    target_return_pct: float = DEFAULT_TARGET_RETURN_PCT,
+    stop_return_pct: float = DEFAULT_STOP_RETURN_PCT,
+    feature_version: str = "v3_amd_cycle_state",
+    setup_mode: str = DEFAULT_SETUP_MODE,
+) -> TrainResult:
+    X, y = build_dataset_from_memory(
+        memory,
+        horizon=horizon,
+        label_mode=label_mode,
+        target_return_pct=target_return_pct,
+        stop_return_pct=stop_return_pct,
+        feature_version=feature_version,
+        setup_mode=setup_mode,
+    )
     if len(X) < 120:
         return TrainResult(False, "insufficient_training_rows", {"rows": int(len(X))})
 
@@ -69,10 +106,22 @@ def train_and_register_from_memory(memory: list[dict[str, Any]], horizon: int = 
     X_all = standardize_transform(X, mean, std)
     walkforward = walkforward_validate(X_all, y, windows=4, min_train=300)
 
+    model_scope = _model_scope(timeframe, setup_mode, label_mode)
     bundle = {
         "family": "aq-memory-baselines",
+        "model_scope": model_scope,
+        "timeframe": str(timeframe or "").strip().lower() or None,
+        "dataset_path": dataset_path,
+        "lookback_years": int(lookback_years) if lookback_years is not None else None,
         "horizon": int(horizon),
-        "feature_version": "v1_extended",
+        "label": label_config(
+            label_mode=label_mode,
+            target_return_pct=target_return_pct,
+            stop_return_pct=stop_return_pct,
+        ),
+        "setup": setup_config(setup_mode=setup_mode),
+        "feature_version": str(feature_version),
+        "feature_count": len(feature_names_for_version(feature_version)),
         "scaler": {
             "mean": mean.tolist(),
             "std": std.tolist(),
@@ -100,12 +149,21 @@ def train_and_register_from_memory(memory: list[dict[str, Any]], horizon: int = 
             for c in candidates
         ],
     }
-    reg = save_model_bundle(bundle, tag="memory")
+    reg = save_model_bundle(
+        bundle,
+        tag="memory",
+        scope=model_scope,
+        aliases=[str(timeframe or "").strip().lower() or None],
+    )
 
     out = {
         "registered": True,
         "version": reg["version"],
         "path": reg["path"],
+        "timeframe": bundle["timeframe"],
+        "label": bundle["label"],
+        "setup": bundle["setup"],
+        "feature_version": bundle["feature_version"],
         "selected_model": best["model_name"],
         "metrics": bundle["validation_metrics"],
     }

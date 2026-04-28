@@ -1,0 +1,362 @@
+{
+  "trained": true,
+  "feature_version": "v4_layered_execution",
+  "mask_strategy": "zero_fill",
+  "timeframe": "1h",
+  "lookback_years": 3,
+  "horizon": 5,
+  "groups_tested": [
+    "time_planetary",
+    "time_lunar",
+    "time_gann",
+    "time_context"
+  ],
+  "dataset_path": "data/XAU_1h_data.csv",
+  "rows_used": 16156,
+  "memory_size": 16107,
+  "dataset_rows": 199,
+  "label_balance_up": 0.281407,
+  "label": {
+    "label_mode": "first_touch_buy",
+    "target_return_pct": 0.003,
+    "stop_return_pct": 0.0015
+  },
+  "setup": {
+    "setup_mode": "buy_trigger_candidate"
+  },
+  "baseline": {
+    "trained": true,
+    "reason": "ok",
+    "selected_model": "centroid",
+    "validation_metrics": {
+      "brier": 0.247998,
+      "accuracy": 0.625,
+      "log_loss": 0.689145,
+      "rows_train": 159,
+      "rows_val": 40
+    },
+    "walkforward": {
+      "enabled": false,
+      "reason": "insufficient_rows",
+      "folds": [],
+      "summary": {
+        "avg_brier": null,
+        "avg_accuracy": null
+      }
+    },
+    "leaderboard": [
+      {
+        "name": "centroid",
+        "brier": 0.247998,
+        "accuracy": 0.625,
+        "log_loss": 0.689145
+      },
+      {
+        "name": "prior",
+        "brier": 0.265984,
+        "accuracy": 0.475,
+        "log_loss": 0.725749
+      },
+      {
+        "name": "logistic_gd",
+        "brier": 0.282067,
+        "accuracy": 0.5,
+        "log_loss": 0.765115
+      },
+      {
+        "name": "momentum_rule",
+        "brier": 0.306209,
+        "accuracy": 0.525,
+        "log_loss": 0.980257
+      },
+      {
+        "name": "gaussian_nb",
+        "brier": 0.539602,
+        "accuracy": 0.45,
+        "log_loss": 2.546946
+      }
+    ]
+  },
+  "ablations": [
+    {
+      "group": "time_planetary",
+      "feature_count": 5,
+      "masked_features": [
+        "time_planetary_aspects_active",
+        "time_planetary_conjunction_active",
+        "time_planetary_square_active",
+        "time_planetary_opposition_active",
+        "time_retrograde_active"
+      ],
+      "mask_strategy": "zero_fill",
+      "trained": true,
+      "reason": "ok",
+      "selected_model": "centroid",
+      "validation_metrics": {
+        "brier": 0.247998,
+        "accuracy": 0.625,
+        "log_loss": 0.689145,
+        "rows_train": 159,
+        "rows_val": 40
+      },
+      "walkforward": {
+        "enabled": false,
+        "reason": "insufficient_rows",
+        "folds": [],
+        "summary": {
+          "avg_brier": null,
+          "avg_accuracy": null
+        }
+      },
+      "leaderboard": [
+        {
+          "name": "centroid",
+          "brier": 0.247998,
+          "accuracy": 0.625,
+          "log_loss": 0.689145
+        },
+        {
+          "name": "prior",
+          "brier": 0.265984,
+          "accuracy": 0.475,
+          "log_loss": 0.725749
+        },
+        {
+          "name": "logistic_gd",
+          "brier": 0.282067,
+          "accuracy": 0.5,
+          "log_loss": 0.765115
+        },
+        {
+          "name": "momentum_rule",
+          "brier": 0.306209,
+          "accuracy": 0.525,
+          "log_loss": 0.980257
+        },
+        {
+          "name": "gaussian_nb",
+          "brier": 0.539602,
+          "accuracy": 0.45,
+          "log_loss": 2.546946
+        }
+      ],
+      "delta_vs_baseline": {
+        "delta_brier": 0.0,
+        "delta_accuracy": 0.0,
+        "delta_log_loss": 0.0,
+        "delta_walkforward_brier": null,
+        "delta_walkforward_accuracy": null
+      }
+    },
+    {
+      "group": "time_context",
+      "feature_count": 2,
+      "masked_features": [
+        "time_cycle_active",
+        "time_window_score"
+      ],
+      "mask_strategy": "zero_fill",
+      "trained": true,
+      "reason": "ok",
+      "selected_model": "centroid",
+      "validation_metrics": {
+        "brier": 0.247992,
+        "accuracy": 0.6,
+        "log_loss": 0.689143,
+        "rows_train": 159,
+        "rows_val": 40
+      },
+      "walkforward": {
+        "enabled": false,
+        "reason": "insufficient_rows",
+        "folds": [],
+        "summary": {
+          "avg_brier": null,
+          "avg_accuracy": null
+        }
+      },
+      "leaderboard": [
+        {
+          "name": "centroid",
+          "brier": 0.247992,
+          "accuracy": 0.6,
+          "log_loss": 0.689143
+        },
+        {
+          "name": "prior",
+          "brier": 0.265984,
+          "accuracy": 0.475,
+          "log_loss": 0.725749
+        },
+        {
+          "name": "logistic_gd",
+          "brier": 0.281462,
+          "accuracy": 0.475,
+          "log_loss": 0.763675
+        },
+        {
+          "name": "momentum_rule",
+          "brier": 0.306209,
+          "accuracy": 0.525,
+          "log_loss": 0.980257
+        },
+        {
+          "name": "gaussian_nb",
+          "brier": 0.539547,
+          "accuracy": 0.45,
+          "log_loss": 2.546599
+        }
+      ],
+      "delta_vs_baseline": {
+        "delta_brier": -6e-06,
+        "delta_accuracy": -0.025,
+        "delta_log_loss": -2e-06,
+        "delta_walkforward_brier": null,
+        "delta_walkforward_accuracy": null
+      }
+    },
+    {
+      "group": "time_gann",
+      "feature_count": 8,
+      "masked_features": [
+        "time_sq9_level_active",
+        "time_gann_45_cycle_active",
+        "time_gann_90_cycle_active",
+        "time_gann_180_cycle_active",
+        "time_gann_pressure_window",
+        "time_gann_station_active",
+        "time_gann_synodic_active",
+        "time_gann_time_cycle_exact"
+      ],
+      "mask_strategy": "zero_fill",
+      "trained": true,
+      "reason": "ok",
+      "selected_model": "centroid",
+      "validation_metrics": {
+        "brier": 0.247861,
+        "accuracy": 0.575,
+        "log_loss": 0.688876,
+        "rows_train": 159,
+        "rows_val": 40
+      },
+      "walkforward": {
+        "enabled": false,
+        "reason": "insufficient_rows",
+        "folds": [],
+        "summary": {
+          "avg_brier": null,
+          "avg_accuracy": null
+        }
+      },
+      "leaderboard": [
+        {
+          "name": "centroid",
+          "brier": 0.247861,
+          "accuracy": 0.575,
+          "log_loss": 0.688876
+        },
+        {
+          "name": "prior",
+          "brier": 0.265984,
+          "accuracy": 0.475,
+          "log_loss": 0.725749
+        },
+        {
+          "name": "logistic_gd",
+          "brier": 0.288426,
+          "accuracy": 0.525,
+          "log_loss": 0.778173
+        },
+        {
+          "name": "momentum_rule",
+          "brier": 0.306209,
+          "accuracy": 0.525,
+          "log_loss": 0.980257
+        },
+        {
+          "name": "gaussian_nb",
+          "brier": 0.563712,
+          "accuracy": 0.425,
+          "log_loss": 2.657923
+        }
+      ],
+      "delta_vs_baseline": {
+        "delta_brier": -0.000137,
+        "delta_accuracy": -0.05,
+        "delta_log_loss": -0.000269,
+        "delta_walkforward_brier": null,
+        "delta_walkforward_accuracy": null
+      }
+    },
+    {
+      "group": "time_lunar",
+      "feature_count": 5,
+      "masked_features": [
+        "time_moon_phase_active",
+        "time_nakshatra_transition_active",
+        "time_moon_eclipse_active",
+        "time_moon_new_active",
+        "time_moon_full_active"
+      ],
+      "mask_strategy": "zero_fill",
+      "trained": true,
+      "reason": "ok",
+      "selected_model": "centroid",
+      "validation_metrics": {
+        "brier": 0.245895,
+        "accuracy": 0.625,
+        "log_loss": 0.684907,
+        "rows_train": 159,
+        "rows_val": 40
+      },
+      "walkforward": {
+        "enabled": false,
+        "reason": "insufficient_rows",
+        "folds": [],
+        "summary": {
+          "avg_brier": null,
+          "avg_accuracy": null
+        }
+      },
+      "leaderboard": [
+        {
+          "name": "centroid",
+          "brier": 0.245895,
+          "accuracy": 0.625,
+          "log_loss": 0.684907
+        },
+        {
+          "name": "logistic_gd",
+          "brier": 0.261946,
+          "accuracy": 0.525,
+          "log_loss": 0.720542
+        },
+        {
+          "name": "prior",
+          "brier": 0.265984,
+          "accuracy": 0.475,
+          "log_loss": 0.725749
+        },
+        {
+          "name": "momentum_rule",
+          "brier": 0.306209,
+          "accuracy": 0.525,
+          "log_loss": 0.980257
+        },
+        {
+          "name": "gaussian_nb",
+          "brier": 0.441195,
+          "accuracy": 0.55,
+          "log_loss": 2.049321
+        }
+      ],
+      "delta_vs_baseline": {
+        "delta_brier": -0.002103,
+        "delta_accuracy": 0.0,
+        "delta_log_loss": -0.004238,
+        "delta_walkforward_brier": null,
+        "delta_walkforward_accuracy": null
+      }
+    }
+  ]
+}

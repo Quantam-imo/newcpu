@@ -1,4 +1,4 @@
-[Unit]
++[Unit]
 Description=AstroQuant Celery Worker
 After=network-online.target redis.service astroquant_tradingbot.service
 Wants=network-online.target

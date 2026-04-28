@@ -16,6 +16,7 @@ from backend.utils.data_loader import (
     integrate_news_features,
     integrate_event_features,
 )
+from backend.utils.master_cycle_features import add_master_cycle_state_features, load_master_cycle_events
 from backend.utils.observation_recorder import record_observation
 from backend.utils.timeframe_loader import TIMEFRAME_FILES
 from backend.memory.scanner import scan_market
@@ -24,8 +25,16 @@ from backend.ai.feature_vector import create_feature_vector
 from backend.ai.similarity_engine import find_similar
 from backend.memory.recall_engine import recall_patterns
 from backend.ai.probability_engine import compute_probability
-from backend.ai.decision_engine import ai_decision
+from backend.ai.decision_engine import (
+    ai_decision,
+    confluence_decision,
+    adapt_wheel_transition_online,
+    build_wheel_context_inputs,
+)
+from backend.ai.concept_learner import concept_learning_step
 from backend.ai.modeling.serving import decide_with_model
+from backend.engines.phase_labeler import label_phases
+from backend.engines.regime_detector import detect_regime
 from backend.engines.psychology_engine import psychology_engine
 from backend.engines.trap_engine import trap_engine
 from backend.engines.behavior_engine import behavior_engine
@@ -107,7 +116,7 @@ def _build_reasoning_display(result: dict) -> dict:
     decision_trace = (result or {}).get("decision_trace", {}) or {}
     trap = (result or {}).get("trap", {}) or {}
 
-    signal = str((result or {}).get("filtered_signal") or "WAIT")
+    signal = str((result or {}).get("display_signal") or (result or {}).get("filtered_signal") or "WAIT")
     phase = str(final.get("phase") or "UNKNOWN")
     trend = str(final.get("trend") or "UNKNOWN")
     dominant_force = str(decision_trace.get("dominant_force") or signal)
@@ -236,6 +245,182 @@ def _build_analysis_lifecycle(
     }
 
 
+def _build_wheel_display(result: dict) -> dict:
+    """
+    Build a compact, UI-friendly "wheel dashboard" object that summarizes
+    phase rotation, market conditions, signal state, and actionability.
+    """
+    out = result or {}
+
+    phase_info = out.get("wheel_phase") or {}
+    confluence = out.get("confluence") or {}
+    transition = confluence.get("wheel_transition") or {}
+    factor_breakdown = confluence.get("factor_breakdown") or {}
+    regime = out.get("regime") or {}
+    record_liq = (out.get("confluence") or {}).get("factor_breakdown", {}).get("liquidity_primary", "")
+    order_flow = out.get("order_flow") or {}
+    news = out.get("news") or {}
+    gann_obs = ((out.get("memory_last") or {}).get("gann_astro_math") if isinstance(out.get("memory_last"), dict) else None) or {}
+    if not gann_obs:
+        # fallback from the latest memory-fed output when memory_last is not present
+        gann_obs = (out.get("gann_astro_math") or {}) if isinstance(out.get("gann_astro_math"), dict) else {}
+    astro = out.get("astro") or {}
+    dt = out.get("decision_trace") or {}
+    concept = out.get("concept_learning") or {}
+    future = out.get("future") or {}
+    time_signal = out.get("time_signal") or {}
+    gann_adv = out.get("gann_adv") or {}
+    trade_levels = out.get("trade_levels") or {}
+    memory_last = out.get("memory_last") or {}
+    amd_live = out.get("amd_ifvg") or {}
+    amd_mem = (memory_last.get("amd_ifvg") if isinstance(memory_last, dict) else None) or {}
+    turtle = (memory_last.get("turtle_soup") if isinstance(memory_last, dict) else None) or {}
+
+    display_signal = str(out.get("display_signal") or out.get("filtered_signal") or "WAIT").upper()
+    executable_signal = str(out.get("executable_signal") or out.get("filtered_signal") or "WAIT").upper()
+    rejection_reason = str(out.get("rejection_reason") or "none")
+
+    probs = transition.get("probabilities") if isinstance(transition, dict) else None
+    if not isinstance(probs, list) or len(probs) < 4:
+        probs = [0.25, 0.25, 0.25, 0.25]
+
+    phase_names = ["ACCUMULATION", "MANIPULATION", "EXPANSION", "DISTRIBUTION"]
+    current_code = int(phase_info.get("code", -1)) if str(phase_info.get("code", "")).strip() else -1
+    next_name = str(transition.get("next_phase_name") or "UNKNOWN")
+    next_conf = float(transition.get("confidence") or 0.0)
+
+    ring = []
+    for idx, name in enumerate(phase_names):
+        ring.append(
+            {
+                "phase": name,
+                "is_current": bool(idx == current_code),
+                "next_probability": round(float(probs[idx]), 5),
+            }
+        )
+
+    reliability = float(dt.get("reliability_score") or 0.0)
+    conflict = float(dt.get("conflict_score") or 0.0)
+    concept_score = (concept.get("current_scoring") or {}).get("score")
+    concept_samples = float((concept.get("current_scoring") or {}).get("effective_samples") or 0.0)
+
+    # Forecast summary for manual trading: future direction and explicit
+    # price/time/degree/date anchors in one place.
+    asof_raw = (out.get("memory_last") or {}).get("time")
+    asof_ts = pd.to_datetime(asof_raw, errors="coerce", utc=True)
+    timeframe = str(out.get("timeframe") or out.get("applied_timeframe") or "1d").lower()
+    timeframe_to_delta = {
+        "1m": pd.Timedelta(minutes=1),
+        "5m": pd.Timedelta(minutes=5),
+        "15m": pd.Timedelta(minutes=15),
+        "30m": pd.Timedelta(minutes=30),
+        "1h": pd.Timedelta(hours=1),
+        "4h": pd.Timedelta(hours=4),
+        "1d": pd.Timedelta(days=1),
+        "1w": pd.Timedelta(weeks=1),
+        "1month": pd.Timedelta(days=30),
+    }
+    tf_delta = timeframe_to_delta.get(timeframe)
+
+    time_cycle_bars = int(gann_adv.get("time_cycle") or 0)
+    projected_turn_ts = None
+    if tf_delta is not None and time_cycle_bars > 0 and not pd.isna(asof_ts):
+        projected_turn_ts = asof_ts + (tf_delta * time_cycle_bars)
+
+    current_price = trade_levels.get("entry")
+    if current_price is None:
+        current_price = ((out.get("memory_last") or {}).get("bar") or {}).get("close")
+    if current_price is not None:
+        current_price = float(current_price)
+
+    target_price = trade_levels.get("take_profit")
+    if target_price is None:
+        harmonic = ((out.get("universal") or {}).get("harmonic") or {})
+        if display_signal in {"BUY", "STRONG BUY"}:
+            target_price = harmonic.get("d_extension_up")
+        elif display_signal in {"SELL", "STRONG SELL"}:
+            target_price = harmonic.get("d_extension_down")
+    if target_price is not None:
+        target_price = float(target_price)
+
+    degree_now = float(gann_adv.get("degree") or 0.0)
+    degree_target = float(gann_obs.get("circle_projection_deg") or degree_now)
+
+    actionable_now = executable_signal in {"BUY", "SELL", "STRONG BUY", "STRONG SELL"}
+    status = "ACTIONABLE" if actionable_now else ("WATCH" if display_signal in {"BUY", "SELL", "STRONG BUY", "STRONG SELL"} else "WAIT")
+
+    return {
+        "status": status,
+        "phase_ring": {
+            "current_phase": str(phase_info.get("name") or "UNKNOWN"),
+            "current_phase_code": current_code,
+            "predicted_next_phase": next_name,
+            "predicted_next_confidence": round(next_conf, 5),
+            "segments": ring,
+        },
+        "market_conditions": {
+            "regime": str(regime.get("regime") or "UNKNOWN"),
+            "regime_weight": float(regime.get("decision_weight") or 1.0),
+            "atr_z": float(regime.get("atr_z") or 0.0),
+            "liquidity_gate": record_liq,
+            "wheel_context_used": str(transition.get("context_used") or "unconditional"),
+            "wheel_context_runtime": str(factor_breakdown.get("wheel_context") or "none"),
+            "order_flow_side": str(order_flow.get("aggressive_side") or "NEUTRAL"),
+            "order_flow_imbalance": float(order_flow.get("flow_imbalance") or 0.0),
+            "flow_regime": str(order_flow.get("flow_regime") or "NEUTRAL"),
+            "iceberg_detected": bool(order_flow.get("iceberg_detected", False)),
+            "iceberg_side": str(order_flow.get("iceberg_side") or "NONE"),
+            "iceberg_absorption_score": float(order_flow.get("iceberg_absorption_score") or 0.0),
+            "iceberg_absorption_type": str(order_flow.get("absorption_type") or "NONE"),
+            "news_high_impact": bool(news.get("high_impact_active", False)),
+            "news_event_count": int(news.get("event_count", 0) or 0),
+            "gann_major_turn_window": bool(gann_obs.get("major_turn_window", False)),
+            "gann_sqrt_rotation_deg": float(gann_obs.get("sqrt_rotation_deg") or 0.0),
+            "astro_strength": str(astro.get("strength") or "NORMAL"),
+            "astro_event_impact": str(((astro.get("nearby_event") or {}).get("impact_level") or "NONE")),
+        },
+        "signal_state": {
+            "display_signal": display_signal,
+            "executable_signal": executable_signal,
+            "confidence": float(out.get("confidence") or 0.0),
+            "reliability_score": reliability,
+            "conflict_score": conflict,
+            "rejection_reason": rejection_reason,
+            "actionable_now": actionable_now,
+        },
+        "learning_state": {
+            "concept_score": None if concept_score is None else float(concept_score),
+            "concept_samples": concept_samples,
+            "resolved_previous": bool((concept.get("resolved_previous") or {}).get("resolved", False)),
+        },
+        "setup_state": {
+            "amd_phase": str(amd_mem.get("amd_phase") or amd_live.get("phase") or "NONE"),
+            "amd_signal": str(amd_live.get("signal") or "NONE"),
+            "amd_bull_entry": bool(amd_mem.get("amd_bull_entry", False)),
+            "amd_bear_entry": bool(amd_mem.get("amd_bear_entry", False)),
+            "amd_rr_ratio": amd_mem.get("amd_rr_ratio"),
+            "turtle_soup_buy": bool(turtle.get("turtle_soup_buy", False)),
+            "turtle_soup_sell": bool(turtle.get("turtle_soup_sell", False)),
+            "turtle_sweep_direction": str(turtle.get("sweep_direction") or "NONE"),
+            "turtle_rejection_confirmed": bool(turtle.get("rejection_confirmed", False)),
+        },
+        "future_prediction": {
+            "direction": str(future.get("direction") or "UNCLEAR"),
+            "cycle_event": str(future.get("cycle_event") or "NO_EVENT"),
+            "timing_window": str((time_signal.get("timing") or future.get("timing_window") or "NORMAL")),
+            "price_now": current_price,
+            "price_target": target_price,
+            "price_time_ratio": float(gann_adv.get("price_time_ratio") or 0.0),
+            "degree_now": degree_now,
+            "degree_target": degree_target,
+            "time_cycle_bars": time_cycle_bars,
+            "as_of_date_utc": None if pd.isna(asof_ts) else asof_ts.strftime("%Y-%m-%d"),
+            "projected_turn_date_utc": None if projected_turn_ts is None else projected_turn_ts.strftime("%Y-%m-%d"),
+            "date_timing_note": str(gann_obs.get("harmonic_timing_text") or "NO_DATE_TIMING_NOTE"),
+        },
+    }
+
+
 def _stage_duration(stage_started_at: pd.Timestamp, stage_completed_at: pd.Timestamp) -> float:
     return round((stage_completed_at - stage_started_at).total_seconds() * 1000.0, 2)
 
@@ -281,7 +466,12 @@ def _apply_gann_signal_alignment(result: dict) -> dict:
     return out
 
 
-def process(df):
+def process(
+    df,
+    timeframe: str = "1d",
+    max_memory_records: int | None = None,
+    recent_memory_window: int = 250,
+):
     # Core intelligence pipeline
     phase1_cfg = get_phase1_config()
     process_timing: list[dict] = []
@@ -299,7 +489,11 @@ def process(df):
 
     # Step 1: Scan memory
     stage_started_at = pd.Timestamp.now("UTC")
-    memory = scan_market(df)
+    memory = scan_market(
+        df,
+        max_records=max_memory_records,
+        recent_window=recent_memory_window,
+    )
 
     # Step 2: Build vectors
     vectors = build_vector_memory(memory)
@@ -318,11 +512,54 @@ def process(df):
     prob = compute_probability(results)
 
     # Step 7: AI decision (model-served when available, rule fallback otherwise)
-    decision, ai_model = decide_with_model(memory, prob)
+    decision, ai_model = decide_with_model(memory, prob, timeframe=timeframe)
     stage_completed_at = pd.Timestamp.now("UTC")
     process_timing.append(
         {
             "name": "memory_probability_stack",
+            "elapsed_ms": _stage_duration(stage_started_at, stage_completed_at),
+        }
+    )
+
+    # Step 7b: Wheel Model — regime detection + phase labeling + transition prediction
+    stage_started_at = pd.Timestamp.now("UTC")
+    try:
+        _labeled_df = label_phases(df.tail(60).copy())
+        _previous_phase_code = int(_labeled_df["phase"].iloc[-2]) if len(_labeled_df) >= 2 else None
+        _current_phase_code = int(_labeled_df["phase"].iloc[-1])
+        _current_phase_str  = _labeled_df["phase_name"].iloc[-1]
+    except Exception:
+        _previous_phase_code = None
+        _current_phase_code = None
+        _current_phase_str  = "UNKNOWN"
+    try:
+        _regime_result = detect_regime(df.tail(80).copy())
+    except Exception:
+        _regime_result = None
+    confluence = confluence_decision(
+        ai_model,
+        memory_last=current_record,
+        regime_result=_regime_result,
+        phase_labeled=_current_phase_code,
+    )
+    # Online wheel adaptation: update transition model with runtime context
+    # (regime/volatility/liquidity + absorption side/strength).
+    if _previous_phase_code is not None and _current_phase_code is not None:
+        _wheel_ctx_inputs = build_wheel_context_inputs(current_record, _regime_result)
+        _wheel_adapt = adapt_wheel_transition_online(
+            previous_phase=_previous_phase_code,
+            current_phase=_current_phase_code,
+            context_key=_wheel_ctx_inputs.get("context_key"),
+            learning_rate=1.0,
+            decay=0.0005,
+            persist_every=25,
+        )
+    else:
+        _wheel_adapt = {"updated": False, "reason": "insufficient_phase_history"}
+    stage_completed_at = pd.Timestamp.now("UTC")
+    process_timing.append(
+        {
+            "name": "wheel_model_confluence",
             "elapsed_ms": _stage_duration(stage_started_at, stage_completed_at),
         }
     )
@@ -394,7 +631,8 @@ def process(df):
     # Accuracy Pass v2: pass phase to filter_signal so MANIPULATION and
     # low-vol EXPANSION signals are suppressed (84% 1-bar precision when active).
     quality = validate_signal(confidence, trap, current_record["phase"])
-    final_signal = filter_signal(dominant, confidence, phase=current_record["phase"])
+    display_signal = filter_signal(dominant, confidence, phase=current_record["phase"])
+    final_signal = display_signal
     decision_trace = _build_decision_trace(signals, weights, dominant, confidence, quality, trap)
 
     # News-aware safeguard: avoid opening directional positions around high-impact events.
@@ -418,9 +656,39 @@ def process(df):
         final_signal = "WAIT"
         rejection_reason = "reliability_below_threshold"
 
+    # Concept self-learning layer: learn "why market moved" from previous bar and
+    # score current directional signal based on historical concept-level hit-rates.
+    _bar_ts = df["time"].iloc[-1] if ("time" in df.columns and not df.empty) else pd.Timestamp.now("UTC")
+    concept_learning = concept_learning_step(
+        direction=str(display_signal).replace("STRONG ", ""),
+        current_price=float(state.get("price") or 0.0),
+        current_ts=_bar_ts,
+        record=current_record,
+        regime_result=_regime_result,
+        confluence=confluence,
+        astro=astro,
+        gann_adv=gann_adv,
+    )
+
+    concept_score = (concept_learning.get("current_scoring") or {}).get("score")
+    concept_samples = float((concept_learning.get("current_scoring") or {}).get("effective_samples") or 0.0)
+    if concept_score is not None:
+        # Confidence calibration: raise/lower confidence based on concept historical edge.
+        confidence = max(0.0, min(1.0, confidence * (0.70 + 0.60 * float(concept_score))))
+
+        # Guard: if concept evidence is sufficiently deep and materially bearish for this
+        # direction, block new entry and wait for clearer confluence.
+        if (
+            final_signal in ("BUY", "SELL", "STRONG BUY", "STRONG SELL")
+            and concept_samples >= 25.0
+            and float(concept_score) < 0.42
+        ):
+            final_signal = "WAIT"
+            rejection_reason = "concept_self_learning_guard"
+
     # Precision layer 3: simplicity output — single bias score for UI / alerts
     simple = simplicity_score(
-        final_signal,
+        display_signal,
         confidence,
         decision_trace["reliability_score"],
         decision_trace["conflict_score"],
@@ -494,6 +762,15 @@ def process(df):
     execution_state = normalize_execution_output(execution_engine(state))
     failure_state = normalize_failure_output(failure_engine(state))
 
+    # Realism guard: suppress directional entries when execution/failure checks disagree.
+    if final_signal in ("BUY", "SELL", "STRONG BUY", "STRONG SELL"):
+        if execution_state.get("verdict") in ("DO_NOT_ENTER", "RISKY_ENTRY"):
+            final_signal = "WAIT"
+            rejection_reason = "execution_feasibility_guard"
+        elif failure_state.get("invalidated"):
+            final_signal = "WAIT"
+            rejection_reason = "failure_invalidation_guard"
+
     # Precision layer 4: overfitting protection
     overfit = overfitting_guard(backtest_stats)
     stage_completed_at = pd.Timestamp.now("UTC")
@@ -537,15 +814,32 @@ def process(df):
             "r_ratio": 2.0,
             "hold_bars": 7,
         }
+    elif final_signal in ("SELL", "STRONG SELL"):
+        trade_levels = {
+            "entry": round(price, 2),
+            "stop_loss": round(price + 10.0, 2),   # optimal SL: +$10/oz above entry
+            "take_profit": round(price - 20.0, 2), # optimal TP: -$20/oz below entry
+            "r_ratio": 2.0,
+            "hold_bars": 7,
+        }
 
-    return {
+    result_payload = {
         "matches": matches,
         "probability": prob,
         "ai_decision": decision,
         "ai_model": ai_model,
+        "confluence": confluence,
+        "wheel_phase": {
+            "code": _current_phase_code,
+            "name": _current_phase_str,
+        },
+        "regime": _regime_result,
+        "wheel_online_adaptation": _wheel_adapt,
         "psychology": psychology,
         "trap": trap,
         "behavior": behavior,
+        "memory_last": current_record,
+        "gann_astro_math": current_record.get("gann_astro_math", {}),
         "gann_adv": gann_adv,
         "astro": astro,
         "numerology": numerology,
@@ -558,9 +852,13 @@ def process(df):
         "confidence": confidence,
         "scenarios": scenarios,
         "quality": quality,
+        "display_signal": display_signal,
+        "executable_signal": final_signal,
         "filtered_signal": final_signal,
         "news": news_context,
+        "order_flow": current_record.get("order_flow", {}),
         "news_guard_applied": news_guard_applied,
+        "concept_learning": concept_learning,
         "decision_trace": decision_trace if phase1_cfg["enable_decision_trace"] else {},
         "rejection_reason": rejection_reason,
         "output_contracts": output_contract_versions(),
@@ -584,6 +882,9 @@ def process(df):
         "compression": compression,
         "process_timing": process_timing,
     }
+
+    result_payload["wheel_display"] = _build_wheel_display(result_payload)
+    return result_payload
 
 
 def _resolve_timeframe_file(timeframe: str, symbol: str = "XAUUSD", data_dir: str = "data") -> Path:
@@ -803,6 +1104,7 @@ def full_system(
     source_mode: str = "historical_first",
     news_file: str = "data/news_data_v2.csv",
     global_events_file: str = "data/global_events.csv",
+    master_cycles_file: str = "data/reports/master_cycles_25y.csv",
 ):
     """Run the full market-causality stack.
 
@@ -822,6 +1124,7 @@ def full_system(
     ]
     news_status = "not_loaded"
     global_events_status = "not_loaded"
+    master_cycles_status = "not_loaded"
     events_df = None
 
     source_mode_norm = str(source_mode or "historical_first").strip().lower()
@@ -926,18 +1229,32 @@ def full_system(
     )
 
     news_stage_started_at = pd.Timestamp.now("UTC")
-    news_df = None
+    news_frames = []
+    merged_news = None
     news_path = Path(news_file)
     if news_path.exists():
         try:
-            news_df = load_news_data(news_file)
-            df = integrate_news_features(df, news_df)
-            news_status = f"loaded ({len(news_df)} events)"
+            news_frames.append(load_news_data(news_file))
+            news_status = f"loaded ({len(news_frames[-1])} events)"
         except Exception as exc:
             news_status = f"load_failed ({exc})"
     else:
-        df = integrate_news_features(df, None)
         news_status = "missing_optional_file"
+
+    master_cycle_events = load_master_cycle_events(master_cycles_file)
+    if master_cycle_events is not None and not master_cycle_events.empty:
+        news_frames.append(master_cycle_events)
+        master_cycles_status = f"loaded ({len(master_cycle_events)} cycle events)"
+    else:
+        master_cycles_path = Path(master_cycles_file)
+        master_cycles_status = "missing_optional_file" if not master_cycles_path.exists() else "load_failed_or_empty"
+
+    if news_frames:
+        merged_news = pd.concat(news_frames, ignore_index=True)
+        merged_news = merged_news.dropna(subset=["time"]).sort_values("time").reset_index(drop=True)
+        df = integrate_news_features(df, merged_news)
+    else:
+        df = integrate_news_features(df, None)
 
     news_stage_completed_at = pd.Timestamp.now("UTC")
     lifecycle_stages.append(
@@ -948,6 +1265,30 @@ def full_system(
             "completed_at_utc": news_stage_completed_at.isoformat(),
             "elapsed_ms": round((news_stage_completed_at - news_stage_started_at).total_seconds() * 1000.0, 2),
             "detail": f"news integration status: {news_status}",
+        }
+    )
+
+    cycle_stage_started_at = pd.Timestamp.now("UTC")
+    df = add_master_cycle_state_features(df, master_cycles_file)
+    cycle_state_features_present = bool(
+        not df.empty
+        and {
+            "cycle_moon_phase_position",
+            "cycle_nakshatra_sequence",
+            "cycle_gann_degree",
+            "cycle_days_to_next_node",
+            "cycle_planetary_active",
+        }.issubset(df.columns)
+    )
+    cycle_stage_completed_at = pd.Timestamp.now("UTC")
+    lifecycle_stages.append(
+        {
+            "name": "master_cycles_integrated",
+            "status": "completed",
+            "started_at_utc": cycle_stage_started_at.isoformat(),
+            "completed_at_utc": cycle_stage_completed_at.isoformat(),
+            "elapsed_ms": round((cycle_stage_completed_at - cycle_stage_started_at).total_seconds() * 1000.0, 2),
+            "detail": f"master cycle status: {master_cycles_status}",
         }
     )
 
@@ -970,9 +1311,9 @@ def full_system(
     else:
         df = integrate_event_features(df, None, prefix="global_event")
         global_events_status = "missing_optional_file"
-    # Fall back to news_df for neighbor-event context when global_events.csv is absent
-    if events_df is None and news_df is not None:
-        events_df = news_df
+    # Fall back to merged news/master-cycle events when global_events.csv is absent.
+    if events_df is None and merged_news is not None:
+        events_df = merged_news
         global_events_status = f"fallback_to_news ({len(events_df)} events)"
 
     events_stage_completed_at = pd.Timestamp.now("UTC")
@@ -1011,8 +1352,34 @@ def full_system(
             }
         )
 
+    memory_caps = {
+        "1m": 350,
+        "5m": 400,
+        "15m": 500,
+        "30m": 600,
+        "1h": 700,
+        "4h": 750,
+        "1d": 900,
+        "1w": 900,
+        "1month": 900,
+    }
+    default_memory_cap = memory_caps.get(applied_timeframe, 900)
+    max_memory_records = min(
+        len(df),
+        max(100, int(os.getenv("MCL_MAX_MEMORY_RECORDS", str(default_memory_cap)))),
+    )
+    recent_memory_window = min(
+        max_memory_records,
+        max(60, int(os.getenv("MCL_RECENT_MEMORY_WINDOW", "220"))),
+    )
+
     intelligence_started_at = pd.Timestamp.now("UTC")
-    result = process(df)
+    result = process(
+        df,
+        timeframe=applied_timeframe,
+        max_memory_records=max_memory_records,
+        recent_memory_window=recent_memory_window,
+    )
     intelligence_completed_at = pd.Timestamp.now("UTC")
     depth_years = _historical_depth_years(df)
     requested_lookback = int(lookback_years) if lookback_years is not None else 25
@@ -1030,10 +1397,29 @@ def full_system(
     result["historical_depth_years"] = depth_years
     result["lookback_target_met"] = bool(depth_years is not None and depth_years >= max(0.0, requested_lookback - 0.25))
     result["lookback_depth_warning"] = None if result["lookback_target_met"] else "historical_dataset_depth_below_requested_lookback"
+    result["memory_scan_budget"] = max_memory_records
+    result["memory_recent_window"] = recent_memory_window
     result["news_source"] = news_file
     result["news_status"] = news_status
     result["global_events_source"] = global_events_file
     result["global_events_status"] = global_events_status
+    result["master_cycles_source"] = master_cycles_file
+    result["master_cycles_status"] = master_cycles_status
+    result["cycle_state_features_present"] = cycle_state_features_present
+
+    # --- AMD + IFVG Distribution Strategy engine ---
+    try:
+        from backend.engines.amd_ifvg_engine import amd_ifvg_latest as _amd_latest
+        result["amd_ifvg"] = _amd_latest(
+            df,
+            lookback=20,
+            atr_length=14,
+            atr_mult=1.5,
+            min_fvg_pct=0.0,
+        )
+    except Exception as _amd_exc:
+        result["amd_ifvg"] = {"signal": "NONE", "phase": "NONE", "error": str(_amd_exc)}
+
     lifecycle_stages.append(
         {
             "name": "intelligence_computed",
@@ -1119,10 +1505,55 @@ def main() -> None:
     print("CONFIDENCE:", result["confidence"])
     print("SCENARIOS:", result["scenarios"])
     print("QUALITY:", result["quality"])
+    print("DISPLAY SIGNAL:", result.get("display_signal", result.get("filtered_signal")))
+    print("EXECUTABLE SIGNAL:", result.get("executable_signal", result.get("filtered_signal")))
     print("FILTERED SIGNAL:", result["filtered_signal"])
     print("NEWS CONTEXT:", result.get("news"))
     print("NEWS GUARD APPLIED:", result.get("news_guard_applied"))
     print("REJECTION REASON:", result.get("rejection_reason") or "none")
+    wheel = result.get("wheel_display") or {}
+    if wheel:
+        wr = wheel.get("phase_ring") or {}
+        wc = wheel.get("market_conditions") or {}
+        ws = wheel.get("signal_state") or {}
+        wx = wheel.get("setup_state") or {}
+        wf = wheel.get("future_prediction") or {}
+        print("\nWHEEL DISPLAY:")
+        print(
+            f"  STATUS={wheel.get('status')} | PHASE={wr.get('current_phase')} -> "
+            f"NEXT={wr.get('predicted_next_phase')} ({wr.get('predicted_next_confidence')})"
+        )
+        print(
+            f"  REGIME={wc.get('regime')} atr_z={wc.get('atr_z')} | "
+            f"FLOW={wc.get('order_flow_side')} ({wc.get('order_flow_imbalance')}) | "
+            f"ICEBERG={wc.get('iceberg_side')}"
+        )
+        print(
+            f"  DISPLAY={ws.get('display_signal')} | EXECUTABLE={ws.get('executable_signal')} | "
+            f"ACTIONABLE={ws.get('actionable_now')} | REASON={ws.get('rejection_reason')}"
+        )
+        print(
+            f"  AMD phase={wx.get('amd_phase')} signal={wx.get('amd_signal')} | "
+            f"BULL_ENTRY={wx.get('amd_bull_entry')} BEAR_ENTRY={wx.get('amd_bear_entry')} RR={wx.get('amd_rr_ratio')}"
+        )
+        print(
+            f"  TURTLE_SOUP buy={wx.get('turtle_soup_buy')} sell={wx.get('turtle_soup_sell')} | "
+            f"SWEEP={wx.get('turtle_sweep_direction')} REJECTION={wx.get('turtle_rejection_confirmed')}"
+        )
+        print(
+            f"  FUTURE={wf.get('direction')} | TIME={wf.get('timing_window')} | EVENT={wf.get('cycle_event')}"
+        )
+        print(
+            f"  PRICE now={wf.get('price_now')} target={wf.get('price_target')} ratio={wf.get('price_time_ratio')}"
+        )
+        print(
+            f"  DEGREE now={wf.get('degree_now')} target={wf.get('degree_target')} | "
+            f"TIME_CYCLE_BARS={wf.get('time_cycle_bars')}"
+        )
+        print(
+            f"  DATE as_of={wf.get('as_of_date_utc')} projected_turn={wf.get('projected_turn_date_utc')} | "
+            f"NOTE={wf.get('date_timing_note')}"
+        )
     if result.get("decision_trace"):
         dt = result["decision_trace"]
         print("DOMINANT FORCE:", dt.get("dominant_force"))

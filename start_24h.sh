@@ -13,6 +13,7 @@
 #   aq-celery      — Celery async worker
 #   aq-orchestrator— Signal orchestrator
 #   aq-livesync    — Live data sync engine
+#   aq-mt5-bridge  — MT5 CSV bridge sync daemon
 #
 # Usage:
 #   ./start_24h.sh          # start everything
@@ -86,7 +87,7 @@ show_status() {
   echo "══════════════════════════════════════════════"
   echo "  AstroQuant 24/7 Session Status"
   echo "══════════════════════════════════════════════"
-  for s in aq-redis aq-chrome aq-cf-unblock aq-backend aq-celery aq-orchestrator aq-livesync; do
+  for s in aq-redis aq-chrome aq-cf-unblock aq-backend aq-celery aq-orchestrator aq-livesync aq-mt5-bridge; do
     if session_running "$s"; then
       echo -e "  ${GREEN}●${NC} $s"
     else
@@ -123,7 +124,7 @@ fi
 
 if [ "$RESTART" = true ]; then
   log "Stopping all sessions for clean restart..."
-  for s in aq-redis aq-chrome aq-cf-unblock aq-backend aq-celery aq-orchestrator aq-livesync; do
+  for s in aq-redis aq-chrome aq-cf-unblock aq-backend aq-celery aq-orchestrator aq-livesync aq-mt5-bridge; do
     kill_session "$s"
   done
   sleep 2
@@ -266,6 +267,21 @@ else
     log "LiveSync started."
   else
     log "start_live_sync.py not found — skipping livesync."
+  fi
+fi
+
+# ── 8. MT5 Bridge Sync (MetaEditor CSV -> canonical TF datasets) ────────────
+if session_running "aq-mt5-bridge"; then
+  log "MT5 bridge sync already running (aq-mt5-bridge)."
+else
+  if [ -f "$(pwd)/tools/mt5_bridge_sync_daemon.py" ]; then
+    log "Starting MT5 bridge sync daemon..."
+    new_session "aq-mt5-bridge" \
+      "export MT5_BRIDGE_SOURCE_DIR='$(pwd)/market-causality-lab/data/live/mt5/incoming'; export MT5_BRIDGE_OUT_DIR='$(pwd)/market-causality-lab/data/live/mt5'; export MT5_BRIDGE_DATA_DIR='$(pwd)/market-causality-lab/data'; export MT5_BRIDGE_TIMEFRAME='5m'; export MT5_BRIDGE_PERSIST_HISTORY='1'; '${PYTHON}' '$(pwd)/tools/mt5_bridge_sync_daemon.py' 2>&1 | tee '$LOG_DIR/mt5_bridge_sync.log'"
+    sleep 2
+    log "MT5 bridge sync started."
+  else
+    log "tools/mt5_bridge_sync_daemon.py not found — skipping MT5 bridge sync."
   fi
 fi
 

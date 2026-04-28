@@ -56,62 +56,11 @@ async def get_health() -> Any:
 			telegram.send(f"[ALERT] SYSTEM HEALTH: {system_health}")
 		except Exception as exc:
 			print(f"[ALERT] SYSTEM HEALTH: {system_health}", exc)
-	# Broker health (reuse logic from /status)
+	broker_runtime = _broker_debug_status()
 	broker_status = {
-		"status": "UNKNOWN",
-		"details": "Not checked",
+		"status": broker_runtime.get("status", "UNKNOWN"),
+		"details": broker_runtime.get("details", "Not checked"),
 	}
-	try:
-		engine = _runtime_playwright_engine()
-		if hasattr(engine, "page") and engine.page is not None:
-			quote = None
-			try:
-				quote = engine.broker_quote_snapshot()
-			except Exception as exc:
-				quote = None
-			if quote and (quote.get("mid") is not None or quote.get("last") is not None):
-				broker_status = {
-					"status": "CONNECTED",
-					"details": "Broker connection healthy",
-				}
-			else:
-				broker_status = {
-					"status": "DISCONNECTED",
-					"details": "Broker not connected or no quote",
-				}
-		else:
-			# Playwright page not attached — try CDP URL directly (same check as /status)
-			_cdp_connected = False
-			try:
-				_cdp_base = _cdp_http_base(getattr(engine, "cdp_url", None) or EXECUTION_BROWSER_CDP_URL)
-				if _cdp_base:
-					_fetch_debug_json(_cdp_base, "/json/version")
-					_cdp_connected = True
-			except Exception:
-				pass
-			if not _cdp_connected:
-				# Last resort: check runner broker_spot_cache for recent activity
-				try:
-					_runner = get_runner()
-					_cache = getattr(_runner, "broker_spot_cache", {}) or {}
-					import time as _time
-					_recent = any(
-						v.get("captured_at", 0) > _time.time() - 30
-						and v.get("snapshot") is not None
-						for v in _cache.values() if isinstance(v, dict)
-					)
-					_cdp_connected = _recent
-				except Exception:
-					pass
-			broker_status = {
-				"status": "CONNECTED" if _cdp_connected else "DISCONNECTED",
-				"details": "Broker debug session reachable" if _cdp_connected else "No broker page instance",
-			}
-	except Exception as exc:
-		broker_status = {
-			"status": "ERROR",
-			"details": f"Broker health check error: {exc}",
-		}
 
 	# Data feed health — check if any symbol has fresh data recently
 	data_feed_status = {
@@ -327,6 +276,61 @@ def _runtime_playwright_engine():
 	return _FALLBACK_PLAYWRIGHT_ENGINE
 
 
+def _broker_debug_status() -> dict[str, Any]:
+	"""Single broker connectivity check shared by /health and /status."""
+	last_checked = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+	status = {
+		"connected": False,
+		"status": "DISCONNECTED",
+		"last_checked": last_checked,
+		"details": "Broker debug session unavailable",
+		"latency_ms": None,
+		"account_id": None,
+		"broker": None,
+	}
+	try:
+		engine = _runtime_playwright_engine()
+		cdp_base = _cdp_http_base(getattr(engine, "cdp_url", None) or EXECUTION_BROWSER_CDP_URL)
+		cdp_reachable = False
+		if cdp_base:
+			try:
+				_fetch_debug_json(cdp_base, "/json/version")
+				cdp_reachable = True
+			except Exception:
+				cdp_reachable = False
+
+		if not cdp_reachable:
+			try:
+				runner = get_runner()
+				cache = getattr(runner, "broker_spot_cache", {}) or {}
+				now_ts = time.time()
+				cdp_reachable = any(
+					isinstance(item, dict)
+					and item.get("snapshot") is not None
+					and float(item.get("captured_at", 0) or 0) > now_ts - 30
+					for item in cache.values()
+				)
+			except Exception:
+				cdp_reachable = False
+
+		if cdp_reachable:
+			status.update({
+				"connected": True,
+				"status": "CONNECTED",
+				"details": "Broker debug session reachable",
+				"latency_ms": 12,
+				"account_id": "SIM-123456",
+				"broker": "DemoBroker",
+			})
+		return status
+	except Exception as exc:
+		status.update({
+			"status": "ERROR",
+			"details": f"Broker health check error: {exc}",
+		})
+		return status
+
+
 def _spot_fidelity_payload(runner) -> dict[str, Any]:
 	spot_symbols = sorted(str(symbol).upper() for symbol in (getattr(runner, "spot_fidelity_symbols", set()) or set()))
 	strict = bool(getattr(runner, "spot_fidelity_strict", False))
@@ -392,15 +396,10 @@ def get_system_health():
 		orchestrator_status = "ERROR"
 	# Data feed health (simulate real check)
 	data_feed_status = "OK"
-	# Broker health: keep this lightweight so /status never stalls the API worker.
-	broker_status = "UNKNOWN"
+	# Broker health shared with /status
 	try:
-		cdp_base = _cdp_http_base(EXECUTION_BROWSER_CDP_URL)
-		if cdp_base:
-			_fetch_debug_json(cdp_base, "/json/version")
-			broker_status = "CONNECTED"
-		else:
-			broker_status = "DISCONNECTED"
+		broker_runtime = _broker_debug_status()
+		broker_status = str(broker_runtime.get("status") or "UNKNOWN").upper()
 	except Exception:
 		broker_status = "ERROR"
 	return {
@@ -527,48 +526,7 @@ async def get_status() -> Any:
 	logging.basicConfig(level=logging.INFO)
 	logging.info("/status endpoint called")
 	system_health = get_system_health()
-	try:
-		engine = _runtime_playwright_engine()
-		broker_status = {
-			"connected": False,
-			"status": "DISCONNECTED",
-			"last_checked": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-			"details": "Broker connection unavailable",
-			"latency_ms": None,
-			"account_id": None,
-			"broker": None
-		}
-		cdp_base = _cdp_http_base(getattr(engine, "cdp_url", None) or EXECUTION_BROWSER_CDP_URL)
-		cdp_reachable = False
-		if cdp_base:
-			try:
-				_fetch_debug_json(cdp_base, "/json/version")
-				cdp_reachable = True
-			except Exception:
-				cdp_reachable = False
-
-		connected = bool(cdp_reachable)
-		if connected:
-			broker_status.update({
-				"connected": True,
-				"status": "CONNECTED",
-				"details": "Broker debug session reachable",
-				"latency_ms": 12,
-				"account_id": "SIM-123456",
-				"broker": "DemoBroker"
-			})
-		else:
-			broker_status["details"] = "Broker debug session unavailable"
-	except Exception as exc:
-		broker_status = {
-			"connected": False,
-			"status": "DISCONNECTED",
-			"last_checked": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-			"details": f"Broker health check error: {exc}",
-			"latency_ms": None,
-			"account_id": None,
-			"broker": None
-		}
+	broker_status = _broker_debug_status()
 
 	news_view = _news_snapshot(limit=5)
 

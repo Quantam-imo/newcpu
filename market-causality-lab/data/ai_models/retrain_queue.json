@@ -1,0 +1,66 @@
+[
+  {
+    "scope": "1d",
+    "version": "memory-20260426T134144Z",
+    "queued_at": "2026-04-26T13:48:13.287587+00:00",
+    "drift_brier": 0.432941,
+    "drift_accuracy": 0.523385,
+    "status": "pending"
+  },
+  {
+    "scope": "1h",
+    "version": "memory-20260426T134144Z",
+    "queued_at": "2026-04-26T13:49:32.403640+00:00",
+    "drift_brier": 0.316233,
+    "drift_accuracy": 0.652561,
+    "status": "pending"
+  },
+  {
+    "scope": "30m",
+    "version": "memory-20260423T161448Z",
+    "queued_at": "2026-04-26T13:50:12.688569+00:00",
+    "drift_brier": 0.087048,
+    "drift_accuracy": 0.904232,
+    "status": "pending"
+  },
+  {
+    "scope": "15m",
+    "version": "memory-20260426T134144Z",
+    "queued_at": "2026-04-26T13:50:53.712997+00:00",
+    "drift_brier": 0.06672,
+    "drift_accuracy": 0.928731,
+    "status": "pending"
+  },
+  {
+    "scope": "5m",
+    "version": "memory-20260426T130845Z",
+    "queued_at": "2026-04-26T13:51:42.710228+00:00",
+    "drift_brier": 0.04808,
+    "drift_accuracy": 0.951002,
+    "status": "pending"
+  },
+  {
+    "scope": "1month",
+    "version": "memory-20260422T100212Z",
+    "queued_at": "2026-04-27T04:28:47.927016+00:00",
+    "drift_brier": 0.285122,
+    "drift_accuracy": 0.474104,
+    "status": "pending"
+  },
+  {
+    "scope": "4h",
+    "version": "memory-20260426T131605Z",
+    "queued_at": "2026-04-27T10:20:48.388530+00:00",
+    "drift_brier": 0.217664,
+    "drift_accuracy": 0.703786,
+    "status": "pending"
+  },
+  {
+    "scope": "1m",
+    "version": "memory-20260426T134144Z",
+    "queued_at": "2026-04-27T13:00:34.532536+00:00",
+    "drift_brier": 0.314675,
+    "drift_accuracy": 0.654286,
+    "status": "pending"
+  }
+]

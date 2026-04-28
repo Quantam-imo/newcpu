@@ -732,6 +732,11 @@ def _command_help() -> str:
         "/signals_all - multi-symbol signal analysis\n"
         "/astro - astro update snapshot\n"
         "/news - news halt and upcoming events\n"
+        "/matrix [symbol] - MCL multi-timeframe confluence grid\n"
+        "/orderflow [symbol] [timeframe] - delta, imbalance, iceberg count\n"
+        "/iceberg [symbol] [timeframe] - current iceberg/absorption levels\n"
+        "/absorption - AI model absorption and learning state\n"
+        "/phase [symbol] [timeframe] - intraday AI phase forecast (default 15m)\n"
         "/report - report (mode from TELEGRAM_REPORT_MODE)\n"
         "/report_short - compact report\n"
         "/report_full - full report\n"
@@ -742,7 +747,7 @@ def _command_help() -> str:
         "/approve <id> - approve a pending trade\n"
         "/reject <id> - reject a pending trade\n"
         "/brain - AI learning engine health\n"
-        "/mcl - MCL prediction briefing (present + future + Gann Q&A)\n"
+        "/mcl - MCL prediction briefing (present + AI phase + future + Gann Q&A)\n"
         "/help - this help"
     )
 
@@ -856,6 +861,228 @@ def _fetch_mcl_gann_qa(symbol: str, date_str: str, limit: int = 20) -> dict:
     except Exception as exc:
         _log(f"mcl_gann_qa error ({symbol}): {exc}")
         return {}
+
+
+def _fetch_orderflow_summary(symbol: str, timeframe: str = "1m") -> dict:
+    try:
+        r = requests.get(
+            f"{_api_base()}/market/orderflow_summary",
+            params={"symbol": symbol, "timeframe": timeframe},
+            timeout=12,
+        )
+        r.raise_for_status()
+        return r.json() if r.text else {}
+    except Exception as exc:
+        _log(f"orderflow_summary error ({symbol}/{timeframe}): {exc}")
+        return {}
+
+
+def _fetch_chart_data(symbol: str, timeframe: str = "1m", limit: int = 80) -> dict:
+    chart_timeframe = {
+        "1m": "1",
+        "5m": "5",
+        "15m": "15",
+        "30m": "30",
+        "1h": "60",
+        "4h": "240",
+        "1d": "1d",
+    }.get(timeframe, timeframe)
+    try:
+        r = requests.get(
+            f"{_api_base()}/chart/data",
+            params={"symbol": symbol, "timeframe": chart_timeframe, "limit": limit},
+            timeout=20,
+        )
+        r.raise_for_status()
+        return r.json() if r.text else {}
+    except Exception as exc:
+        _log(f"chart_data error ({symbol}/{timeframe}): {exc}")
+        return {}
+
+
+def _fetch_ai_absorption() -> dict:
+    try:
+        r = requests.get(
+            f"{_api_base()}/market_causality/chart/ai-absorption",
+            timeout=12,
+        )
+        r.raise_for_status()
+        return r.json() if r.text else {}
+    except Exception as exc:
+        _log(f"ai_absorption error: {exc}")
+        return {}
+
+
+def _parse_symbol_timeframe_args(raw: str, default_timeframe: str = "1m") -> tuple[str, str]:
+    parts = [part for part in raw.split() if part]
+    symbol = _signal_symbol()
+    timeframe = default_timeframe
+    valid_timeframes = {"1m", "5m", "15m", "30m", "1h", "4h", "1d"}
+
+    if len(parts) >= 2:
+        candidate = _display_symbol(parts[1].strip())
+        if candidate.lower() in valid_timeframes:
+            timeframe = candidate.lower()
+        else:
+            symbol = candidate
+
+    if len(parts) >= 3:
+        candidate_tf = parts[2].strip().lower()
+        if candidate_tf in valid_timeframes:
+            timeframe = candidate_tf
+
+    return symbol, timeframe
+
+
+def _handle_orderflow_command(raw: str) -> str:
+    symbol, timeframe = _parse_symbol_timeframe_args(raw, default_timeframe="1m")
+    payload = _fetch_orderflow_summary(symbol, timeframe=timeframe)
+    summary = payload.get("summary") or {}
+    if not summary:
+        return f"Orderflow unavailable for {symbol} {timeframe}."
+
+    return (
+        f"Orderflow: {symbol} [{_fmt_ist()}]\n"
+        f"Timeframe  : {timeframe}\n"
+        f"Mode       : {summary.get('market_data_mode', 'N/A')}\n"
+        f"Regime     : {summary.get('regime_mode', 'N/A')} | Alert: {summary.get('alert_level', 'N/A')}\n"
+        f"Delta      : {float(summary.get('delta') or 0.0):.2f} | Imbalance: {summary.get('imbalance', 'N/A')}\n"
+        f"Aggression : buy {float(summary.get('buy_aggression') or 0.0):.0f} | sell {float(summary.get('sell_aggression') or 0.0):.0f}\n"
+        f"Icebergs   : {int(summary.get('iceberg_count') or 0)} | Absorption: {summary.get('absorption', 'N/A')}\n"
+        f"Confidence : {float(summary.get('confidence') or 0.0):.1f}%\n"
+        f"Narrative  : {summary.get('narrative', 'N/A')}"
+    )
+
+
+def _handle_iceberg_command(raw: str) -> str:
+    symbol, timeframe = _parse_symbol_timeframe_args(raw, default_timeframe="1m")
+    payload = _fetch_chart_data(symbol, timeframe=timeframe, limit=80)
+    overlays = payload.get("overlays") or {}
+    meta = payload.get("meta") or {}
+    iceberg_rows = list(overlays.get("iceberg") or [])
+    absorption_levels = list(overlays.get("absorption_levels") or [])
+
+    lines = [
+        f"Iceberg: {symbol} [{_fmt_ist()}]",
+        f"Timeframe : {timeframe}",
+        f"Source    : {meta.get('source', 'N/A')}",
+        f"Levels    : {len(iceberg_rows)} iceberg rows | {len(absorption_levels)} absorption levels",
+    ]
+
+    if iceberg_rows:
+        lines += ["", "TOP LEVELS"]
+        for row in iceberg_rows[:5]:
+            try:
+                price = float(row.get("price") or 0.0)
+                strength = float(row.get("absorption_strength") or 0.0)
+                lines.append(f"  {price:.3f}  strength={strength:.2f}")
+            except Exception:
+                continue
+    elif absorption_levels:
+        lines += ["", "ABSORPTION LEVELS"]
+        for price in absorption_levels[:5]:
+            try:
+                lines.append(f"  {float(price):.3f}")
+            except Exception:
+                continue
+    else:
+        lines += ["", "No active iceberg/absorption levels reported."]
+
+    return "\n".join(lines)
+
+
+def _handle_absorption_command() -> str:
+    payload = _fetch_ai_absorption()
+    if not payload:
+        return "AI absorption unavailable - backend not responding."
+    if str(payload.get("status") or "").lower() != "ok":
+        return f"AI absorption error: {payload.get('error', 'unknown error')}"
+
+    total_predictions = int(payload.get("total_predictions") or 0)
+    total_outcomes = int(payload.get("total_outcomes") or 0)
+    calibration = payload.get("calibration_score")
+    model_weights = dict(payload.get("model_weights") or {})
+    model_win_rates = dict(payload.get("model_win_rates") or {})
+    top_model = str(payload.get("top_model") or "N/A")
+    learning_state = str(payload.get("learning_state") or "N/A")
+    cycle_alignment = str(payload.get("cycle_alignment") or "N/A")
+
+    scored_models = []
+    for model, win_rate in model_win_rates.items():
+        if win_rate is None:
+            continue
+        try:
+            scored_models.append((model, float(win_rate), float(model_weights.get(model, 0.0) or 0.0)))
+        except Exception:
+            continue
+    scored_models.sort(key=lambda item: (-item[1], -item[2], item[0]))
+
+    lines = [
+        f"AI Absorption [{_fmt_ist()}]",
+        f"State       : {learning_state}",
+        f"Top model   : {top_model}",
+        f"Cycle align : {cycle_alignment}",
+        f"Predictions : {total_predictions} | Outcomes: {total_outcomes}",
+        f"Calibration : {round(float(calibration) * 100, 1)}%" if calibration is not None else "Calibration : N/A",
+    ]
+
+    if scored_models:
+        lines += ["", "MODEL SCOREBOARD"]
+        for model, win_rate, weight in scored_models[:5]:
+            lines.append(f"  {model:<10} win={win_rate * 100:.1f}%  weight={weight:.3f}")
+
+    return "\n".join(lines)
+
+
+def _handle_matrix_command(raw: str) -> str:
+    parts = [part for part in raw.split() if part]
+    symbol = _signal_symbol()
+    if len(parts) >= 2:
+        symbol = _display_symbol(parts[1].strip())
+
+    payload = _fetch_mcl_matrix(symbol, timeout=90)
+    rows = list(payload.get("rows") or [])
+    if not rows:
+        return f"Matrix unavailable for {symbol}."
+
+    tf_order = ("1month", "1w", "1d", "4h", "1h", "30m", "15m", "5m", "1m")
+    row_map = {str(row.get("timeframe") or ""): row for row in rows if isinstance(row, dict)}
+    ordered_rows = [row_map[tf] for tf in tf_order if tf in row_map]
+    if not ordered_rows:
+        ordered_rows = rows
+
+    lines = [f"MCL Matrix — {symbol}", f"{_fmt_ist()}"]
+    coverage = payload.get("coverage") or {}
+    ok_count = coverage.get("ok_count")
+    total = coverage.get("total")
+    if ok_count is not None and total is not None:
+        lines.append(f"Coverage : {ok_count}/{total}")
+
+    lines += ["", "TIMEFRAME CONFLUENCE"]
+    for row in ordered_rows[:9]:
+        timeframe = str(row.get("timeframe") or "?")
+        signal = str(row.get("signal") or "N/A")
+        bias = str(row.get("bias_label") or "")
+        status = str(row.get("status") or "?")
+        quality = str(row.get("quality") or "")
+        conf = row.get("confidence")
+        conf_str = f"{int(float(conf) * 100)}%" if conf is not None else "--"
+        model_used = row.get("ai_model_used")
+        model_tag = "MODEL" if model_used else "FALLBACK"
+        lines.append(f"  {timeframe:<7} {signal:<5} {conf_str:<4} {bias} [{status}|{quality}|{model_tag}]")
+
+    return "\n".join(lines)
+
+
+def _handle_phase_command(raw: str) -> str:
+    symbol, timeframe = _parse_symbol_timeframe_args(raw, default_timeframe="15m")
+
+    summary = _fetch_mcl_summary(symbol, timeframe=timeframe, timeout=30)
+    if not summary:
+        return f"Phase forecast unavailable for {symbol} {timeframe} - backend not responding."
+
+    message = _build_mcl_ai_phase_message(symbol, summary)
+    return f"{message}\n\nTimeframe : {timeframe}"
 
 
 def _build_mcl_present_message(symbol: str, summary: dict) -> str:
@@ -984,6 +1211,59 @@ def _build_mcl_future_message(symbol: str, summary: dict, matrix: dict) -> str:
     return "\n".join(lines)
 
 
+def _build_mcl_ai_phase_message(symbol: str, summary: dict) -> str:
+    """Dedicated AI phase + market movement forecast using the normalized summary block."""
+    forecast = summary.get("ai_phase_forecast") or {}
+    drivers = forecast.get("gann_astro_drivers") or {}
+
+    current_phase = str(forecast.get("current_phase") or summary.get("phase") or "UNKNOWN")
+    phase_projection = str(forecast.get("phase_projection") or current_phase)
+    movement_direction = str(forecast.get("market_movement_direction") or "WAIT")
+    movement_label = str(forecast.get("market_movement_label") or "SIDEWAYS_OR_UNCLEAR")
+    confidence_pct = float(forecast.get("confidence_pct") or 0.0)
+    ai_buy = float(forecast.get("ai_buy_prob") or 0.0)
+    ai_sell = float(forecast.get("ai_sell_prob") or 0.0)
+    future_direction = str(forecast.get("future_direction") or "WAIT")
+    signal_direction = str(forecast.get("signal_direction") or summary.get("signal") or "WAIT")
+    compression_bias = str(forecast.get("compression_bias") or "")
+    bias_label = str(forecast.get("bias_label") or summary.get("bias_label") or "NEUTRAL_BIAS")
+    model_version = str(forecast.get("ai_model_version") or summary.get("ai_model_version") or "unknown")
+    model_used = bool(forecast.get("ai_model_used"))
+
+    lines = [
+        f"MCL AI PHASE FORECAST — {symbol}",
+        f"{_fmt_ist()}",
+        "",
+        "PHASE FORECAST",
+        f"  Current phase   : {current_phase}",
+        f"  Projected phase : {phase_projection}",
+        f"  Movement        : {movement_direction} [{movement_label}]",
+        f"  Confidence      : {confidence_pct:.1f}%",
+        f"  AI probs        : Buy {ai_buy:.1f}% | Sell {ai_sell:.1f}%",
+        f"  Consensus       : signal={signal_direction} | future={future_direction} | bias={bias_label}",
+    ]
+
+    if compression_bias:
+        lines.append(f"  Compression bias: {compression_bias}")
+
+    lines += [
+        "",
+        "GANN + ASTRO DRIVERS",
+        f"  Moon phase  : {drivers.get('moon_phase') or '--'}",
+        f"  Nakshatra   : {drivers.get('nakshatra') or '--'}",
+        f"  Astro event : {drivers.get('nearby_event') or '--'}",
+        f"  Impact      : {drivers.get('nearby_event_impact') or '--'}",
+        f"  Gann degree : {drivers.get('gann_degree') if drivers.get('gann_degree') is not None else '--'}",
+        f"  Angle prox  : {drivers.get('gann_angle_proximity') or '--'}",
+        f"  Cycle event : {drivers.get('future_cycle_event') or '--'}",
+        f"  Timing      : {drivers.get('timing_window') or '--'}",
+        "",
+        f"MODEL : {'ACTIVE' if model_used else 'FALLBACK'} | {model_version}",
+    ]
+
+    return "\n".join(lines)
+
+
 def _build_mcl_gann_qa_message(symbol: str, gann_qa: dict) -> str:
     """Message 3 — Gann 52-question session: daily scored observation Q&A."""
     rows = gann_qa.get("rows") or []
@@ -1018,7 +1298,7 @@ def _build_mcl_gann_qa_message(symbol: str, gann_qa: dict) -> str:
 
 
 def _send_mcl_messages(symbol: str) -> None:
-    """Fetch all MCL data and send the 3-message daily prediction briefing."""
+    """Fetch all MCL data and send the MCL prediction briefing."""
     today_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     try:
         _log(f"MCL briefing: fetching summary for {symbol}")
@@ -1030,6 +1310,8 @@ def _send_mcl_messages(symbol: str) -> None:
         gann_qa = _fetch_mcl_gann_qa(symbol, today_utc)
 
         _send_message(_build_mcl_present_message(symbol, summary))
+        time.sleep(0.8)
+        _send_message(_build_mcl_ai_phase_message(symbol, summary))
         time.sleep(0.8)
         _send_message(_build_mcl_future_message(symbol, summary, matrix))
         time.sleep(0.8)
@@ -1165,6 +1447,16 @@ def _handle_command(text: str) -> Optional[str]:
         else:
             next_news_text = "  None scheduled"
         return f"News [{_fmt_ist()}]\nHalt  : {halt_line}\nUpcoming:\n{next_news_text}"
+    if text.startswith("/matrix"):
+        return _handle_matrix_command(raw)
+    if text.startswith("/orderflow"):
+        return _handle_orderflow_command(raw)
+    if text.startswith("/iceberg"):
+        return _handle_iceberg_command(raw)
+    if text.startswith("/absorption"):
+        return _handle_absorption_command()
+    if text.startswith("/phase"):
+        return _handle_phase_command(raw)
     if text.startswith("/brain"):
         cal = _get_json("/market_causality/status")
         if not cal:

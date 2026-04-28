@@ -20,7 +20,7 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[stop]${NC} $*"; }
 warn() { echo -e "${YELLOW}[stop]${NC} $*"; }
 
-SESSIONS=(aq-livesync aq-orchestrator aq-celery aq-backend aq-cf-unblock aq-chrome aq-redis)
+SESSIONS=(aq-mt5-bridge aq-livesync aq-orchestrator aq-celery aq-backend aq-cf-unblock aq-chrome aq-redis)
 
 for s in "${SESSIONS[@]}"; do
   if tmux has-session -t "$s" 2>/dev/null; then
@@ -37,6 +37,7 @@ if [ "$HARD" = true ]; then
   pkill -f "celery.*astroquant" 2>/dev/null || true
   pkill -f "start_astroquant.py" 2>/dev/null || true
   pkill -f "start_live_sync.py" 2>/dev/null || true
+  pkill -f "tools/mt5_bridge_sync_daemon.py" 2>/dev/null || true
   pkill -f "cloudflare_unblock.py" 2>/dev/null || true
   pkill -f "remote-debugging-port=9222" 2>/dev/null || true
   redis-cli shutdown nosave 2>/dev/null || true

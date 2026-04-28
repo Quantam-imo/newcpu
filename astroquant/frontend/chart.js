@@ -306,6 +306,7 @@ function toggleDivergenceOverlay(enabled) {
 const AQ_DEFAULT_CHART_API_ORIGIN = String(window.location.origin || "").trim();
 const AQ_API_BASE_CHART = String(window.AQ_API_BASE || AQ_DEFAULT_CHART_API_ORIGIN || "").trim();
 const AQ_CHART_SETTINGS_KEY = "AQ_CHART_SETTINGS_V2";
+const AQ_TURTLE_PROFILE_BY_TF_KEY = "AQ_TURTLE_PROFILE_BY_TF_V1";
 const AQ_CHART_DRAWINGS_KEY = "AQ_CHART_DRAWINGS_V1";
 let CHART_AUTO_REFRESH_MS = 3000;
 const LIVE_PAINT_INTERVAL_MS = 350;
@@ -967,6 +968,45 @@ function selectedSymbol() {
 function selectedTimeframe() {
 	const select = document.getElementById("chartTimeframe");
 	return select ? select.value : "1m";
+}
+
+function selectedTurtleProfile() {
+	const select = document.getElementById("chartTurtleProfile");
+	const raw = select ? String(select.value || "").trim().toLowerCase() : "auto";
+	if (raw === "strict" || raw === "balanced" || raw === "aggressive" || raw === "auto") return raw;
+	return "auto";
+}
+
+function readTurtleProfileMap() {
+	try {
+		const raw = localStorage.getItem(AQ_TURTLE_PROFILE_BY_TF_KEY);
+		if (!raw) return {};
+		const parsed = JSON.parse(raw);
+		if (!parsed || typeof parsed !== "object") return {};
+		return parsed;
+	} catch (_) {
+		return {};
+	}
+}
+
+function writeTurtleProfileForTimeframe(timeframe, profile) {
+	const tf = String(timeframe || "1m").trim().toLowerCase();
+	const nextProfile = String(profile || "auto").trim().toLowerCase();
+	if (!tf) return;
+	if (!(nextProfile === "strict" || nextProfile === "balanced" || nextProfile === "aggressive" || nextProfile === "auto")) return;
+	const map = readTurtleProfileMap();
+	map[tf] = nextProfile;
+	try { localStorage.setItem(AQ_TURTLE_PROFILE_BY_TF_KEY, JSON.stringify(map)); } catch (_) {}
+}
+
+function applyTurtleProfileForTimeframe(timeframe) {
+	const select = document.getElementById("chartTurtleProfile");
+	if (!select) return;
+	const tf = String(timeframe || selectedTimeframe() || "1m").trim().toLowerCase();
+	const map = readTurtleProfileMap();
+	const saved = String(map[tf] || "auto").trim().toLowerCase();
+	const profile = (saved === "strict" || saved === "balanced" || saved === "aggressive" || saved === "auto") ? saved : "auto";
+	select.value = profile;
 }
 
 function chartApiOrigins() {
@@ -1865,6 +1905,7 @@ function buildMclOverlayMarkers(overlayPayload) {
 	const gannCycles = Array.isArray(overlayPayload.gann_cycles) ? overlayPayload.gann_cycles : [];
 	const lunarEvents = Array.isArray(overlayPayload.lunar_events) ? overlayPayload.lunar_events : [];
 	const autoPatterns = Array.isArray(overlayPayload.auto_patterns) ? overlayPayload.auto_patterns : [];
+	const turtleSoup = Array.isArray(overlayPayload.turtle_soup) ? overlayPayload.turtle_soup : [];
 	const elliottWaves = Array.isArray(overlayPayload.elliott_waves) ? overlayPayload.elliott_waves : [];
 	const cycleAlignVertical = Array.isArray(overlayPayload?.cycle_alignment?.vertical_lines)
 		? overlayPayload.cycle_alignment.vertical_lines
@@ -1873,6 +1914,7 @@ function buildMclOverlayMarkers(overlayPayload) {
 	for (const row of gannCycles.slice(-40)) pushMarker(row, "CY");
 	for (const row of lunarEvents.slice(-32)) pushMarker(row, "MOON");
 	for (const row of autoPatterns.slice(-40)) pushMarker(row, "PAT");
+	for (const row of turtleSoup.slice(-36)) pushMarker(row, "TS");
 	for (const row of elliottWaves.slice(-36)) {
 		pushMarker({
 			time: row?.time,
@@ -1908,8 +1950,31 @@ function updateMclAiPanel(overlaysPayload, absorptionPayload) {
 	setText("mclOvCycles", overlaysOk ? String((overlaysPayload.gann_cycles || []).length) : "--");
 	setText("mclOvLunar", overlaysOk ? String((overlaysPayload.lunar_events || []).length) : "--");
 	setText("mclOvPatterns", overlaysOk ? String((overlaysPayload.auto_patterns || []).length) : "--");
+	setText("mclOvTurtle", overlaysOk ? String((overlaysPayload.turtle_soup || []).length) : "--");
 	setText("mclOvProjection", overlaysOk ? String((overlaysPayload.prediction_zone || []).length) : "--");
 	setText("mclOvAccuracy", overlaysOk ? String(Number(overlaysPayload?.meta?.astro_gann_display_accuracy || 0).toFixed(3)) : "--");
+	setText("mclOvTurtleAcc", overlaysOk ? String(Number(overlaysPayload?.meta?.turtle_soup_ai_accuracy || 0).toFixed(3)) : "--");
+	setText("mclOvTurtleTfAcc", overlaysOk && overlaysPayload?.turtle_soup_learning?.current_timeframe_accuracy != null
+		? String(Number(overlaysPayload.turtle_soup_learning.current_timeframe_accuracy).toFixed(3))
+		: "--");
+	setText("mclOvTurtleLatest", overlaysOk && overlaysPayload?.latest_turtle_soup
+		? `${String(overlaysPayload.latest_turtle_soup.direction || "?")} ${String(overlaysPayload.latest_turtle_soup.session || "")}`.trim()
+		: "NONE");
+	setText("mclOvTurtlePool", overlaysOk && overlaysPayload?.latest_turtle_soup
+		? String(overlaysPayload.latest_turtle_soup.liquidity_pool_kind || overlaysPayload.latest_turtle_soup.liquidity_type || "--")
+		: "--");
+	setText("mclOvTurtleLearned", overlaysOk && overlaysPayload?.turtle_soup_learning
+		? String(overlaysPayload.turtle_soup_learning.current_timeframe_outcomes ?? "--")
+		: "--");
+	setText("mclOvTurtleProfile", overlaysOk
+		? `${String(overlaysPayload?.turtle_profile_requested || overlaysPayload?.meta?.turtle_profile_requested || "auto")} -> ${String(overlaysPayload?.turtle_profile_applied || overlaysPayload?.meta?.turtle_profile_applied || "auto")}`
+		: "--");
+	setText("mclOvTurtleCandidates", overlaysOk && overlaysPayload?.turtle_soup_learning
+		? String(overlaysPayload.turtle_soup_learning.candidates_seen ?? "--")
+		: "--");
+	setText("mclOvTurtleReject", overlaysOk && overlaysPayload?.turtle_soup_learning
+		? String(overlaysPayload.turtle_soup_learning.top_rejection_reason || "none")
+		: "--");
 
 	if (!absorbOk) {
 		setText("mclAiState", "--");
@@ -1957,6 +2022,8 @@ async function refreshMclEnhancements(symbol, timeframe) {
 	const params = new URLSearchParams({
 		symbol: String(symbol),
 		timeframe: tf,
+		source_mode: "live_first",
+		turtle_profile: selectedTurtleProfile(),
 		lookback_years: String(lookbackYears),
 		limit: String(limit),
 	});
@@ -2574,6 +2641,7 @@ async function loadInstitutionalChart() {
 
 function bindChartControls() {
 	restoreChartSettings();
+	applyTurtleProfileForTimeframe(selectedTimeframe());
 
 	const reload = document.getElementById("reloadChart");
 	if (reload) reload.addEventListener("click", () => loadInstitutionalChart().catch(() => {}));
@@ -2647,6 +2715,7 @@ function bindChartControls() {
 	const timeframeSelect = document.getElementById("chartTimeframe");
 	if (timeframeSelect) timeframeSelect.addEventListener("change", () => {
 		writeChartSettings({ timeframe: timeframeSelect.value });
+		applyTurtleProfileForTimeframe(timeframeSelect.value);
 		latestCandleSnapshot = [];
 		latestLivePrice = null;
 		latestLiveUpdatedAt = 0;
@@ -2655,6 +2724,15 @@ function bindChartControls() {
 		lastPaintedLivePrice = null;
 		loadInstitutionalChart().catch(() => {});
 	});
+
+	const turtleProfileSelect = document.getElementById("chartTurtleProfile");
+	if (turtleProfileSelect) {
+		turtleProfileSelect.addEventListener("change", () => {
+			writeTurtleProfileForTimeframe(selectedTimeframe(), selectedTurtleProfile());
+			void refreshMclEnhancements(selectedSymbol(), selectedTimeframe());
+		});
+		writeTurtleProfileForTimeframe(selectedTimeframe(), selectedTurtleProfile());
+	}
 
 	for (const id of toggleIds) {
 		const el = document.getElementById(id);

@@ -21,16 +21,21 @@ install_service_template() {
 if pidof systemd > /dev/null; then
   # Copy service files to systemd directory
   install_service_template astroquant_tradingbot.service
+  install_service_template astroquant_mt5_bridge_sync.service
   install_service_template astroquant_watchdog.service
   install_service_template astroquant_watchdog.timer
+  install_service_template astroquant_ai_retrain.service
+  install_service_template astroquant_ai_retrain.timer
 
   # Reload systemd to recognize new services
   sudo systemctl daemon-reload
 
   # Enable services to start on boot
   sudo systemctl enable astroquant_tradingbot.service
+  sudo systemctl enable astroquant_mt5_bridge_sync.service
   sudo systemctl enable astroquant_watchdog.timer
-  echo "Enabled: astroquant_tradingbot.service + astroquant_watchdog.timer"
+  sudo systemctl enable astroquant_ai_retrain.timer
+  echo "Enabled: astroquant_tradingbot.service + astroquant_mt5_bridge_sync.service + astroquant_watchdog.timer + astroquant_ai_retrain.timer"
 else
   echo "systemd is not available. Using service commands and manual steps."
   # Start redis-server if available
@@ -48,6 +53,7 @@ else
   fi
   # Advise user to open frontend manually
   echo "Please open http://localhost:8000 in your browser to access the frontend."
+  echo "For MT5 bridge syncing in this environment, run: ./start_mt5_bridge_sync.sh"
   echo "If Chrome/Chromium is not installed, install it for browser automation."
 fi
 

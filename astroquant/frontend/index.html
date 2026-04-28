@@ -1028,6 +1028,13 @@
                             <option value="30m">30m</option>
                             <option value="1h">1h</option>
                         </select>
+                        <select id="chartTurtleProfile" title="Turtle Soup behavior profile">
+                            <option value="auto" selected>Turtle Auto</option>
+                            <option value="strict">Turtle Strict</option>
+                            <option value="balanced">Turtle Balanced</option>
+                            <option value="aggressive">Turtle Aggressive</option>
+                        </select>
+                        <span class="chart-key-hint" title="Auto uses timeframe-aware strictness (1m strict, 5m-30m balanced, 1h+ aggressive)">Turtle profile: auto by timeframe</span>
                         <button id="reloadChart">Reload</button>
                         <button id="resetChartSettings">Reset Chart Settings</button>
                         <button id="chartZoomIn">Zoom +</button>
@@ -1103,8 +1110,17 @@
                             <div><span>Cycles</span><strong id="mclOvCycles">--</strong></div>
                             <div><span>Lunar Events</span><strong id="mclOvLunar">--</strong></div>
                             <div><span>Patterns</span><strong id="mclOvPatterns">--</strong></div>
+                            <div><span>Turtle Soup</span><strong id="mclOvTurtle">--</strong></div>
                             <div><span>Projection Pts</span><strong id="mclOvProjection">--</strong></div>
                             <div><span>Overlay Accuracy</span><strong id="mclOvAccuracy">--</strong></div>
+                            <div><span>Turtle AI Acc</span><strong id="mclOvTurtleAcc">--</strong></div>
+                            <div><span>Turtle TF Acc</span><strong id="mclOvTurtleTfAcc">--</strong></div>
+                            <div><span>Latest Turtle</span><strong id="mclOvTurtleLatest">NONE</strong></div>
+                            <div><span>Turtle Pool</span><strong id="mclOvTurtlePool">--</strong></div>
+                            <div><span>Turtle Learned</span><strong id="mclOvTurtleLearned">--</strong></div>
+                            <div><span>Turtle Profile</span><strong id="mclOvTurtleProfile">--</strong></div>
+                            <div><span>Turtle Candidates</span><strong id="mclOvTurtleCandidates">--</strong></div>
+                            <div><span>Turtle Top Reject</span><strong id="mclOvTurtleReject">--</strong></div>
                             <div><span>AI State</span><strong id="mclAiState">--</strong></div>
                             <div><span>Calibration</span><strong id="mclAiCalibration">--</strong></div>
                             <div><span>Top Model</span><strong id="mclAiTopModel">--</strong></div>

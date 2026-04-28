@@ -199,13 +199,14 @@ def _derive_engine_status_blocks(candles: list, market_data: dict) -> tuple[dict
             "reason": "ENGINE_DISABLED",
         }
 
+    astro_window_active = str(market_data.get("session", "")).upper() in {"LONDON", "NY", "LONDON/NY"}
+    astro_payload = {
+        "astro_window_active": astro_window_active,
+        "astro_marker": "Mars Square Saturn" if str(market_data.get("volatility", "")).upper() == "HIGH" else "NO_EVENT",
+        "astro_bias": "Volatility" if str(market_data.get("volatility", "")).upper() == "HIGH" else "Neutral",
+    }
+
     if astro_enabled:
-        volatility = str(market_data.get("volatility", "")).upper()
-        astro_payload = {
-            "astro_window_active": str(market_data.get("session", "")).upper() in {"LONDON", "NY", "LONDON/NY"},
-            "astro_marker": "Mars Square Saturn" if volatility == "HIGH" else "NO_EVENT",
-            "astro_bias": "Volatility" if volatility == "HIGH" else "Neutral",
-        }
         astro_calc = mentor_astro_engine.calculate(astro_payload)
         astro_block = {
             "_engine": "ACTIVE",
@@ -213,12 +214,12 @@ def _derive_engine_status_blocks(candles: list, market_data: dict) -> tuple[dict
             "reason": "WINDOW_ACTIVE" if astro_calc.get("harmonic_window") else "NO_WINDOW",
         }
     else:
+        astro_calc = mentor_astro_engine.calculate(astro_payload)
         astro_block = {
-            "_engine": "NOT_ACTIVE",
-            "harmonic_window": False,
-            "planet_event": "ENGINE_NOT_ACTIVE",
-            "bias": "--",
-            "reason": "ENGINE_DISABLED",
+            "_engine": "FALLBACK",
+            **astro_calc,
+            "enabled": False,
+            "reason": "ENGINE_DISABLED_USING_FALLBACK",
         }
     return gann_block, astro_block
 

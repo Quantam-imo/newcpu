@@ -80,8 +80,71 @@
         }
     }
 
-    async function loadSummary(forceRefresh = false) {
+    async function loadModelStatus() {
+        // Fetch training status and model calibration in parallel
         try {
+            const [tsRes, calRes] = await Promise.allSettled([
+                apiFetch("/market_causality/system/training-status", {}, 8000),
+                apiFetch("/market_causality/system/model-calibration", {}, 8000),
+            ]);
+
+            // Training status
+            if (tsRes.status === "fulfilled") {
+                const d = await tsRes.value.json();
+                const el = document.getElementById("mclTrainingStatus");
+                if (el) {
+                    const statusColors = { ALL_READY: "#10b981", PARTIAL: "#fbbf24", NOT_READY: "#ef4444", UNKNOWN: "#6b7280" };
+                    const color = statusColors[d.status] || "#6b7280";
+                    const ready = d.ready_models ?? "--";
+                    const total = d.total_models ?? "--";
+                    el.innerHTML = `<span style="color:${color};font-weight:700;">${d.status || "--"}</span> <span style="color:#94a3b8">${ready}/${total} models</span>`;
+                }
+                const tfEl = document.getElementById("mclTrainingTFs");
+                if (tfEl && d.timeframes) {
+                    const tfs = Object.entries(d.timeframes);
+                    tfEl.innerHTML = tfs.map(([tf, info]) => {
+                        const rdy = info.ready;
+                        const ver = info.version || "--";
+                        const col = rdy ? "#10b981" : "#ef4444";
+                        return `<span style="color:${col};margin-right:6px;">${tf.toUpperCase()}${rdy ? "✓" : "✗"}(${ver})</span>`;
+                    }).join("");
+                }
+                // Update header badge
+                const badge = document.getElementById("mclModelBadge");
+                if (badge) {
+                    const statusColors = { ALL_READY: "#10b981", PARTIAL: "#fbbf24", NOT_READY: "#ef4444", UNKNOWN: "#6b7280" };
+                    badge.style.color = statusColors[d.status] || "#6b7280";
+                    badge.textContent = `🤖 ${d.status || "?"}`;
+                }
+            }
+
+            // Model calibration
+            if (calRes.status === "fulfilled") {
+                const d = await calRes.value.json();
+                const el = document.getElementById("mclCalibrationStatus");
+                if (el) {
+                    const statusColors = { CALIBRATED: "#10b981", LEARNING: "#fbbf24", ABSORBING: "#60a5fa", DEGRADED: "#ef4444", UNKNOWN: "#6b7280" };
+                    const color = statusColors[d.calibration_status] || "#6b7280";
+                    const drift = d.drift_percentage != null ? ` drift=${d.drift_percentage.toFixed(1)}%` : "";
+                    el.innerHTML = `<span style="color:${color};font-weight:700;">${d.calibration_status || "--"}</span>` +
+                        (drift ? `<span style="color:#94a3b8">${drift}</span>` : "");
+                }
+                setText("mclDriftPct", d.drift_percentage != null ? `${d.drift_percentage.toFixed(1)}%` : "--");
+                setText("mclTotalPreds", d.total_predictions != null ? String(d.total_predictions) : "--");
+                setText("mclWinRate", d.win_rate != null ? `${(d.win_rate * 100).toFixed(1)}%` : "--");
+                // Update header calibration badge
+                const calBadge = document.getElementById("mclCalibrationBadge");
+                if (calBadge) {
+                    const statusColors = { CALIBRATED: "#10b981", LEARNING: "#fbbf24", ABSORBING: "#60a5fa", DEGRADED: "#ef4444", UNKNOWN: "#6b7280" };
+                    calBadge.style.color = statusColors[d.calibration_status] || "#6b7280";
+                    const driftStr = d.drift_percentage != null ? ` ${d.drift_percentage.toFixed(0)}%` : "";
+                    calBadge.textContent = `📈 ${d.calibration_status || "?"}${driftStr}`;
+                }
+            }
+        } catch (_) { /* model status is non-critical */ }
+    }
+
+    async function loadSummary(forceRefresh = false) {        try {
             const { symbol, timeframe } = selectedContext();
             const params = new URLSearchParams();
             if (forceRefresh) params.set("refresh", "true");
@@ -311,7 +374,20 @@
                 <button id="mclUseChartContextBtn" title="Use current chart symbol/timeframe">Use Chart</button>
             </div>
             <div id="mclWhyCard" style="margin-bottom:8px;border:1px solid #7f8c8d;background:rgba(127, 140, 141, 0.10);padding:10px;border-radius:8px;">
-                <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+            <div style="margin-bottom:8px;border:1px solid rgba(16,185,129,0.3);background:rgba(16,185,129,0.06);padding:8px 10px;border-radius:8px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">
+                    <strong style="font-size:12px;color:#94a3b8;letter-spacing:.04em;">AI MODEL STATUS</strong>
+                    <button id="mclModelRefreshBtn" style="font-size:10px;padding:2px 8px;">↻ Refresh</button>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+                    <div><span style="color:#64748b;font-size:11px;">Training</span><br><span id="mclTrainingStatus" style="font-size:12px;">--</span></div>
+                    <div><span style="color:#64748b;font-size:11px;">Calibration</span><br><span id="mclCalibrationStatus" style="font-size:12px;">--</span></div>
+                    <div><span style="color:#64748b;font-size:11px;">Drift</span><br><strong id="mclDriftPct" style="font-size:12px;">--</strong></div>
+                    <div><span style="color:#64748b;font-size:11px;">Predictions</span><br><strong id="mclTotalPreds" style="font-size:12px;">--</strong></div>
+                    <div><span style="color:#64748b;font-size:11px;">Win Rate</span><br><strong id="mclWinRate" style="font-size:12px;">--</strong></div>
+                </div>
+                <div id="mclTrainingTFs" style="font-size:10px;line-height:1.8;flex-wrap:wrap;"></div>
+            </div>                <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
                     <strong>Why This Signal</strong>
                     <strong id="mclWhyTitle">NEUTRAL</strong>
                 </div>
@@ -435,6 +511,9 @@
         const refreshBtn = document.getElementById("mclRefreshBtn");
         if (refreshBtn) refreshBtn.addEventListener("click", () => loadSummary(true));
 
+        const modelRefreshBtn = document.getElementById("mclModelRefreshBtn");
+        if (modelRefreshBtn) modelRefreshBtn.addEventListener("click", () => loadModelStatus());
+
         const useChartContextBtn = document.getElementById("mclUseChartContextBtn");
         if (useChartContextBtn) {
             useChartContextBtn.addEventListener("click", () => {
@@ -473,6 +552,7 @@
         if (shouldOpen) {
             syncContextWithChart();
             loadSummary(false);
+            loadModelStatus();
         }
     }
 
@@ -486,6 +566,12 @@
                 loadSummary(false);
             }
         }, 15000);
+        setSingletonInterval("marketCausalityModelStatusRefresh", () => {
+            const panel = document.getElementById(PANEL_ID);
+            if (panel && panel.style.display !== "none") {
+                loadModelStatus();
+            }
+        }, 60000);
     } else {
         setInterval(() => {
             const panel = document.getElementById(PANEL_ID);
@@ -493,6 +579,12 @@
                 loadSummary(false);
             }
         }, 15000);
+        setInterval(() => {
+            const panel = document.getElementById(PANEL_ID);
+            if (panel && panel.style.display !== "none") {
+                loadModelStatus();
+            }
+        }, 60000);
     }
 
     window.toggleMarketCausalityPanel = togglePanel;

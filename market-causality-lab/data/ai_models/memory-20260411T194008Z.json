@@ -1,0 +1,150 @@
+{
+  "version": "memory-20260411T194008Z",
+  "created_at_utc": "20260411T194008Z",
+  "family": "aq-memory-baselines",
+  "horizon": 1,
+  "feature_version": "v1_extended",
+  "scaler": {
+    "mean": [
+      0.12691466083150985,
+      5.866901531728662,
+      40.88911039387313,
+      41.51172210065642,
+      5.866901531728662,
+      0.053610503282275714,
+      0.1422319474835886,
+      0.06345733041575492,
+      1.9288840262582057,
+      0.0,
+      0.0,
+      0.4442013129102845,
+      0.0,
+      1174.5240765864344
+    ],
+    "std": [
+      0.991913639822552,
+      56.0132859451704,
+      20.08080580924563,
+      38.0616035421039,
+      56.0132859451704,
+      0.22524745774391378,
+      0.3492878763979887,
+      0.24378371076070945,
+      1.0565920308196792,
+      1.0,
+      1.0,
+      0.4968767518399971,
+      1.0,
+      411.2061173805846
+    ]
+  },
+  "best_model": {
+    "name": "logistic_gd",
+    "serialized": {
+      "name": "logistic_gd",
+      "lr": 0.03,
+      "epochs": 300,
+      "l2": 0.001,
+      "w": [
+        0.9144975886726612,
+        0.3647591931704206,
+        -0.15961845497323685,
+        0.011896734439024188,
+        0.3647591931704206,
+        0.059137056136743534,
+        0.370476417341245,
+        -0.3387329628512536,
+        -0.01440893966568585,
+        0.0,
+        0.0,
+        0.38149860252456747,
+        0.0,
+        -0.11251155524989377
+      ],
+      "b": 0.2729205732329126
+    },
+    "temperature": 1.0408163265306123
+  },
+  "validation_metrics": {
+    "brier": 0.125659,
+    "accuracy": 0.847162,
+    "log_loss": 0.406069,
+    "rows_train": 914,
+    "rows_val": 229
+  },
+  "walkforward": {
+    "enabled": true,
+    "reason": "ok",
+    "folds": [
+      {
+        "fold": 1,
+        "train_rows": 300,
+        "val_rows": 210,
+        "selected_model": "logistic_gd",
+        "brier": 0.106523,
+        "accuracy": 0.857143
+      },
+      {
+        "fold": 2,
+        "train_rows": 510,
+        "val_rows": 210,
+        "selected_model": "logistic_gd",
+        "brier": 0.134762,
+        "accuracy": 0.82381
+      },
+      {
+        "fold": 3,
+        "train_rows": 720,
+        "val_rows": 210,
+        "selected_model": "logistic_gd",
+        "brier": 0.125318,
+        "accuracy": 0.847619
+      },
+      {
+        "fold": 4,
+        "train_rows": 930,
+        "val_rows": 210,
+        "selected_model": "logistic_gd",
+        "brier": 0.119052,
+        "accuracy": 0.852381
+      }
+    ],
+    "summary": {
+      "avg_brier": 0.121414,
+      "avg_accuracy": 0.845238,
+      "fold_count": 4
+    }
+  },
+  "leaderboard": [
+    {
+      "name": "logistic_gd",
+      "brier": 0.125659,
+      "accuracy": 0.847162,
+      "log_loss": 0.406069
+    },
+    {
+      "name": "centroid",
+      "brier": 0.13967,
+      "accuracy": 0.803493,
+      "log_loss": 0.443784
+    },
+    {
+      "name": "momentum_rule",
+      "brier": 0.15891,
+      "accuracy": 0.764192,
+      "log_loss": 0.48032
+    },
+    {
+      "name": "gaussian_nb",
+      "brier": 0.171426,
+      "accuracy": 0.777293,
+      "log_loss": 0.596492
+    },
+    {
+      "name": "prior",
+      "brier": 0.222737,
+      "accuracy": 0.681223,
+      "log_loss": 0.637951
+    }
+  ]
+}

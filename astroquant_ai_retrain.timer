@@ -1,0 +1,13 @@
+[Unit]
+Description=Run AstroQuant AI retraining every 6 hours
+
+[Timer]
+OnBootSec=20min
+OnUnitActiveSec=6h
+AccuracySec=5min
+RandomizedDelaySec=3min
+Persistent=true
+Unit=astroquant_ai_retrain.service
+
+[Install]
+WantedBy=timers.target

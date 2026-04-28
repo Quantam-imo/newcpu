@@ -78,6 +78,16 @@ def integrate_news_features(df, news_df, pre_event_minutes=60, post_event_minute
     out["news_high_impact_count"] = 0
     out["news_medium_impact_count"] = 0
     out["news_low_impact_count"] = 0
+    out["news_aspect_event_count"] = 0
+    out["news_conjunction_count"] = 0
+    out["news_square_count"] = 0
+    out["news_opposition_count"] = 0
+    out["news_trine_count"] = 0
+    out["news_sextile_count"] = 0
+    out["news_ingress_event_count"] = 0
+    out["news_nakshatra_event_count"] = 0
+    out["news_gann_event_count"] = 0
+    out["news_eclipse_event_count"] = 0
 
     if "time" not in out.columns or out.empty or news_df is None or news_df.empty:
         out["news_impact_score"] = 0
@@ -109,6 +119,18 @@ def integrate_news_features(df, news_df, pre_event_minutes=60, post_event_minute
         out["news_event_active"] = False
         return out
 
+    # Concept extraction for astrology/Gann named-aspect signals.
+    event_text = events_local.get("event", "").astype(str)
+    category_text = events_local.get("category", "").astype(str)
+    detail_text = events_local.get("detail", "").astype(str)
+    combined_text = (
+        event_text.str.lower()
+        + " "
+        + category_text.str.lower()
+        + " "
+        + detail_text.str.lower()
+    )
+
     impact = events_local.get("impact", "medium")
     impact = pd.Series(impact).astype(str).str.strip().str.lower().to_numpy()
     event_ns = events_local["time"].astype("int64", copy=False).to_numpy()
@@ -138,21 +160,77 @@ def integrate_news_features(df, news_df, pre_event_minutes=60, post_event_minute
     low_counts = _accumulate_interval_counts(mask_arr=(impact == "low"))
     medium_counts = _accumulate_interval_counts(mask_arr=(impact != "high") & (impact != "low"))
 
+    aspect_mask = combined_text.str.contains(
+        r"\b(?:conjunction|sextile|square|trine|opposition)\b",
+        regex=True,
+        na=False,
+    ).to_numpy()
+    conjunction_mask = combined_text.str.contains(r"\bconjunction\b", regex=True, na=False).to_numpy()
+    square_mask = combined_text.str.contains(r"\bsquare\b", regex=True, na=False).to_numpy()
+    opposition_mask = combined_text.str.contains(r"\bopposition\b", regex=True, na=False).to_numpy()
+    trine_mask = combined_text.str.contains(r"\btrine\b", regex=True, na=False).to_numpy()
+    sextile_mask = combined_text.str.contains(r"\bsextile\b", regex=True, na=False).to_numpy()
+    ingress_mask = combined_text.str.contains(r"\bingress\b", regex=True, na=False).to_numpy()
+    nakshatra_mask = combined_text.str.contains(r"\bnakshatra\b", regex=True, na=False).to_numpy()
+    gann_mask = combined_text.str.contains(r"\bgann\b", regex=True, na=False).to_numpy()
+    eclipse_mask = combined_text.str.contains(r"\beclipse\b", regex=True, na=False).to_numpy()
+
+    aspect_counts = _accumulate_interval_counts(mask_arr=aspect_mask)
+    conjunction_counts = _accumulate_interval_counts(mask_arr=conjunction_mask)
+    square_counts = _accumulate_interval_counts(mask_arr=square_mask)
+    opposition_counts = _accumulate_interval_counts(mask_arr=opposition_mask)
+    trine_counts = _accumulate_interval_counts(mask_arr=trine_mask)
+    sextile_counts = _accumulate_interval_counts(mask_arr=sextile_mask)
+    ingress_counts = _accumulate_interval_counts(mask_arr=ingress_mask)
+    nakshatra_counts = _accumulate_interval_counts(mask_arr=nakshatra_mask)
+    gann_counts = _accumulate_interval_counts(mask_arr=gann_mask)
+    eclipse_counts = _accumulate_interval_counts(mask_arr=eclipse_mask)
+
     out_vals = out[[
         "news_event_count",
         "news_high_impact_count",
         "news_medium_impact_count",
         "news_low_impact_count",
+        "news_aspect_event_count",
+        "news_conjunction_count",
+        "news_square_count",
+        "news_opposition_count",
+        "news_trine_count",
+        "news_sextile_count",
+        "news_ingress_event_count",
+        "news_nakshatra_event_count",
+        "news_gann_event_count",
+        "news_eclipse_event_count",
     ]].to_numpy(copy=True)
     out_vals[valid_idx, 0] = total_counts
     out_vals[valid_idx, 1] = high_counts
     out_vals[valid_idx, 2] = medium_counts
     out_vals[valid_idx, 3] = low_counts
+    out_vals[valid_idx, 4] = aspect_counts
+    out_vals[valid_idx, 5] = conjunction_counts
+    out_vals[valid_idx, 6] = square_counts
+    out_vals[valid_idx, 7] = opposition_counts
+    out_vals[valid_idx, 8] = trine_counts
+    out_vals[valid_idx, 9] = sextile_counts
+    out_vals[valid_idx, 10] = ingress_counts
+    out_vals[valid_idx, 11] = nakshatra_counts
+    out_vals[valid_idx, 12] = gann_counts
+    out_vals[valid_idx, 13] = eclipse_counts
     out[[
         "news_event_count",
         "news_high_impact_count",
         "news_medium_impact_count",
         "news_low_impact_count",
+        "news_aspect_event_count",
+        "news_conjunction_count",
+        "news_square_count",
+        "news_opposition_count",
+        "news_trine_count",
+        "news_sextile_count",
+        "news_ingress_event_count",
+        "news_nakshatra_event_count",
+        "news_gann_event_count",
+        "news_eclipse_event_count",
     ]] = out_vals
 
     out["news_impact_score"] = (

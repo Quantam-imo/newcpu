@@ -28,13 +28,14 @@ def get_phase1_config() -> dict:
         profile = "stability"
 
     default_news_guard = profile == "stability"
+    default_strict_reliability = profile == "stability"
 
     cfg = {
         "profile": profile,
         "enable_news_guard": _bool_env("AQ_ENABLE_NEWS_GUARD", default_news_guard),
         "enable_decision_trace": _bool_env("AQ_ENABLE_DECISION_TRACE", True),
-        "enable_strict_reliability_gate": _bool_env("AQ_ENABLE_STRICT_RELIABILITY_GATE", False),
-        "min_reliability_score": _float_env("AQ_MIN_RELIABILITY_SCORE", 0.55),
+        "enable_strict_reliability_gate": _bool_env("AQ_ENABLE_STRICT_RELIABILITY_GATE", default_strict_reliability),
+        "min_reliability_score": _float_env("AQ_MIN_RELIABILITY_SCORE", 0.62),
     }
 
     # Clamp reliability threshold into [0,1].

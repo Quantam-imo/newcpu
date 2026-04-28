@@ -1,11 +1,17 @@
 import databento as db
 
-client = db.Historical("REDACTED")
 
-datasets = client.metadata.list_datasets()
+def main() -> None:
+    client = db.Historical("REDACTED")
 
-with open("db_datasets_list.txt", "w") as f:
-    for ds in datasets:
-        f.write(str(ds) + "\n")
+    datasets = client.metadata.list_datasets()
 
-print("Dataset list written to db_datasets_list.txt")
+    with open("db_datasets_list.txt", "w") as f:
+        for ds in datasets:
+            f.write(str(ds) + "\n")
+
+    print("Dataset list written to db_datasets_list.txt")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,35 @@
+{
+  "1d": {
+    "rows": 6931,
+    "aggressive_buy_rate": 0.4145,
+    "aggressive_sell_rate": 0.3731,
+    "iceberg_rate": 0.0557,
+    "mean_flow_imbalance": 0.035191,
+    "mean_volume_zscore": 0.027572,
+    "year_start": 2000,
+    "year_end": 2026,
+    "liquidity_breakdown": [
+      {
+        "liquidity_type": "BUY_SIDE_SWEEP",
+        "rows": 724,
+        "mean_flow_imbalance": 0.658345,
+        "iceberg_rate": 0.044199
+      },
+      {
+        "liquidity_type": "NO_SWEEP",
+        "rows": 5797,
+        "mean_flow_imbalance": 0.008347,
+        "iceberg_rate": 0.058651
+      },
+      {
+        "liquidity_type": "SELL_SIDE_SWEEP",
+        "rows": 410,
+        "mean_flow_imbalance": -0.685657,
+        "iceberg_rate": 0.034146
+      }
+    ],
+    "detailed_csv": "data/reports/order_flow_1d_detailed.csv",
+    "yearly_csv": "data/reports/order_flow_1d_yearly.csv",
+    "source": "data/XAU_1d_data.csv"
+  }
+}
