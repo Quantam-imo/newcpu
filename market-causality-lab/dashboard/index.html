@@ -240,6 +240,38 @@
 
         .wheel-segment-state {
             font-size: 10px;
+
+                    .wheel-segment-guide {
+                        font-size: 9px;
+                        color: rgba(148,163,184,0.7);
+                        margin-top: 3px;
+                        line-height: 1.3;
+                        text-align: center;
+                        max-width: 92px;
+                    }
+                    .wheel-segment.current .wheel-segment-guide { color: #e2e8f0; }
+                    .wheel-segment-price {
+                        font-size: 10px;
+                        font-weight: 700;
+                        margin-top: 4px;
+                        font-variant-numeric: tabular-nums;
+                        letter-spacing: 0.03em;
+                    }
+                    .wheel-segment.current  .wheel-segment-price { color: #fde047; }
+                    .wheel-segment.next     .wheel-segment-price { color: #7dd3fc; }
+                    .wheel-center-price {
+                        font-size: 13px;
+                        font-weight: 800;
+                        color: #fde047;
+                        font-variant-numeric: tabular-nums;
+                        margin-top: 2px;
+                        letter-spacing: 0.02em;
+                    }
+                    .wheel-center-target {
+                        font-size: 10px;
+                        color: #7dd3fc;
+                        font-variant-numeric: tabular-nums;
+                    }
             color: var(--muted);
             text-transform: uppercase;
             letter-spacing: 0.7px;
@@ -2928,11 +2960,11 @@
 </head>
 <body>
     <div class="header">
-        <h1>
-            <span class="header-icon">🔬</span>
-            Market Causality Lab
-        </h1>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:8px;">
+            <h1 style="margin:0;">
+                <span class="header-icon">🔬</span>
+                Market Causality Lab
+            </h1>
             <span id="livePriceBadge" style="
                 background:rgba(250,204,21,0.12);
                 border:1px solid #ca8a04;
@@ -2946,36 +2978,36 @@
                 text-align:center;
             ">XAUUSD --</span>
             <span id="livePriceSource" style="font-size:11px;color:#6b7280;">--</span>
-                   <!-- Training Status Badge -->
-                   <span id="trainingStatusBadge" style="
-                       background:rgba(99,102,241,0.12);
-                       border:1px solid #6366f1;
-                       color:#a5b4fc;
-                       border-radius:6px;
-                       padding:4px 10px;
-                       font-size:12px;
-                       font-weight:700;
-                       letter-spacing:0.2px;
-                       cursor:pointer;
-                       transition:all 0.2s ease;
-                   " onclick="toggleTrainingPanel()" title="Click to expand training status">
-                       ⏳ Training: --/9
-                   </span>
-                   <!-- Model Calibration Badge -->
-                   <span id="calibrationBadge" style="
-                       background:rgba(16,185,129,0.12);
-                       border:1px solid #10b981;
-                       color:#86efac;
-                       border-radius:6px;
-                       padding:4px 10px;
-                       font-size:12px;
-                       font-weight:700;
-                       letter-spacing:0.2px;
-                       cursor:pointer;
-                       transition:all 0.2s ease;
-                   " onclick="toggleCalibrationPanel()" title="Click to expand calibration status">
-                       ✓ Model: --
-                   </span>
+            <!-- Training Status Badge -->
+            <span id="trainingStatusBadge" style="
+                background:rgba(99,102,241,0.12);
+                border:1px solid #6366f1;
+                color:#a5b4fc;
+                border-radius:6px;
+                padding:4px 10px;
+                font-size:12px;
+                font-weight:700;
+                letter-spacing:0.2px;
+                cursor:pointer;
+                transition:all 0.2s ease;
+            " onclick="toggleTrainingPanel()" title="Click to expand training status">
+                ⏳ Training: --/9
+            </span>
+            <!-- Model Calibration Badge -->
+            <span id="calibrationBadge" style="
+                background:rgba(16,185,129,0.12);
+                border:1px solid #10b981;
+                color:#86efac;
+                border-radius:6px;
+                padding:4px 10px;
+                font-size:12px;
+                font-weight:700;
+                letter-spacing:0.2px;
+                cursor:pointer;
+                transition:all 0.2s ease;
+            " onclick="toggleCalibrationPanel()" title="Click to expand calibration status">
+                ✓ Model: --
+            </span>
         </div>
         <div class="controls">
             <input type="text" id="symbolInput" placeholder="Symbol (e.g., XAUUSD)" value="XAUUSD" />
@@ -3663,7 +3695,7 @@
                         </thead>
                         <tbody id="mtfStructureBody">
                             <tr>
-                                <td colspan="13">Load analysis to compute multi-timeframe structure map.</td>
+                                <td colspan="14">Load analysis to compute multi-timeframe structure map.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -5071,7 +5103,8 @@
                     wheel_context_used: "unconditional",
                     wheel_context_runtime: "none",
                     order_flow_side: signalRaw.includes("BUY") ? "BUY" : (signalRaw.includes("SELL") ? "SELL" : "NEUTRAL"),
-                    order_flow_imbalance: confidence,
+                    // Keep fallback neutral when true tape imbalance is unavailable.
+                    order_flow_imbalance: 0,
                     flow_regime: "NEUTRAL",
                     iceberg_detected: false,
                     iceberg_side: "NONE",
@@ -5111,6 +5144,96 @@
                     projected_turn_date_utc: null,
                     date_timing_note: String(((astro.nearby_event || {}).detail) || "live snapshot fallback"),
                 },
+            };
+        }
+
+        function _deriveCrossTfIcebergConsensus(rows) {
+            const validRows = Array.isArray(rows)
+                ? rows.filter((row) => row && String(row.status || "ok").toLowerCase() !== "error")
+                : [];
+
+            if (validRows.length === 0) {
+                return {
+                    quality: "NO DATA",
+                    agreementPct: 0,
+                    dominantSide: "NEUTRAL",
+                    directionalCount: 0,
+                    coverage: 0,
+                    strongCount: 0,
+                    conflictCount: 0,
+                    bestTf: "--",
+                    bestScore: 0,
+                };
+            }
+
+            let buyCount = 0;
+            let sellCount = 0;
+            let strongCount = 0;
+            let coveredCount = 0;
+            let bestScore = 0;
+            let bestTf = "--";
+
+            for (const row of validRows) {
+                const tf = String(row?.timeframe || row?.applied_timeframe || row?.requested_timeframe || "--").toLowerCase();
+                const obs = row?.observation || {};
+                const tape = String(obs?.confirmation_tape_action || row?.observation_confirmation_tape_action || "").toUpperCase();
+                const liq = String(obs?.liquidity_signal || row?.observation_liquidity_signal || "").toUpperCase();
+                const signal = String(row?.signal || row?.filtered_signal || "WAIT").toUpperCase();
+                const trend = String(row?.trend || "").toUpperCase();
+                const comp = row?.compression || {};
+
+                const tapeAbsorb = /(ABSORB|ICEBERG|REFILL|PASSIVE|STACK)/.test(tape);
+                const tapeFail = /(REJECT|EXHAUST|FAILED|FAIL)/.test(tape);
+                const liqEvent = /(SWEEP|BLOCK|POOL|STOP)/.test(liq);
+                const breakoutNear = Boolean(comp?.breakout_near || row?.mcl_compression_breakout_near);
+                const phase = String(comp?.phase || "").toUpperCase();
+
+                let side = "NEUTRAL";
+                if (/(BUY|BID|LONG|ACCUM)/.test(tape) || signal === "BUY" || trend.includes("BUY") || trend.includes("BULL")) side = "BUY";
+                else if (/(SELL|ASK|SHORT|DIST)/.test(tape) || signal === "SELL" || trend.includes("SELL") || trend.includes("BEAR")) side = "SELL";
+
+                let score = 0;
+                if (tapeAbsorb) score += 42;
+                if (liqEvent) score += 18;
+                if (breakoutNear) score += 12;
+                if (phase === "EXPANSION" || phase === "RETRACEMENT") score += 8;
+                const conf = Number(row?.confidence);
+                if (Number.isFinite(conf)) score += Math.max(0, Math.min(1, conf)) * 20;
+                if (tapeFail) score -= 15;
+                if (side === "NEUTRAL") score -= 10;
+                score = Math.max(0, Math.min(100, Math.round(score)));
+
+                if (score >= 35) coveredCount++;
+                if (side === "BUY") buyCount++;
+                else if (side === "SELL") sellCount++;
+                if (score >= 65) strongCount++;
+
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestTf = tf.toUpperCase();
+                }
+            }
+
+            const directionalCount = buyCount + sellCount;
+            const dominantSide = buyCount > sellCount ? "BUY" : sellCount > buyCount ? "SELL" : "NEUTRAL";
+            const agreementPct = directionalCount > 0 ? Math.round((Math.max(buyCount, sellCount) / directionalCount) * 100) : 0;
+            const conflictCount = directionalCount > 0 ? Math.min(buyCount, sellCount) : 0;
+            const coverage = Math.round((coveredCount / Math.max(1, validRows.length)) * 100);
+
+            let quality = "WEAK";
+            if (dominantSide !== "NEUTRAL" && agreementPct >= 75 && strongCount >= 2) quality = "STRONG";
+            else if (dominantSide !== "NEUTRAL" && agreementPct >= 60 && strongCount >= 1) quality = "VALID";
+
+            return {
+                quality,
+                agreementPct,
+                dominantSide,
+                directionalCount,
+                coverage,
+                strongCount,
+                conflictCount,
+                bestTf,
+                bestScore,
             };
         }
 
@@ -5271,6 +5394,47 @@
             const absorptionPass = absorptionPct >= absorptionNeedPct;
             const flowPass = flowActualPct >= flowNeedPct;
             const phasePass = phaseActualPct != null && phaseActualPct >= phaseNeedPct;
+
+            // Detector hardening: score quality and invalidate likely fake absorption.
+            const persistenceBarsRaw = Number(conditions.iceberg_persistence_bars ?? conditions.absorption_persistence_bars ?? conditions.iceberg_duration_bars);
+            const persistenceNorm = Number.isFinite(persistenceBarsRaw) ? Math.max(0, Math.min(1, persistenceBarsRaw / 8)) : 0.5;
+            const postDispRaw = Number(conditions.post_absorption_displacement ?? conditions.absorption_followthrough ?? conditions.post_move_strength);
+            const postDispNorm = Number.isFinite(postDispRaw)
+                ? Math.max(0, Math.min(1, Math.abs(postDispRaw) > 1 ? Math.abs(postDispRaw) / 100 : Math.abs(postDispRaw)))
+                : 0.5;
+            const sideConflict = icebergDetected
+                && icebergSide !== "NONE"
+                && flowSide !== "NEUTRAL"
+                && icebergSide !== flowSide
+                && flowPass;
+            const quickReclaim = Boolean(conditions.iceberg_reclaim_fast || conditions.absorption_failed || conditions.fake_absorption_flag);
+            const lowPersistence = Number.isFinite(persistenceBarsRaw) && persistenceBarsRaw < 2;
+            const noFollowThrough = absorptionPass && postDispNorm < 0.2 && !phasePass;
+            const spoofRisk = sideConflict || quickReclaim || lowPersistence || noFollowThrough;
+            const detectorScoreRaw = (
+                absorptionScore * 0.42
+                + flowMagnitude * 0.18
+                + nextPhaseConfidenceNorm * 0.18
+                + persistenceNorm * 0.12
+                + postDispNorm * 0.10
+            )
+                - (sideConflict ? 0.22 : 0)
+                - (quickReclaim ? 0.24 : 0)
+                - (noFollowThrough ? 0.14 : 0)
+                - (lowPersistence ? 0.10 : 0);
+            const detectorConfidencePct = Math.round(Math.max(0, Math.min(1, detectorScoreRaw)) * 100);
+            const detectorValidity = spoofRisk
+                ? "INVALIDATED"
+                : (detectorConfidencePct >= 70 && absorptionPass ? "STRONG" : (detectorConfidencePct >= 45 ? "VALID" : "WEAK"));
+            const detectorTone = detectorValidity === "STRONG" ? "positive" : (detectorValidity === "INVALIDATED" ? "negative" : "warn");
+
+            if (icebergDetected && spoofRisk) {
+                nextMoveBias = "NEUTRAL / RISK";
+                nextMoveCall = "POSSIBLE SPOOF / FAKE ABSORPTION";
+                nextMoveReason = "Absorption signal failed quality checks (side conflict, weak persistence, or no follow-through).";
+                nextMoveTone = "warn";
+            }
+
             const gatePassCount = Number(absorptionPass) + Number(flowPass) + Number(phasePass);
             const gateTotal = 3;
             const gateProgressTone = gatePassCount === gateTotal ? "positive" : (gatePassCount === 0 ? "negative" : "warn");
@@ -5312,18 +5476,47 @@
             const symbolForTrend = (document.getElementById("symbolInput")?.value || DEFAULT_SYMBOL).toUpperCase();
             const institutionalTrend = _updateInstitutionalTrend(symbolForTrend, institutionalPressureScore);
             const institutionalTrendText = `${institutionalTrend.arrow} ${institutionalTrend.side} ${institutionalTrend.trendWord}`;
+            const icebergConsensus = _deriveCrossTfIcebergConsensus(window._lastLoadedRows || []);
+            const consensusTone = icebergConsensus.quality === "STRONG"
+                ? "positive"
+                : (icebergConsensus.quality === "VALID" ? "highlight" : "warn");
+
+            const PHASE_GUIDE = {
+                ACCUMULATION: { guide: "Smart money loading — buy dips, demand zones" },
+                MANIPULATION:  { guide: "Liquidity sweep — avoid breakouts, watch reversal" },
+                EXPANSION:     { guide: "Trend momentum — ride pullbacks, add to winners" },
+                DISTRIBUTION:  { guide: "Institutional offload — fade rallies, protect gains" },
+            };
+            const priceNow = Number.isFinite(Number(future.price_now)) ? Number(future.price_now).toFixed(2) : null;
+            const priceTarget = Number.isFinite(Number(future.price_target)) ? Number(future.price_target).toFixed(2) : null;
 
             const segmentHtml = ["ACCUMULATION", "MANIPULATION", "EXPANSION", "DISTRIBUTION"].map((fallbackPhase, idx) => {
                 const seg = segments[idx] || {};
-                const phase = String(seg.phase || fallbackPhase);
+                const phase = String(seg.phase || fallbackPhase).toUpperCase();
                 const prob = Number(seg.next_probability);
                 const isCurrent = Boolean(seg.is_current) || idx === currentPhaseCode;
                 const isNext = idx === nextPhaseIndex;
+                const guide = PHASE_GUIDE[phase]?.guide || "";
+
+                // Price label: current for active phase, target for next, iceberg detail for manip
+                let priceLabel = null;
+                if (isCurrent && priceNow)    priceLabel = `Now: ${priceNow}`;
+                else if (isNext && priceTarget) priceLabel = `Target: ${priceTarget}`;
+                if (phase === "MANIPULATION" && isCurrent && icebergDetected) {
+                    priceLabel = `Sweep ${_escapeHtml(icebergSide)} · ${absorptionPct}% abs`;
+                } else if (phase === "DISTRIBUTION" && isCurrent && priceTarget) {
+                    priceLabel = `Exit zone: ${priceTarget}`;
+                } else if (phase === "ACCUMULATION" && isCurrent && priceNow) {
+                    priceLabel = `Entry zone: ${priceNow}`;
+                }
+
                 return `
                     <div class="wheel-segment seg-${idx} ${isCurrent ? "current" : ""} ${isNext ? "next" : ""}">
                         <div class="wheel-segment-phase">${_escapeHtml(phase)}</div>
                         <div class="wheel-segment-prob">${Number.isFinite(prob) ? `${(prob * 100).toFixed(1)}%` : "--"}</div>
-                        <div class="wheel-segment-state">${isCurrent ? "Current Phase" : (isNext ? "Predicted Next" : "Rotation Odds")}</div>
+                        <div class="wheel-segment-state">${isCurrent ? "▶ Current" : (isNext ? "→ Next" : "Rotation Odds")}</div>
+                        ${guide ? `<div class="wheel-segment-guide">${_escapeHtml(guide)}</div>` : ""}
+                        ${priceLabel ? `<div class="wheel-segment-price">${priceLabel}</div>` : ""}
                     </div>
                 `;
             }).join("");
@@ -5337,6 +5530,8 @@
                             <div class="wheel-center">
                                 <div class="wheel-status-pill ${sentimentTone === "neutral" ? "caution" : sentimentTone}">${_escapeHtml(status)}</div>
                                 <div class="wheel-center-phase">${_escapeHtml(ring.current_phase || "UNKNOWN")}</div>
+                                ${priceNow ? `<div class="wheel-center-price">${priceNow}</div>` : ""}
+                                ${priceTarget ? `<div class="wheel-center-target">→ ${priceTarget}</div>` : ""}
                                 <div class="wheel-center-next">Next: ${_escapeHtml(ring.predicted_next_phase || "UNKNOWN")}</div>
                                 <div class="wheel-center-conf">${nextConfPct == null ? "--" : `${nextConfPct.toFixed(0)}%`}</div>
                             </div>
@@ -5432,6 +5627,10 @@
                                         <span>Absorption: ${absorptionPct}%</span>
                                         <span>Move confidence: ${combinedMoveConfidence}%</span>
                                     </div>
+                                    <div class="iceberg-readout" style="margin-top:4px;">
+                                        <span>Detector confidence: ${detectorConfidencePct}%</span>
+                                        <span class="iceberg-bias-pill ${detectorTone}">Validity: ${_escapeHtml(detectorValidity)}</span>
+                                    </div>
                                     <div class="iceberg-evidence">
                                         <div class="iceberg-evidence-row ${absorptionPass ? "pass" : ""}">
                                             <span class="iceberg-evidence-label">1) Absorption gate</span>
@@ -5455,7 +5654,12 @@
                                         <div><span class="iceberg-translation-label">Action:</span>${_escapeHtml(actionLine)}</div>
                                     </div>
                                     <div class="iceberg-next-call">${_escapeHtml(nextMoveCall)}</div>
-                                    <div class="wheel-chip-meta">${_escapeHtml(nextMoveReason)} | Type: ${_escapeHtml(absorptionType)} | Flow regime: ${_escapeHtml(String(conditions.flow_regime || "NEUTRAL").replaceAll("_", " "))} | Wheel ctx: ${_escapeHtml(wheelContextUsed)} | Runtime: ${_escapeHtml(wheelContextRuntime)} | Profile: ${_escapeHtml(icebergThresholdProfile.label)} [Abs≥${(icebergThresholds.absorptionBias * 100).toFixed(0)}% Flow≥${(icebergThresholds.flowLean * 100).toFixed(0)}% Conf≥${icebergThresholds.phaseStrongPct}%]</div>
+                                    <div class="wheel-chip-meta">${_escapeHtml(nextMoveReason)} | Type: ${_escapeHtml(absorptionType)} | Persistence: ${Number.isFinite(persistenceBarsRaw) ? `${Math.round(persistenceBarsRaw)} bars` : "--"} | Follow-through: ${Math.round(postDispNorm * 100)}% | Flow regime: ${_escapeHtml(String(conditions.flow_regime || "NEUTRAL").replaceAll("_", " "))} | Wheel ctx: ${_escapeHtml(wheelContextUsed)} | Runtime: ${_escapeHtml(wheelContextRuntime)} | Profile: ${_escapeHtml(icebergThresholdProfile.label)} [Abs≥${(icebergThresholds.absorptionBias * 100).toFixed(0)}% Flow≥${(icebergThresholds.flowLean * 100).toFixed(0)}% Conf≥${icebergThresholds.phaseStrongPct}%]</div>
+                                </div>
+                                <div class="wheel-chip ${consensusTone}">
+                                    <div class="wheel-chip-title">Cross-TF Iceberg Consensus</div>
+                                    <div class="wheel-chip-value">${_escapeHtml(icebergConsensus.dominantSide)} | ${icebergConsensus.agreementPct}% agreement (${_escapeHtml(icebergConsensus.quality)})</div>
+                                    <div class="wheel-chip-meta">Coverage: ${icebergConsensus.coverage}% | Strong TFs: ${icebergConsensus.strongCount} | Conflicts: ${icebergConsensus.conflictCount} | Best TF: ${_escapeHtml(icebergConsensus.bestTf)} (${icebergConsensus.bestScore}%)</div>
                                 </div>
                                 <div class="wheel-chip institutional-panel ${institutionalTone}">
                                     <div class="iceberg-panel-header">
@@ -6033,12 +6237,13 @@
                 ? rows.filter((row) => {
                     if (!row) return false;
                     const status = String(row.status || "ok").toLowerCase();
-                    return status === "ok" || status === "stale_timeout" || status === "";
+                    // Keep all non-error rows so timeframe structure stays visible even during partial timeouts.
+                    return status !== "error";
                 })
                 : [];
 
             if (validRows.length === 0) {
-                body.innerHTML = `<tr><td colspan="13">No structure rows available yet.</td></tr>`;
+                body.innerHTML = `<tr><td colspan="14">No structure rows available yet.</td></tr>`;
                 if (summaryEl) summaryEl.textContent = "Structure map pending...";
                 return;
             }
@@ -8064,16 +8269,16 @@
 
         function _chartTimeoutMsForTimeframe(timeframe) {
             const tf = String(timeframe || "1d").toLowerCase();
-            if (tf === "1m") return 30000;
-            if (tf === "5m") return 40000;
-            if (tf === "15m") return 70000;
-            if (tf === "30m") return 80000;
-            if (tf === "1h") return 90000;
-            if (tf === "4h") return 90000;
-            if (tf === "1d") return 60000;
-            if (tf === "1w") return 45000;
-            if (tf === "1month") return 35000;
-            return 60000;
+            if (tf === "1m") return 120000;
+            if (tf === "5m") return 120000;
+            if (tf === "15m") return 120000;
+            if (tf === "30m") return 120000;
+            if (tf === "1h") return 120000;
+            if (tf === "4h") return 120000;
+            if (tf === "1d") return 120000;
+            if (tf === "1w") return 120000;
+            if (tf === "1month") return 120000;
+            return 120000;
         }
 
         function _chartLookbackYearsForTimeframe(timeframe) {
@@ -11560,9 +11765,9 @@
         let _lastChartBarState = { close: null, time: null };
         const _liveUrlParams = new URLSearchParams(window.location.search || "");
         const _liveMode = {
-            preferSource: (_liveUrlParams.get("live_prefer") || "broker").toLowerCase(),
+            preferSource: (_liveUrlParams.get("live_prefer") || "goldapi").toLowerCase(),
             brokerOnly: ["1", "true", "yes", "on"].includes(String(_liveUrlParams.get("live_broker_only") || "0").toLowerCase()),
-            maxAgeSeconds: Math.max(5, Number(_liveUrlParams.get("live_max_age") || 45) || 45),
+            maxAgeSeconds: Math.max(5, Number(_liveUrlParams.get("live_max_age") || 120) || 120),
             maxDriftPct: Math.max(0.01, Number(_liveUrlParams.get("live_max_drift_pct") || 0.35) || 0.35),
         };
 
@@ -11570,6 +11775,13 @@
             const key = String(tf || "").toLowerCase();
             const map = { "1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400, "1w": 604800, "1month": 2592000 };
             return map[key] || 3600;
+        }
+
+        function _timeframeOrderIndex(tf, orderedFrames) {
+            const key = String(tf || "").toLowerCase();
+            const frames = Array.isArray(orderedFrames) ? orderedFrames : [];
+            const idx = frames.findIndex((item) => String(item || "").toLowerCase() === key);
+            return idx >= 0 ? idx : frames.length;
         }
 
         function _formatAgeSeconds(value) {
@@ -11629,7 +11841,8 @@
             const nowSec = Math.floor(Date.now() / 1000);
             const tf = document.getElementById("timeframeSelect")?.value || DEFAULT_TIMEFRAME;
             const tfSec = _timeframeToSeconds(tf);
-            const chartAgeSec = Number.isFinite(Number(_lastChartBarState.time)) ? Math.max(0, nowSec - Number(_lastChartBarState.time)) : null;
+            const _chartBarTime = _lastChartBarState.time;
+            const chartAgeSec = (_chartBarTime != null && _chartBarTime !== 0 && Number.isFinite(Number(_chartBarTime))) ? Math.max(0, nowSec - Number(_chartBarTime)) : null;
             const liveAgeSec = Number.isFinite(Number(_liveQuoteState.age)) ? Number(_liveQuoteState.age) : null;
 
             if (!Number.isFinite(livePrice)) reasons.push("live_na");

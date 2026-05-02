@@ -38,6 +38,13 @@ _CACHE_TTL_SECONDS = 300.0
 _summary_refresh_lock = threading.Lock()
 _summary_refresh_inflight: set[str] = set()
 
+# Chart data cache — keyed by (symbol, timeframe, source_mode, lookback_years, limit)
+# TTL: 5 minutes so the chart does not recompute on every page load.
+_chart_cache_lock = threading.Lock()
+_chart_cache_payloads: dict[str, dict[str, Any]] = {}
+_chart_cache_ts: dict[str, float] = {}
+_CHART_CACHE_TTL_SECONDS = 300.0
+
 _boundary_cache_lock = threading.Lock()
 _boundary_cache_payload: dict[str, Any] = {"mtime": None, "events": []}
 _boundary_alert_sent_at: dict[str, float] = {}
@@ -4292,6 +4299,39 @@ def _compute_chart(
     strict_mt5: bool = False,
     require_fresh_mt5: bool = False,
 ) -> dict[str, Any]:
+    # ── Cache check ──────────────────────────────────────────────────────────
+    _cache_key = f"{symbol}|{timeframe}|{source_mode}|{lookback_years}|{limit}|{int(strict_mt5)}|{int(require_fresh_mt5)}"
+    with _chart_cache_lock:
+        _cached_ts = _chart_cache_ts.get(_cache_key, 0.0)
+        if time.time() - _cached_ts < _CHART_CACHE_TTL_SECONDS:
+            _cached = _chart_cache_payloads.get(_cache_key)
+            if _cached is not None:
+                return _cached
+    # ── Compute ───────────────────────────────────────────────────────────────
+    _result = _compute_chart_uncached(
+        symbol=symbol,
+        timeframe=timeframe,
+        source_mode=source_mode,
+        lookback_years=lookback_years,
+        limit=limit,
+        strict_mt5=strict_mt5,
+        require_fresh_mt5=require_fresh_mt5,
+    )
+    with _chart_cache_lock:
+        _chart_cache_payloads[_cache_key] = _result
+        _chart_cache_ts[_cache_key] = time.time()
+    return _result
+
+
+def _compute_chart_uncached(
+    symbol: str = "XAUUSD",
+    timeframe: str = "1d",
+    source_mode: str = "historical_first",
+    lookback_years: int = 25,
+    limit: int = 12000,
+    strict_mt5: bool = False,
+    require_fresh_mt5: bool = False,
+) -> dict[str, Any]:
     symbol = _normalize_symbol(symbol)
     requested_timeframe = _normalize_timeframe(timeframe)
     source_mode = _normalize_source_mode(source_mode)
@@ -4478,6 +4518,111 @@ def _compute_chart(
             pass
 
         return None, None
+
+    def _latest_goldapi_spot_quote() -> tuple[float | None, int | None]:
+        """Fetch live XAUUSD spot price from gold-api.com (free, no API key required)."""
+        try:
+            import urllib.request as _urllib_req
+            import json as _json
+            from datetime import datetime as _dt, timezone as _tz
+
+            _req = _urllib_req.Request(
+                "https://api.gold-api.com/price/XAU",
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+            with _urllib_req.urlopen(_req, timeout=8) as _resp:
+                _data = _json.loads(_resp.read().decode())
+            _price = float(_data.get("price") or 0.0)
+            if _price <= 0:
+                return None, None
+            _ts_str = str(_data.get("updatedAt") or "")
+            try:
+                _ts = int(_dt.strptime(_ts_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=_tz.utc).timestamp())
+            except Exception:
+                _ts = int(time.time())
+            return round(_price, 4), _ts
+        except Exception:
+            return None, None
+
+    def _fetch_yahoo_finance_candles(tf_norm: str, start_epoch: int) -> list[dict]:
+        """Fetch OHLCV candles for GC=F (gold futures) from Yahoo Finance.
+
+        Free, no API key required. Returns list of {time, open, high, low, close, volume} dicts
+        with timestamps > start_epoch. For 4h, resamples from 1h data.
+        """
+        try:
+            import urllib.request as _urllib_req
+            import json as _json
+
+            _yf_interval_map = {
+                "1m": ("2m", "5d"),
+                "5m": ("5m", "60d"),
+                "15m": ("15m", "60d"),
+                "30m": ("30m", "60d"),
+                "1h": ("1h", "730d"),
+                "4h": ("1h", "730d"),
+                "1d": ("1d", "max"),
+            }
+            _yf_interval, _yf_range = _yf_interval_map.get(tf_norm, ("1h", "60d"))
+            _url = f"https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?interval={_yf_interval}&range={_yf_range}"
+            _req = _urllib_req.Request(_url, headers={"User-Agent": "Mozilla/5.0"})
+            with _urllib_req.urlopen(_req, timeout=15) as _resp:
+                _data = _json.loads(_resp.read().decode())
+            _result = _data["chart"]["result"][0]
+            _timestamps = _result.get("timestamp") or []
+            _quote = _result["indicators"]["quote"][0]
+            _opens = _quote.get("open") or []
+            _highs = _quote.get("high") or []
+            _lows = _quote.get("low") or []
+            _closes = _quote.get("close") or []
+            _volumes = _quote.get("volume") or []
+
+            _rows: list[dict] = []
+            for _i, _ts in enumerate(_timestamps):
+                if int(_ts) <= start_epoch:
+                    continue
+                try:
+                    _c = float(_closes[_i]) if _i < len(_closes) and _closes[_i] is not None else None
+                    _o = float(_opens[_i]) if _i < len(_opens) and _opens[_i] is not None else _c
+                    _h = float(_highs[_i]) if _i < len(_highs) and _highs[_i] is not None else _c
+                    _l = float(_lows[_i]) if _i < len(_lows) and _lows[_i] is not None else _c
+                    _v = float(_volumes[_i]) if _i < len(_volumes) and _volumes[_i] is not None else 0.0
+                except (TypeError, ValueError, IndexError):
+                    continue
+                if _c is None or _c <= 0:
+                    continue
+                _rows.append({
+                    "time": int(_ts),
+                    "open": float(_o or _c),
+                    "high": float(_h or max(_o or _c, _c)),
+                    "low": float(_l or min(_o or _c, _c)),
+                    "close": float(_c),
+                    "volume": max(0.0, float(_v)),
+                })
+
+            # Resample 1h → 4h buckets
+            if tf_norm == "4h" and _rows:
+                _bucket_secs = 4 * 3600
+                _agg: dict[int, dict] = {}
+                for _r in _rows:
+                    _bts = int((_r["time"] // _bucket_secs) * _bucket_secs)
+                    if _bts not in _agg:
+                        _agg[_bts] = {
+                            "time": _bts,
+                            "open": _r["open"], "high": _r["high"],
+                            "low": _r["low"], "close": _r["close"],
+                            "volume": _r["volume"],
+                        }
+                    else:
+                        _agg[_bts]["high"] = max(_agg[_bts]["high"], _r["high"])
+                        _agg[_bts]["low"] = min(_agg[_bts]["low"], _r["low"])
+                        _agg[_bts]["close"] = _r["close"]
+                        _agg[_bts]["volume"] += _r["volume"]
+                _rows = sorted(_agg.values(), key=lambda x: x["time"])
+
+            return _rows
+        except Exception:
+            return []
 
     def _latest_stooq_spot_quote(max_age_seconds: int = 6 * 3600) -> tuple[float | None, int | None]:
         """Fetch latest public XAUUSD spot quote from stooq for stale-chart tail fallback."""
@@ -4954,88 +5099,112 @@ def _compute_chart(
                 if _tf_norm in ("1m", "5m") and _gap_est > 7 * 24 * 3600:
                     raise RuntimeError("live_gap_fill_skipped_intraday_gap_too_large")
                 if _gap_est >= max(60, tf_seconds // 2):
-                    if not _mcl_databento_enabled():
-                        raise RuntimeError("databento_disabled_for_mcl")
-                    _api_key = str(_os.getenv("DATABENTO_API_KEY", "")).strip()
-                    if not _api_key:
-                        raise RuntimeError("DATABENTO_API_KEY not configured")
-                    import databento as _db
+                    if _tf_norm in ("1m", "1min"):
+                        # 1m has too many bars to backfill in real-time
+                        raise RuntimeError("live_gap_fill_skipped_1m_intraday")
 
-                    _start = _dt.fromtimestamp(historical_last_epoch + 1, tz=_tz.utc)
-                    # Stay 2h behind "now" to avoid Databento available-end errors
-                    _end = _dt.now(_tz.utc) - _td(hours=2)
-                    if _end <= _start:
-                        raise RuntimeError("gap too small or data too fresh for backfill")
-
-                    if _tf_norm in ("1m", "1min", "5m", "15m", "30m"):
-                        # Keep intraday chart endpoint responsive by avoiding remote intraday backfill.
-                        raise RuntimeError("live_gap_fill_skipped_intraday_remote_backfill")
-                    elif _tf_norm in ("1h",):
-                        raise RuntimeError("live_gap_fill_skipped_intraday_remote_backfill")
-                    elif _tf_norm in ("4h",):
-                        raise RuntimeError("live_gap_fill_skipped_intraday_remote_backfill")
-                    elif _tf_norm in ("1d", "daily", "day"):
-                        _schema, _resample_rule = "ohlcv-1h", "1D"
-                    else:
-                        _schema, _resample_rule = "ohlcv-1h", None
-
-                    _client = _db.Historical(_api_key)
-                    _raw = _client.timeseries.get_range(
-                        dataset="GLBX.MDP3",
-                        symbols=["GC.c.0"],
-                        stype_in="continuous",
-                        schema=_schema,
-                        start=_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                        end=_end.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    )
-                    _gap_df = _raw.to_df().reset_index()
-                    _gap_df = _gap_df.rename(columns={"ts_event": "time"})
-                    _gap_df["time"] = _pd.to_datetime(_gap_df["time"], utc=True)
-                    _gap_df = _gap_df[["time", "open", "high", "low", "close", "volume"]].dropna(
-                        subset=["time", "open", "close"]
-                    )
-                    # Scale fixed-point prices if needed
-                    if not _gap_df.empty and float(_gap_df["close"].iloc[0]) > 100000:
-                        for _c in ("open", "high", "low", "close"):
-                            _gap_df[_c] = _gap_df[_c] / 1e9
-                    # Resample to applied_timeframe if needed
-                    if _resample_rule and not _gap_df.empty:
-                        _gap_df = (
-                            _gap_df.set_index("time")
-                            .resample(_resample_rule, closed="left", label="left")
-                            .agg(
-                                open=("open", "first"),
-                                high=("high", "max"),
-                                low=("low", "min"),
-                                close=("close", "last"),
-                                volume=("volume", "sum"),
-                            )
-                            .dropna(subset=["open", "close"])
-                            .reset_index()
-                        )
-                    if not _gap_df.empty:
-                        for _gr in _gap_df.itertuples(index=False):
-                            _t = int(_gr.time.timestamp())
-                            _o = float(_gr.open or 0.0)
-                            _h = float(_gr.high or 0.0)
-                            _l = float(_gr.low or 0.0)
-                            _c = float(_gr.close or 0.0)
-                            _v = float(getattr(_gr, "volume", 0.0) or 0.0)
+                    if _tf_norm in ("5m", "15m", "30m", "1h", "4h"):
+                        # Free intraday gap-fill via Yahoo Finance GC=F (no API key required)
+                        _yf_rows = _fetch_yahoo_finance_candles(_tf_norm, historical_last_epoch)
+                        if not _yf_rows:
+                            raise RuntimeError("yahoo_finance_gap_fill_unavailable")
+                        _yf_added = 0
+                        for _gr in _yf_rows:
+                            _t = int(_gr["time"])
+                            _c = float(_gr.get("close") or 0.0)
+                            _o = float(_gr.get("open") or _c)
+                            _h = float(_gr.get("high") or max(_o, _c))
+                            _l = float(_gr.get("low") or min(_o, _c))
+                            _v = float(_gr.get("volume") or 0.0)
                             if _c > 0.0 and _t > historical_last_epoch:
-                                rows.append(
-                                    {
-                                        "time": _t,
-                                        "open": _o,
-                                        "high": _h,
-                                        "low": _l,
-                                        "close": _c,
-                                        "volume": max(0.0, _v),
-                                    }
+                                rows.append({
+                                    "time": _t, "open": _o, "high": _h,
+                                    "low": _l, "close": _c,
+                                    "volume": max(0.0, _v),
+                                })
+                                _yf_added += 1
+                        if _yf_added > 0:
+                            live_last_epoch = int(_yf_rows[-1]["time"])
+                            live_gap_seconds = int(max(0, live_last_epoch - historical_last_epoch))
+                            live_gap_fill_applied = True
+                            live_gap_reason = f"yahoo_finance_gc_fill_{_yf_added}_candles"
+                    else:
+                        # Databento path for daily / weekly timeframes
+                        if not _mcl_databento_enabled():
+                            raise RuntimeError("databento_disabled_for_mcl")
+                        _api_key = str(_os.getenv("DATABENTO_API_KEY", "")).strip()
+                        if not _api_key:
+                            raise RuntimeError("DATABENTO_API_KEY not configured")
+                        import databento as _db
+
+                        _start = _dt.fromtimestamp(historical_last_epoch + 1, tz=_tz.utc)
+                        # Stay 2h behind "now" to avoid Databento available-end errors
+                        _end = _dt.now(_tz.utc) - _td(hours=2)
+                        if _end <= _start:
+                            raise RuntimeError("gap too small or data too fresh for backfill")
+
+                        if _tf_norm in ("1d", "daily", "day"):
+                            _schema, _resample_rule = "ohlcv-1h", "1D"
+                        else:
+                            _schema, _resample_rule = "ohlcv-1h", None
+
+                        _client = _db.Historical(_api_key)
+                        _raw = _client.timeseries.get_range(
+                            dataset="GLBX.MDP3",
+                            symbols=["GC.c.0"],
+                            stype_in="continuous",
+                            schema=_schema,
+                            start=_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                            end=_end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        )
+                        _gap_df = _raw.to_df().reset_index()
+                        _gap_df = _gap_df.rename(columns={"ts_event": "time"})
+                        _gap_df["time"] = _pd.to_datetime(_gap_df["time"], utc=True)
+                        _gap_df = _gap_df[["time", "open", "high", "low", "close", "volume"]].dropna(
+                            subset=["time", "open", "close"]
+                        )
+                        # Scale fixed-point prices if needed
+                        if not _gap_df.empty and float(_gap_df["close"].iloc[0]) > 100000:
+                            for _c in ("open", "high", "low", "close"):
+                                _gap_df[_c] = _gap_df[_c] / 1e9
+                        # Resample to applied_timeframe if needed
+                        if _resample_rule and not _gap_df.empty:
+                            _gap_df = (
+                                _gap_df.set_index("time")
+                                .resample(_resample_rule, closed="left", label="left")
+                                .agg(
+                                    open=("open", "first"),
+                                    high=("high", "max"),
+                                    low=("low", "min"),
+                                    close=("close", "last"),
+                                    volume=("volume", "sum"),
                                 )
-                        live_last_epoch = int(_gap_df["time"].max().timestamp())
-                        live_gap_seconds = int(max(0, live_last_epoch - historical_last_epoch))
-                        live_gap_fill_applied = True
-                        live_gap_reason = f"databento_backfill_{len(_gap_df)}_candles"
+                                .dropna(subset=["open", "close"])
+                                .reset_index()
+                            )
+                        if not _gap_df.empty:
+                            for _gr in _gap_df.itertuples(index=False):
+                                _t = int(_gr.time.timestamp())
+                                _o = float(_gr.open or 0.0)
+                                _h = float(_gr.high or 0.0)
+                                _l = float(_gr.low or 0.0)
+                                _c = float(_gr.close or 0.0)
+                                _v = float(getattr(_gr, "volume", 0.0) or 0.0)
+                                if _c > 0.0 and _t > historical_last_epoch:
+                                    rows.append(
+                                        {
+                                            "time": _t,
+                                            "open": _o,
+                                            "high": _h,
+                                            "low": _l,
+                                            "close": _c,
+                                            "volume": max(0.0, _v),
+                                        }
+                                    )
+                            live_last_epoch = int(_gap_df["time"].max().timestamp())
+                            live_gap_seconds = int(max(0, live_last_epoch - historical_last_epoch))
+                            live_gap_fill_applied = True
+                            live_gap_reason = f"databento_backfill_{len(_gap_df)}_candles"
         except Exception as exc:
             live_gap_reason = f"live_gap_fill_unavailable: {exc}"
             # Databento gap-fill may be unavailable (auth/network). First use local persisted
@@ -5338,6 +5507,7 @@ def _compute_chart(
 
             # Public spot tail fallback when MT5/local quote is unavailable and the
             # intraday chart is still stale after local tail attempts.
+            # Priority: stooq → gold-api.com (both free, no API key)
             try:
                 _bucket = max(60, _timeframe_seconds(applied_timeframe))
                 _now_epoch = int(time.time())
@@ -5346,13 +5516,22 @@ def _compute_chart(
                 _is_intraday = str(applied_timeframe).lower().strip() in {"1m", "5m", "15m", "30m", "1h", "4h"}
                 if _allow_live_tail_patch and _is_intraday and _last_epoch > 0 and (_now_aligned - _last_epoch) >= _bucket:
                     _stooq_max_age = int(max(300, float(os.getenv("MCL_STOOQ_MAX_AGE_SEC", str(6 * 3600)))))
+                    _spot_price, _spot_ts, _spot_src = None, None, None
+                    # Try stooq first
                     _stooq_price, _stooq_ts = _latest_stooq_spot_quote(max_age_seconds=_stooq_max_age)
                     if _stooq_price is not None and _stooq_price > 0.0 and _stooq_ts is not None:
-                        _aligned_stooq_ts = int((_stooq_ts // _bucket) * _bucket)
-                        _target_ts = min(_now_aligned, _aligned_stooq_ts)
+                        _spot_price, _spot_ts, _spot_src = _stooq_price, _stooq_ts, "stooq_tail"
+                    else:
+                        # Fallback: gold-api.com (free, no API key, real-time)
+                        _ga_price, _ga_ts = _latest_goldapi_spot_quote()
+                        if _ga_price is not None and _ga_price > 0.0:
+                            _spot_price, _spot_ts, _spot_src = _ga_price, (_ga_ts or int(time.time())), "goldapi_tail"
+                    if _spot_price is not None and _spot_ts is not None:
+                        _aligned_spot_ts = int((_spot_ts // _bucket) * _bucket)
+                        _target_ts = min(_now_aligned, _aligned_spot_ts)
                         if _target_ts > _last_epoch:
-                            _o = float(rows[-1].get("close") or _stooq_price)
-                            _c = float(_stooq_price)
+                            _o = float(rows[-1].get("close") or _spot_price)
+                            _c = float(_spot_price)
                             _h = max(_o, _c)
                             _l = min(_o, _c)
                             rows.append(
@@ -5369,9 +5548,9 @@ def _compute_chart(
                             live_gap_seconds = int(max(0, live_last_epoch - _last_epoch))
                             live_gap_fill_applied = True
                             if live_gap_reason:
-                                live_gap_reason = f"{live_gap_reason}|stooq_tail"
+                                live_gap_reason = f"{live_gap_reason}|{_spot_src}"
                             else:
-                                live_gap_reason = "stooq_tail"
+                                live_gap_reason = str(_spot_src)
             except Exception:
                 pass
 
@@ -5770,11 +5949,14 @@ def market_causality_live_price(
             1. Local/MT5 bridge quote files (primary for MCL)
             2. Maven broker DOM (real-time XAUUSD spot via CDP bridge)
             3. stooq.com XAUUSD spot (free, no API key, ~seconds delay)
-            4. Databento futures fallback (optional; disabled by default for MCL)
+            4. gold-api.com (free, no API key, real-time gold price)
+            5. Yahoo Finance GC=F (free, no API key, GC futures price)
+            6. Databento futures fallback (optional; disabled by default for MCL)
     Used by the MCL dashboard for periodic live price polling.
     """
     import pandas as _pd
     import urllib.request as _urllib_req
+    import json as _json_lp
 
     symbol = _normalize_symbol(symbol)
     started_at = time.time()
@@ -5906,10 +6088,71 @@ def market_causality_live_price(
         except Exception:
             return None
 
+    def _fetch_goldapi_live_quote() -> dict[str, Any] | None:
+        """Fetch real-time gold price from gold-api.com (free, no API key)."""
+        try:
+            from datetime import datetime as _dt_lp, timezone as _tz_lp
+            _req = _urllib_req.Request(
+                "https://api.gold-api.com/price/XAU",
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+            with _urllib_req.urlopen(_req, timeout=8) as _resp:
+                _data = _json_lp.loads(_resp.read().decode())
+            _price = float(_data.get("price") or 0.0)
+            if _price <= 0:
+                return None
+            _ts_str = str(_data.get("updatedAt") or "")
+            try:
+                _ts = int(_dt_lp.strptime(_ts_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=_tz_lp.utc).timestamp())
+            except Exception:
+                _ts = int(time.time())
+            _age = int(max(0, time.time() - _ts))
+            # gold-api.com updates at most once per minute; allow up to 120s
+            if _age > max(max_age_seconds, 120):
+                return None
+            return {
+                "price": round(float(_price), 4),
+                "source": "goldapi_xauusd_spot",
+                "spot": True,
+                "ts": _ts,
+            }
+        except Exception:
+            return None
+
+    def _fetch_yahoo_finance_live_quote() -> dict[str, Any] | None:
+        """Fetch live GC=F (gold futures) price from Yahoo Finance (free, no API key)."""
+        try:
+            _req = _urllib_req.Request(
+                "https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?interval=1m&range=1d",
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+            with _urllib_req.urlopen(_req, timeout=10) as _resp:
+                _data = _json_lp.loads(_resp.read().decode())
+            _meta = _data["chart"]["result"][0]["meta"]
+            _price = float(_meta.get("regularMarketPrice") or 0.0)
+            _ts = int(_meta.get("regularMarketTime") or time.time())
+            if _price <= 0:
+                return None
+            _age = int(max(0, time.time() - _ts))
+            if _age > max_age_seconds:
+                return None
+            return {
+                "price": round(float(_price), 4),
+                "source": "yahoo_finance_gc_futures",
+                "spot": False,
+                "ts": _ts,
+            }
+        except Exception:
+            return None
+
     mt5_quote = _fetch_mt5_local_quote()
     broker_quote = _fetch_broker_quote()
     stooq_quote: dict[str, Any] | None = None
     stooq_loaded = False
+    goldapi_quote: dict[str, Any] | None = None
+    goldapi_loaded = False
+    yahoo_quote: dict[str, Any] | None = None
+    yahoo_loaded = False
     databento_quote: dict[str, Any] | None = None
     databento_loaded = False
 
@@ -5919,6 +6162,20 @@ def market_causality_live_price(
             stooq_quote = _fetch_stooq_quote()
             stooq_loaded = True
         return stooq_quote
+
+    def _get_goldapi_quote() -> dict[str, Any] | None:
+        nonlocal goldapi_quote, goldapi_loaded
+        if not goldapi_loaded:
+            goldapi_quote = _fetch_goldapi_live_quote()
+            goldapi_loaded = True
+        return goldapi_quote
+
+    def _get_yahoo_quote() -> dict[str, Any] | None:
+        nonlocal yahoo_quote, yahoo_loaded
+        if not yahoo_loaded:
+            yahoo_quote = _fetch_yahoo_finance_live_quote()
+            yahoo_loaded = True
+        return yahoo_quote
 
     def _get_databento_quote() -> dict[str, Any] | None:
         nonlocal databento_quote, databento_loaded
@@ -5949,13 +6206,13 @@ def market_causality_live_price(
     if broker_only:
         selected_quote = broker_quote
     elif prefer_source in {"mt5", "mcl", "local", "bridge"}:
-        selected_quote = mt5_quote or broker_quote or _get_stooq_quote() or _get_databento_quote()
+        selected_quote = mt5_quote or broker_quote or _get_stooq_quote() or _get_goldapi_quote() or _get_yahoo_quote() or _get_databento_quote()
     elif prefer_source in {"stooq", "spot", "public_spot"}:
-        selected_quote = _get_stooq_quote() or mt5_quote or broker_quote or _get_databento_quote()
+        selected_quote = _get_stooq_quote() or _get_goldapi_quote() or mt5_quote or broker_quote or _get_yahoo_quote() or _get_databento_quote()
     elif prefer_source in {"databento", "futures", "proxy"}:
-        selected_quote = _get_databento_quote() or mt5_quote or broker_quote or _get_stooq_quote()
+        selected_quote = _get_databento_quote() or mt5_quote or broker_quote or _get_stooq_quote() or _get_goldapi_quote() or _get_yahoo_quote()
     else:
-        selected_quote = mt5_quote or broker_quote or _get_stooq_quote() or _get_databento_quote()
+        selected_quote = mt5_quote or broker_quote or _get_stooq_quote() or _get_goldapi_quote() or _get_yahoo_quote() or _get_databento_quote()
 
     if selected_quote is None:
         return {
