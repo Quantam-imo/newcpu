@@ -10,6 +10,8 @@ from backend.engines.time_compression_engine import time_compression_engine
 from backend.engines.order_flow_engine import order_flow_engine
 from backend.sync.sync_engine import sync_engine
 from backend.engines.amd_ifvg_engine import amd_ifvg_latest
+from backend.engines.ict_engine import compute_ict_context
+from backend.engines.novel_signal_engine import run_novel_signals
 
 
 def _extract_news_context(sub_df):
@@ -1087,6 +1089,7 @@ def scan_market(df, max_records=None, recent_window=250):
         decision_context = _extract_decision_context(location, trigger, participation, cycle, phase)
         turtle_soup = _extract_turtle_soup_context(sub_df)
         amd_ifvg = _extract_amd_ifvg_context(sub_df)
+        ict = compute_ict_context(sub_df)
         reliability = _extract_reliability_context(
             state=state,
             gann=gann,
@@ -1123,8 +1126,13 @@ def scan_market(df, max_records=None, recent_window=250):
             "decision_context": decision_context,
             "turtle_soup": turtle_soup,
             "amd_ifvg": amd_ifvg,
+            "ict": ict,
             "reliability": reliability,
         }
+
+        # Novel discovery signals — must run AFTER the record is assembled
+        # so all sub-system fields are available to the signal functions.
+        record["novel_signals"] = run_novel_signals(record)
 
         memory.append(record)
 

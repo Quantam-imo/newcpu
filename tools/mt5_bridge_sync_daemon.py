@@ -15,7 +15,12 @@ from typing import Any
 
 import pandas as pd
 
-from mt5_bridge_to_mcl import _load_mt5_csv, _write_outputs
+from mt5_bridge_to_mcl import (
+    _load_mt5_csv,
+    _write_outputs,
+    persist_history_from_bridge_frame,
+    refresh_derived_from_daily,
+)
 
 # Timeframes to auto-generate by resampling the base (5m) feed.
 # Keys = target TF label, values = pandas resample rule.
@@ -82,6 +87,8 @@ def main() -> int:
     symbol = _env_str("MT5_BRIDGE_SYMBOL", "XAUUSD").upper()
     timeframe = _env_str("MT5_BRIDGE_TIMEFRAME", "5m").lower()
     out_dir = Path(_env_str("MT5_BRIDGE_OUT_DIR", "/workspaces/newcpu/market-causality-lab/data/live/mt5")).expanduser().resolve()
+    data_dir = Path(_env_str("MT5_BRIDGE_DATA_DIR", "/workspaces/newcpu/market-causality-lab/data")).expanduser().resolve()
+    persist_history = _env_int("MT5_BRIDGE_PERSIST_HISTORY", 1) == 1
     poll_sec = _env_int("MT5_BRIDGE_POLL_SEC", 1)
     stable_polls = _env_int("MT5_BRIDGE_STABLE_POLLS", 1)
     lag_alert_sec = _env_int("MT5_BRIDGE_LAG_ALERT_SEC", 15)
@@ -90,7 +97,7 @@ def main() -> int:
         "starting"
         f" source_dir={source_dir} glob={source_glob} symbol={symbol}"
         f" timeframe={timeframe} poll_sec={poll_sec} stable_polls={stable_polls}"
-        f" lag_alert_sec={lag_alert_sec}"
+        f" lag_alert_sec={lag_alert_sec} persist_history={int(persist_history)} data_dir={data_dir}"
     )
 
     last_processed: tuple[str, int, int] | None = None
@@ -137,19 +144,37 @@ def main() -> int:
             df = _load_mt5_csv(newest)
             intraday, export_copy = _write_outputs(df=df, symbol=symbol, timeframe=timeframe, out_dir=out_dir)
             last_processed = key
+            persisted: list[str] = []
+
+            if persist_history:
+                target = persist_history_from_bridge_frame(df=df, timeframe=timeframe, data_dir=data_dir)
+                if target is not None:
+                    persisted.append(str(target))
 
             # Auto-generate higher timeframes by resampling the base feed
             for tf_label, resample_rule in _RESAMPLE_TFS.items():
                 try:
                     df_rs = _resample_df(df, resample_rule)
                     _write_outputs(df=df_rs, symbol=symbol, timeframe=tf_label, out_dir=out_dir)
+                    if persist_history:
+                        target = persist_history_from_bridge_frame(df=df_rs, timeframe=tf_label, data_dir=data_dir)
+                        if target is not None:
+                            persisted.append(str(target))
                 except Exception as exc:
                     _log(f"warning: failed to resample {tf_label}: {exc}")
+
+            if persist_history:
+                try:
+                    derived = refresh_derived_from_daily(data_dir=data_dir)
+                    persisted.extend(str(path) for path in derived)
+                except Exception as exc:
+                    _log(f"warning: failed to refresh derived 1w/1month: {exc}")
 
             _log(
                 f"bridge updated rows={len(df)} tfs={timeframe}+"
                 + ",".join(_RESAMPLE_TFS.keys())
                 + f" intraday={intraday} export={export_copy}"
+                + (f" persisted={','.join(persisted)}" if persisted else "")
             )
         except KeyboardInterrupt:
             _log("stopped by keyboard interrupt")

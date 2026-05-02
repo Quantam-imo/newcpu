@@ -1,13 +1,13 @@
 {
-  "version": "memory-20260426T134144Z",
-  "requested_timeframe": "1d",
-  "model_timeframe": "15m",
+  "version": "memory-20260426T130845Z",
+  "requested_timeframe": "5m",
+  "model_timeframe": "5m",
   "drift": {
     "status": "degraded",
-    "current_brier": 0.453063,
-    "current_accuracy": 0.501114,
-    "baseline_brier": 0.046573,
-    "baseline_accuracy": 0.95103,
+    "current_brier": 0.28403,
+    "current_accuracy": 0.71,
+    "baseline_brier": 0.009478,
+    "baseline_accuracy": 0.990432,
     "drift_detected": true,
     "reason": "brier_or_accuracy_regression"
   }

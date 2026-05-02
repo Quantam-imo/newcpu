@@ -20,6 +20,7 @@ from backend.ai.modeling.feature_pipeline import (
     standardize_transform,
 )
 from backend.ai.modeling.registry import load_latest_bundle
+from backend.engines.intraday_strategy_engine import evaluate_bar, calculate_position_size
 
 
 def _decision_from_prob(p_buy: float) -> str:
@@ -241,6 +242,52 @@ def decide_with_model(
 
         decision = _decision_from_prob(p_buy)
         meta = _meta_base(bundle, bundle_source, model_scope, feature_version)
+
+        # ── IKZC Strategy Signal ──────────────────────────────────────────────
+        strategy_signal = None
+        try:
+            import pandas as _pd
+            bars_raw = [
+                {
+                    "open":   float((m.get("bar") or {}).get("open", 0)),
+                    "high":   float((m.get("bar") or {}).get("high", 0)),
+                    "low":    float((m.get("bar") or {}).get("low", 0)),
+                    "close":  float((m.get("bar") or {}).get("close", 0)),
+                    "volume": float((m.get("bar") or {}).get("volume", 0)),
+                }
+                for m in memory[-60:]
+                if (m.get("bar") or {}).get("close")
+            ]
+            if bars_raw:
+                bars_df = _pd.DataFrame(bars_raw)
+                sig = evaluate_bar(memory[-1], p_buy, bars_df)
+                if sig is not None:
+                    strategy_signal = {
+                        "active":          True,
+                        "direction":       sig.direction,
+                        "entry":           sig.entry_price,
+                        "stop":            sig.stop_price,
+                        "tp1":             sig.tp1_price,
+                        "tp2":             sig.tp2_price,
+                        "risk_points":     sig.risk_points,
+                        "rr_ratio":        sig.rr_ratio,
+                        "kill_zone":       sig.kill_zone,
+                        "model_prob":      sig.model_prob,
+                        "ict_score":       sig.ict_score,
+                        "ict_concepts":    sig.ict_concepts,
+                        "pd_position_pct": sig.pd_position_pct,
+                        "active_signals":  sig.active_signals,
+                        "confidence":      sig.confidence_score,
+                        "notes":           sig.notes,
+                        "position_sizing": calculate_position_size(
+                            account_balance=10000.0,
+                            stop_distance=sig.risk_points,
+                        ),
+                    }
+        except Exception:
+            pass
+        # ─────────────────────────────────────────────────────────────────────
+
         meta.update({
             "used_model": True,
             "model_name": (best.get("name") or model_payload.get("name") or "unknown"),
@@ -250,6 +297,7 @@ def decide_with_model(
             "p_sell": round(1.0 - p_buy, 6),
             "drift": drift_meta,
             "trigger_direction": live_trigger_direction,
+            "strategy_signal": strategy_signal,
         })
         return decision, meta
     except Exception as exc:

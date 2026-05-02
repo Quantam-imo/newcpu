@@ -172,12 +172,121 @@ ELLIOTT_UNIFIED_FEATURE_NAMES = LAYERED_FEATURE_NAMES + [
     "elliott_wheel_phase_rotation_gate",
 ]
 
+GANN_ICT_FEATURE_NAMES = ELLIOTT_UNIFIED_FEATURE_NAMES + [
+    # === Gann fan angle features ===
+    "gann_1x1_angle_above",           # price is above the 1x1 (45°) angle from major swing low
+    "gann_1x2_angle_active",          # trend is steep (>63.4°) — 1 price unit per 2 time units
+    "gann_2x1_angle_active",          # trend is slow (<26.6°) — 2 time units per 1 price unit
+    "gann_sq9_next_level_distance",   # normalised distance to next Sq9 cardinal level (0–1)
+    "gann_time_cycle_90d_window",     # within the 90-day Gann time-cycle window
+    "gann_time_cycle_360d_window",    # within the annual Gann time-cycle window
+    "gann_master_price_number",       # price is near a Gann master number (144, 288, 432…)
+    # === ICT killzone & precision features ===
+    "ict_killzone_london_open",       # current bar is inside London Open killzone (02:00–05:00 EST)
+    "ict_killzone_ny_open",           # current bar is inside New York Open killzone (07:00–10:00 EST)
+    "ict_optimal_trade_entry",        # OTE retracement (61.8–79%) into a FVG is active
+    "ict_mss_active",                 # Market Structure Shift (bullish or bearish) detected
+    "ict_fvg_present",                # Fair Value Gap present near current price
+    "ict_breaker_block",              # Failed order block flipped to opposite use
+    "ict_power_of_3_phase",           # AMD phase score: accumulation=0, manipulation=0.5, distribution=1
+    "ict_previous_day_high_near",     # price is within 1 ATR of previous day's high
+    "ict_weekly_bias_bullish",        # weekly candle direction is bullish
+    "ict_weekly_bias_score",          # normalised weekly directional bias (−1 to +1 mapped to 0–1)
+]
+
+# === v7 Novel Discovery — 5 original signals never defined in any trading methodology ===
+NOVEL_FEATURE_NAMES = GANN_ICT_FEATURE_NAMES + [
+    # Entropy Collapse Signal (ECS)
+    "novel_ecs_active",            # all sub-systems simultaneously at minimum entropy (coiled spring)
+    "novel_ecs_strength",          # 0–1 strength of entropy collapse
+    "novel_ecs_energy_stored",     # compression energy loaded at collapse point
+    # Nakshatra Velocity Anomaly (NVA)
+    "novel_nva_active",            # lunar transition + Gann rotation velocity anomaly
+    "novel_nva_strength",          # 0–1 strength of rotation velocity spike
+    "novel_nva_rot_velocity",      # angular velocity of price rotation (deg / 3 bars)
+    # Planetary Aspect Compression Lock (PACL)
+    "novel_pacl_active",           # 3+ planetary aspects holding a structural lock
+    "novel_pacl_strength",         # 0–1 strength of astro pressure lock
+    "novel_pacl_aspect_count",     # number of active planetary aspects
+    # Reliability Inversion Signal (RIS)
+    "novel_ris_active",            # manufactured conflict → deceptive move about to reverse
+    "novel_ris_strength",          # 0–1 strength of inversion
+    "novel_ris_conflict_score",    # raw conflict score at inversion
+    # Cycle Alignment Resonance (CAR)
+    "novel_car_active",            # Elliott + Gann + lunar three-system resonance
+    "novel_car_strength",          # 0–1 resonance strength
+    "novel_car_cycle_align",       # Elliott cycle alignment score component
+    # Cross-signal composite
+    "novel_signal_count",          # number of novel signals active simultaneously
+    "novel_combined_strength",     # directional-weighted average strength of active signals
+]
+
+# v8: adds Volume-Structure Trend Bias (VSTB) signal features
+VSTB_FEATURE_NAMES = NOVEL_FEATURE_NAMES + [
+    # Volume-Structure Trend Bias (VSTB) — empirically strongest predictor (88% at 4h)
+    "novel_vstb_active",           # quiet vol in uptrend OR loud vol in downtrend
+    "novel_vstb_strength",         # 0–1 strength of volume-trend confluence
+    "novel_vstb_vol_z",            # raw volume z-score at signal bar
+]
+
+# v9: adds FRV signal + full ICT engine context (25 ICT + 2 FRV + 3 ICT composite = 30 new features)
+ICT_EXTENDED_FEATURE_NAMES = VSTB_FEATURE_NAMES + [
+    # === FRV signal (Fade Reversal — 54.3% at 15m, 19,246 events, 26yr) ===
+    "novel_frv_active",            # fade reversal setup active
+    "novel_frv_strength",          # 0–1 strength of fade reversal setup
+    # === ICT Composite Signal ===
+    "novel_ict_signal_active",     # ICT composite signal active (score>=0.30, 2+ conditions)
+    "novel_ict_signal_strength",   # 0–1 ICT composite strength
+    "novel_ict_signal_score",      # raw ICT setup score (0–1 alignment of concepts)
+    # === ICT Engine — PD Array ===
+    "ict_pd_premium",              # price in premium zone (>55% of HTF range) → sell zone
+    "ict_pd_discount",             # price in discount zone (<45% of HTF range) → buy zone
+    "ict_pd_equilibrium",          # price near equilibrium (45–55%) → neutral
+    "ict_pd_price_position_pct",   # normalised price position in range (0=bottom, 1=top)
+    # === ICT Engine — HTF Bias ===
+    "ict_htf_daily_bullish",       # today's price above prior day's midpoint
+    "ict_htf_daily_bearish",       # today's price below prior day's midpoint
+    "ict_htf_weekly_bullish",      # price above weekly range midpoint
+    "ict_htf_weekly_bearish",      # price below weekly range midpoint
+    # === ICT Engine — Session Setups ===
+    "ict_judas_swing_buy",         # Judas Swing detected — false down spike before real up move
+    "ict_judas_swing_sell",        # Judas Swing detected — false up spike before real down move
+    "ict_judas_strength",          # strength of Judas rejection wick (0–1)
+    "ict_silver_bullet_active",    # Silver Bullet setup active (10–11am or 2–3pm EST)
+    "ict_silver_bullet_buy",       # Silver Bullet BUY direction (discount + FVG + displacement)
+    "ict_silver_bullet_sell",      # Silver Bullet SELL direction (premium + FVG + displacement)
+    # === ICT Engine — Gaps & Voids ===
+    "ict_ndog_bullish",            # New Day Opening Gap up (price opened above prev close)
+    "ict_ndog_bearish",            # New Day Opening Gap down
+    "ict_nwog_bullish",            # New Week Opening Gap up
+    "ict_nwog_bearish",            # New Week Opening Gap down
+    "ict_liquidity_void_up",       # bullish liquidity void present (to be filled from above)
+    "ict_liquidity_void_down",     # bearish liquidity void present
+    # === ICT Engine — High-Probability Levels ===
+    "ict_propulsion_block_near",   # price at or near propulsion block level
+    "ict_propulsion_block_bull",   # bullish propulsion block being revisited
+    "ict_propulsion_block_bear",   # bearish propulsion block being revisited
+    "ict_ce_fvg_bull_tested",      # Consequent Encroachment: 50% of bullish FVG being tested
+    "ict_ce_fvg_bear_tested",      # Consequent Encroachment: 50% of bearish FVG being tested
+    # === MMS (Money Market Structure) Programs ===
+    "ict_mms_buy_program",         # institutional buy program running (EMA bull + discount)
+    "ict_mms_sell_program",        # institutional sell program running (EMA bear + premium)
+    "ict_mms_program_strength",    # strength of detected MMS program (0–1)
+    "ict_market_expanding",        # market is in expansion (avg range > 1.2 ATR)
+    "ict_market_consolidating",    # market is in consolidation (avg range < 0.7 ATR)
+    "ict_smt_divergence",          # SMT proxy: session momentum divergence detected
+]
+
 FEATURE_NAMES_BY_VERSION = {
     "v3_amd_cycle_state": FEATURE_NAMES,
     "v4_layered_execution": LAYERED_FEATURE_NAMES,
     "v5_elliott_unified": ELLIOTT_UNIFIED_FEATURE_NAMES,
     # Backward-compatible alias used by older model bundles.
     "v5_unified_elliott_cycle": ELLIOTT_UNIFIED_FEATURE_NAMES,
+    "v6_gann_ict": GANN_ICT_FEATURE_NAMES,
+    "v7_novel_discovery": NOVEL_FEATURE_NAMES,
+    "v8_vstb": VSTB_FEATURE_NAMES,
+    "v9_ict_extended": ICT_EXTENDED_FEATURE_NAMES,
 }
 
 
@@ -188,6 +297,248 @@ def feature_names_for_version(feature_version: str | None = None) -> list[str]:
     if version not in FEATURE_NAMES_BY_VERSION:
         raise ValueError(f"Unsupported feature version: {feature_version}")
     return FEATURE_NAMES_BY_VERSION[version]
+
+
+def _compute_novel_layer(record: dict[str, Any]) -> list[float]:
+    """Compute the 18 v7_novel_discovery extension features from the novel signal engine."""
+    # Use pre-computed novel_signals if already in record (set by scanner.py),
+    # otherwise compute on the fly (e.g. during inference / serving).
+    ns = (record or {}).get("novel_signals")
+    if not ns:
+        try:
+            from backend.engines.novel_signal_engine import run_novel_signals
+            ns = run_novel_signals(record)
+        except Exception:
+            return [0.0] * 17
+
+    ecs  = ns.get("ecs") or {}
+    nva  = ns.get("nva") or {}
+    pacl = ns.get("pacl") or {}
+    ris  = ns.get("ris") or {}
+    car  = ns.get("car") or {}
+
+    return [
+        1.0 if ecs.get("active") else 0.0,
+        float(ecs.get("strength", 0.0) or 0.0),
+        float((ecs.get("components") or {}).get("energy_stored_pct", 0.0) or 0.0),
+        1.0 if nva.get("active") else 0.0,
+        float(nva.get("strength", 0.0) or 0.0),
+        min(1.0, float(nva.get("rot_velocity_deg", 0.0) or 0.0) / 90.0),
+        1.0 if pacl.get("active") else 0.0,
+        float(pacl.get("strength", 0.0) or 0.0),
+        min(1.0, float((pacl.get("components") or {}).get("aspect_count", 0.0) or 0.0) / 6.0),
+        1.0 if ris.get("active") else 0.0,
+        float(ris.get("strength", 0.0) or 0.0),
+        float((ris.get("components") or {}).get("conflict_score", 0.0) or 0.0),
+        1.0 if car.get("active") else 0.0,
+        float(car.get("strength", 0.0) or 0.0),
+        float((car.get("components") or {}).get("cycle_alignment_score", 0.0) or 0.0),
+        min(1.0, float(ns.get("novel_signal_count", 0) or 0) / 5.0),
+        float(ns.get("novel_combined_strength", 0.0) or 0.0),
+    ]
+
+
+def _compute_vstb_layer(record: dict[str, Any]) -> list[float]:
+    """Compute the 3 v8_vstb extension features (VSTB signal)."""
+    ns = (record or {}).get("novel_signals")
+    if not ns:
+        try:
+            from backend.engines.novel_signal_engine import run_novel_signals
+            ns = run_novel_signals(record)
+        except Exception:
+            return [0.0] * 3
+    vstb = ns.get("vstb") or {}
+    comps = vstb.get("components") or {}
+    return [
+        1.0 if vstb.get("active") else 0.0,
+        float(vstb.get("strength", 0.0) or 0.0),
+        max(-1.0, min(1.0, float(comps.get("vol_z", 0.0) or 0.0) / 3.0)),  # normalised to [-1,1]
+    ]
+
+
+def _compute_ict_extended_layer(record: dict[str, Any]) -> list[float]:
+    """
+    Compute the 36 v9_ict_extended features.
+    Reads from record["novel_signals"] (FRV + ICT composite) and record["ict"] (ICT engine).
+    Returns exactly 36 floats matching ICT_EXTENDED_FEATURE_NAMES[-36:].
+    """
+    # Novel signals — FRV + ICT composite
+    ns = (record or {}).get("novel_signals")
+    if not ns:
+        try:
+            from backend.engines.novel_signal_engine import run_novel_signals
+            ns = run_novel_signals(record)
+        except Exception:
+            ns = {}
+
+    frv      = (ns or {}).get("frv") or {}
+    ict_sig  = (ns or {}).get("ict") or {}
+    ict_comp = (ict_sig.get("components") or {})
+
+    frv_active   = 1.0 if frv.get("active") else 0.0
+    frv_strength = float(frv.get("strength", 0.0) or 0.0)
+
+    ict_sig_active   = 1.0 if ict_sig.get("active") else 0.0
+    ict_sig_strength = float(ict_sig.get("strength", 0.0) or 0.0)
+    ict_sig_score    = float(ict_comp.get("ict_setup_score", 0.0) or 0.0)
+
+    # ICT engine context
+    ict = (record or {}).get("ict") or {}
+
+    def _b(key: str) -> float:
+        return 1.0 if bool(ict.get(key, False)) else 0.0
+
+    def _f(key: str) -> float:
+        return float(ict.get(key, 0.0) or 0.0)
+
+    sb_dir = str(ict.get("silver_bullet_direction", "NEUTRAL")).upper()
+
+    return [
+        # FRV signal
+        frv_active,
+        frv_strength,
+        # ICT composite signal
+        ict_sig_active,
+        ict_sig_strength,
+        ict_sig_score,
+        # PD Array
+        _b("pd_premium"),
+        _b("pd_discount"),
+        _b("pd_equilibrium"),
+        _f("pd_price_position_pct"),
+        # HTF Bias
+        _b("htf_daily_bias_bullish"),
+        _b("htf_daily_bias_bearish"),
+        _b("htf_weekly_bias_bullish"),
+        _b("htf_weekly_bias_bearish"),
+        # Judas Swing
+        _b("judas_swing_buy"),
+        _b("judas_swing_sell"),
+        _f("judas_strength"),
+        # Silver Bullet
+        _b("silver_bullet_active"),
+        1.0 if (bool(ict.get("silver_bullet_active")) and sb_dir == "BUY")  else 0.0,
+        1.0 if (bool(ict.get("silver_bullet_active")) and sb_dir == "SELL") else 0.0,
+        # Gaps & Voids
+        _b("ndog_bullish"),
+        _b("ndog_bearish"),
+        _b("nwog_bullish"),
+        _b("nwog_bearish"),
+        _b("liquidity_void_up"),
+        _b("liquidity_void_down"),
+        # High-probability levels
+        _b("propulsion_block_near"),
+        _b("propulsion_block_bullish"),
+        _b("propulsion_block_bearish"),
+        _b("ce_fvg_bullish_tested"),
+        _b("ce_fvg_bearish_tested"),
+        # MMS programs
+        _b("mms_buy_program"),
+        _b("mms_sell_program"),
+        _f("mms_program_strength"),
+        _b("market_is_expanding"),
+        _b("market_is_consolidating"),
+        _b("smt_session_divergence"),
+    ]
+
+
+_GANN_MASTER_NUMBERS = [x * 144 for x in range(1, 30)]  # 144, 288, 432 … 4176
+
+
+def _compute_gann_ict_layer(record: dict[str, Any]) -> list[float]:
+    """Compute the 17 v6_gann_ict extension features."""
+    gann_astro_math = (record or {}).get("gann_astro_math") or {}
+    time_engine     = (record or {}).get("time_engine") or {}
+    participation   = (record or {}).get("participation") or {}
+    location        = (record or {}).get("location") or {}
+    trigger         = (record or {}).get("trigger") or {}
+    cycle           = (record or {}).get("cycle") or {}
+    structure       = (record or {}).get("structure") or {}
+    phase           = str((record or {}).get("phase") or "NEUTRAL").upper()
+    state           = (record or {}).get("state") or {}
+
+    # --- Gann fan angle features ---
+    tangent_deg = float(gann_astro_math.get("tangent_angle_deg", 0.0) or 0.0)
+    gann_1x1_angle_above  = 1.0 if tangent_deg >= 45.0 else 0.0
+    gann_1x2_angle_active = 1.0 if tangent_deg >= 63.43 else 0.0
+    gann_2x1_angle_active = 1.0 if 0.0 < tangent_deg <= 26.57 else 0.0
+
+    sq9_dist = float(gann_astro_math.get("degree_projection_distance", 1.0) or 1.0)
+    gann_sq9_next_level_distance = max(0.0, min(1.0, sq9_dist / 360.0))
+
+    gann_time_cycle_90d_window  = 1.0 if bool(time_engine.get("gann_90_cycle_active", False)) else 0.0
+    gann_time_cycle_360d_window = 1.0 if bool(time_engine.get("gann_180_cycle_active", False)) else 0.0
+
+    price = float(state.get("price", 0.0) or 0.0)
+    gann_master_price_number = 0.0
+    if price > 0:
+        for mn in _GANN_MASTER_NUMBERS:
+            if abs(price - mn) / mn < 0.005:  # within 0.5%
+                gann_master_price_number = 1.0
+                break
+
+    # --- ICT killzone & precision features ---
+    ict_killzone_london_open = 1.0 if bool(participation.get("london_open", False)) else 0.0
+    ict_killzone_ny_open     = 1.0 if bool(participation.get("newyork_open", False)) else 0.0
+
+    # OTE: 61.8–79% retracement into a FVG
+    fvg_bullish = bool(location.get("bullish_fvg_near", False))
+    fvg_bearish = bool(location.get("bearish_fvg_near", False))
+    retracement = float(gann_astro_math.get("cosine_retracement", 0.0) or 0.0)
+    ict_optimal_trade_entry = 1.0 if (fvg_bullish or fvg_bearish) and 0.618 <= retracement <= 0.79 else 0.0
+
+    ict_mss_active  = 1.0 if (bool(trigger.get("mss_bullish", False)) or bool(trigger.get("mss_bearish", False))) else 0.0
+    ict_fvg_present = 1.0 if (fvg_bullish or fvg_bearish) else 0.0
+    # breaker_block is only set by the ICT engine (record["ict"]), not in location
+    ict_ctx = (record or {}).get("ict") or {}
+    ict_breaker_block = 1.0 if bool(ict_ctx.get("propulsion_block_near", False)) else 0.0
+
+    # Power of 3: accumulation=0.0, manipulation=0.5, distribution=1.0
+    _p3_map = {"ACCUMULATION": 0.0, "MANIPULATION": 0.5, "DISTRIBUTION": 1.0}
+    ict_power_of_3_phase = _p3_map.get(phase, 0.25)
+
+    # previous_day_high_near: approximated via pd_range_midpoint proximity in ICT engine
+    ict_previous_day_high_near = 1.0 if bool(ict_ctx.get("propulsion_block_bullish", False) or
+                                              ict_ctx.get("propulsion_block_bearish", False)) else 0.0
+
+    # Weekly bias — from structure if available, otherwise fall back to ICT engine
+    weekly_dir = str(structure.get("weekly_bias") or structure.get("weekly_direction") or "").upper()
+    if not weekly_dir or weekly_dir not in {"UP", "BULLISH", "BUY", "DOWN", "BEARISH", "SELL"}:
+        # Fall back to ICT engine HTF weekly bias
+        if ict_ctx.get("htf_weekly_bias_bullish"):
+            weekly_dir = "BULLISH"
+        elif ict_ctx.get("htf_weekly_bias_bearish"):
+            weekly_dir = "BEARISH"
+    ict_weekly_bias_bullish = 1.0 if weekly_dir in {"UP", "BULLISH", "BUY"} else 0.0
+    weekly_score = float(structure.get("weekly_bias_score", 0.0) or 0.0)
+    if weekly_score == 0.0:
+        # Use ICT htf_weekly_bias as proxy: +1 = bullish, -1 = bearish
+        if ict_ctx.get("htf_weekly_bias_bullish"):
+            weekly_score = 1.0
+        elif ict_ctx.get("htf_weekly_bias_bearish"):
+            weekly_score = -1.0
+    # Map from [-1, 1] or any range to [0, 1]
+    ict_weekly_bias_score = max(0.0, min(1.0, (weekly_score + 1.0) / 2.0))
+
+    return [
+        gann_1x1_angle_above,
+        gann_1x2_angle_active,
+        gann_2x1_angle_active,
+        gann_sq9_next_level_distance,
+        gann_time_cycle_90d_window,
+        gann_time_cycle_360d_window,
+        gann_master_price_number,
+        ict_killzone_london_open,
+        ict_killzone_ny_open,
+        ict_optimal_trade_entry,
+        ict_mss_active,
+        ict_fvg_present,
+        ict_breaker_block,
+        ict_power_of_3_phase,
+        ict_previous_day_high_near,
+        ict_weekly_bias_bullish,
+        ict_weekly_bias_score,
+    ]
 
 
 def build_feature_row(record: dict[str, Any], feature_version: str = "v3_amd_cycle_state") -> list[float]:
@@ -296,7 +647,8 @@ def build_feature_row(record: dict[str, Any], feature_version: str = "v3_amd_cyc
         version = "v5_elliott_unified"
     if version == "v3_amd_cycle_state":
         return row
-    if version not in {"v4_layered_execution", "v5_elliott_unified"}:
+    if version not in {"v4_layered_execution", "v5_elliott_unified", "v6_gann_ict",
+                       "v7_novel_discovery", "v8_vstb", "v9_ict_extended"}:
         raise ValueError(f"Unsupported feature version: {feature_version}")
 
     layered = [
@@ -362,6 +714,7 @@ def build_feature_row(record: dict[str, Any], feature_version: str = "v3_amd_cyc
     if version == "v4_layered_execution":
         return [float(x) for x in (row + layered)]
 
+
     elliott_wave_confidence = float(elliott_wave.get("wave_confidence", 0.0) or 0.0)
     elliott_wave_progress = float(elliott_wave.get("wave_progress", 0.0) or 0.0)
     elliott_wave_direction_up = 1.0 if bool(elliott_wave.get("wave_direction_up", False)) else 0.0
@@ -413,7 +766,27 @@ def build_feature_row(record: dict[str, Any], feature_version: str = "v3_amd_cyc
         elliott_wheel_phase_rotation_gate,
     ]
 
-    return [float(x) for x in (row + layered + elliott_layer)]
+    if version == "v5_elliott_unified":
+        return [float(x) for x in (row + layered + elliott_layer)]
+
+    # v6_gann_ict — extends v5 with 17 Gann-fan + ICT features
+    gann_ict_layer = _compute_gann_ict_layer(record)
+    if version == "v6_gann_ict":
+        return [float(x) for x in (row + layered + elliott_layer + gann_ict_layer)]
+
+    # v7_novel_discovery — extends v6 with 18 novel cross-domain signal features
+    novel_layer = _compute_novel_layer(record)
+    if version == "v7_novel_discovery":
+        return [float(x) for x in (row + layered + elliott_layer + gann_ict_layer + novel_layer)]
+
+    # v8_vstb — extends v7 with 3 VSTB features (Volume-Structure Trend Bias)
+    vstb_layer = _compute_vstb_layer(record)
+    if version == "v8_vstb":
+        return [float(x) for x in (row + layered + elliott_layer + gann_ict_layer + novel_layer + vstb_layer)]
+
+    # v9_ict_extended — extends v8 with 35 ICT engine + FRV + ICT composite features
+    ict_ext_layer = _compute_ict_extended_layer(record)
+    return [float(x) for x in (row + layered + elliott_layer + gann_ict_layer + novel_layer + vstb_layer + ict_ext_layer)]
 
 
 def _label_from_record(record: dict[str, Any]) -> int:

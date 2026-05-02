@@ -1,32 +1,10 @@
 {
   "version": 1,
   "meta": {
-    "updates": 137,
-    "last_update": "2026-04-28T09:47:33.630782+00:00"
+    "updates": 163,
+    "last_update": "2026-05-01T03:46:58.734782+00:00"
   },
-  "pending": {
-    "timestamp": "2026-04-24T00:00:00+00:00",
-    "direction": "BUY",
-    "price": 4708.06,
-    "concepts": [
-      "astro:EVENT_IMPACT_LOW",
-      "astro:MOON_WAXING_CRESCENT",
-      "astro:STRENGTH_HIGH",
-      "factor:elliott:BUY",
-      "factor:harmonic:SELL",
-      "factor:phase_primary:BUY",
-      "gann:HARMONIC_NEAR",
-      "gann_adv:DEG_BIN_90",
-      "gann_adv:ZONE_NORMAL",
-      "liquidity:NO_SWEEP",
-      "orderflow:AGGRESSIVE_BUY",
-      "orderflow:IMBALANCE_BUY",
-      "phase:EXPANSION",
-      "regime:RANGE",
-      "structure:DOWN",
-      "volatility:LOW"
-    ]
-  },
+  "pending": null,
   "concept_stats": {
     "astro:MOON_FULL_MOON": {
       "BUY": {
@@ -39,7 +17,7 @@
       "BUY": {
         "tp": 1.0,
         "fp": 0.0,
-        "neutral": 50.0
+        "neutral": 51.0
       }
     },
     "factor:liquidity_primary:BUY": {
@@ -51,9 +29,9 @@
     },
     "factor:phase_primary:BUY": {
       "BUY": {
-        "tp": 2.0,
-        "fp": 0.0,
-        "neutral": 97.0
+        "tp": 5.0,
+        "fp": 3.0,
+        "neutral": 101.0
       },
       "SELL": {
         "tp": 0.0,
@@ -65,7 +43,7 @@
       "BUY": {
         "tp": 1.0,
         "fp": 0.0,
-        "neutral": 84.0
+        "neutral": 85.0
       },
       "SELL": {
         "tp": 0.0,
@@ -75,9 +53,9 @@
     },
     "gann:MAJOR_TURN": {
       "BUY": {
-        "tp": 2.0,
+        "tp": 5.0,
         "fp": 0.0,
-        "neutral": 0.0
+        "neutral": 2.0
       },
       "SELL": {
         "tp": 0.0,
@@ -122,7 +100,7 @@
     },
     "news:EVENT_ACTIVE": {
       "BUY": {
-        "tp": 2.0,
+        "tp": 5.0,
         "fp": 0.0,
         "neutral": 14.0
       }
@@ -151,8 +129,8 @@
     "structure:UP": {
       "BUY": {
         "tp": 1.0,
-        "fp": 0.0,
-        "neutral": 47.0
+        "fp": 3.0,
+        "neutral": 48.0
       },
       "SELL": {
         "tp": 0.0,
@@ -176,21 +154,21 @@
       "BUY": {
         "tp": 0.0,
         "fp": 0.0,
-        "neutral": 85.0
+        "neutral": 86.0
       }
     },
     "astro:MOON_WAXING_CRESCENT": {
       "BUY": {
         "tp": 0.0,
         "fp": 0.0,
-        "neutral": 50.0
+        "neutral": 51.0
       }
     },
     "factor:elliott:BUY": {
       "BUY": {
         "tp": 0.0,
-        "fp": 0.0,
-        "neutral": 62.0
+        "fp": 3.0,
+        "neutral": 66.0
       },
       "SELL": {
         "tp": 0.0,
@@ -202,7 +180,7 @@
       "BUY": {
         "tp": 0.0,
         "fp": 0.0,
-        "neutral": 84.0
+        "neutral": 85.0
       },
       "SELL": {
         "tp": 0.0,
@@ -213,8 +191,8 @@
     "gann_adv:DEG_BIN_90": {
       "BUY": {
         "tp": 0.0,
-        "fp": 0.0,
-        "neutral": 97.0
+        "fp": 3.0,
+        "neutral": 101.0
       },
       "SELL": {
         "tp": 0.0,
@@ -224,9 +202,9 @@
     },
     "gann_adv:ZONE_NORMAL": {
       "BUY": {
-        "tp": 1.0,
-        "fp": 0.0,
-        "neutral": 97.0
+        "tp": 4.0,
+        "fp": 3.0,
+        "neutral": 101.0
       },
       "SELL": {
         "tp": 0.0,
@@ -236,9 +214,9 @@
     },
     "liquidity:NO_SWEEP": {
       "BUY": {
-        "tp": 1.0,
-        "fp": 0.0,
-        "neutral": 97.0
+        "tp": 4.0,
+        "fp": 3.0,
+        "neutral": 101.0
       },
       "SELL": {
         "tp": 0.0,
@@ -262,7 +240,7 @@
     },
     "news:NAKSHATRA_EVENT": {
       "BUY": {
-        "tp": 1.0,
+        "tp": 4.0,
         "fp": 0.0,
         "neutral": 14.0
       }
@@ -271,7 +249,7 @@
       "BUY": {
         "tp": 0.0,
         "fp": 0.0,
-        "neutral": 85.0
+        "neutral": 86.0
       },
       "SELL": {
         "tp": 0.0,
@@ -283,7 +261,7 @@
       "BUY": {
         "tp": 0.0,
         "fp": 0.0,
-        "neutral": 85.0
+        "neutral": 86.0
       },
       "SELL": {
         "tp": 0.0,
@@ -293,9 +271,9 @@
     },
     "phase:EXPANSION": {
       "BUY": {
-        "tp": 1.0,
-        "fp": 0.0,
-        "neutral": 97.0
+        "tp": 4.0,
+        "fp": 3.0,
+        "neutral": 101.0
       },
       "SELL": {
         "tp": 0.0,
@@ -305,9 +283,9 @@
     },
     "regime:RANGE": {
       "BUY": {
-        "tp": 1.0,
-        "fp": 0.0,
-        "neutral": 62.0
+        "tp": 4.0,
+        "fp": 3.0,
+        "neutral": 66.0
       },
       "SELL": {
         "tp": 0.0,
@@ -317,9 +295,9 @@
     },
     "structure:DOWN": {
       "BUY": {
-        "tp": 1.0,
+        "tp": 4.0,
         "fp": 0.0,
-        "neutral": 50.0
+        "neutral": 53.0
       },
       "SELL": {
         "tp": 0.0,
@@ -329,9 +307,9 @@
     },
     "volatility:LOW": {
       "BUY": {
-        "tp": 1.0,
-        "fp": 0.0,
-        "neutral": 62.0
+        "tp": 4.0,
+        "fp": 3.0,
+        "neutral": 66.0
       },
       "SELL": {
         "tp": 0.0,
@@ -346,9 +324,9 @@
         "neutral": 38.0
       },
       "BUY": {
-        "tp": 1.0,
-        "fp": 0.0,
-        "neutral": 12.0
+        "tp": 4.0,
+        "fp": 3.0,
+        "neutral": 15.0
       }
     },
     "astro:MOON_FIRST_QUARTER": {
@@ -359,8 +337,8 @@
       },
       "BUY": {
         "tp": 0.0,
-        "fp": 0.0,
-        "neutral": 12.0
+        "fp": 3.0,
+        "neutral": 15.0
       }
     },
     "astro:STRENGTH_NORMAL": {
@@ -370,21 +348,21 @@
         "neutral": 38.0
       },
       "BUY": {
-        "tp": 1.0,
-        "fp": 0.0,
-        "neutral": 47.0
+        "tp": 4.0,
+        "fp": 3.0,
+        "neutral": 50.0
       }
     },
     "astro:MOON_WAXING_GIBBOUS": {
       "BUY": {
-        "tp": 1.0,
+        "tp": 4.0,
         "fp": 0.0,
         "neutral": 35.0
       }
     },
     "factor:elliott:SELL": {
       "BUY": {
-        "tp": 1.0,
+        "tp": 4.0,
         "fp": 0.0,
         "neutral": 34.0
       }
@@ -422,9 +400,9 @@
         "neutral": 11.0
       },
       "BUY": {
-        "tp": 1.0,
-        "fp": 0.0,
-        "neutral": 12.0
+        "tp": 4.0,
+        "fp": 3.0,
+        "neutral": 15.0
       }
     },
     "orderflow:IMBALANCE_SELL": {
@@ -434,9 +412,9 @@
         "neutral": 11.0
       },
       "BUY": {
-        "tp": 1.0,
-        "fp": 0.0,
-        "neutral": 12.0
+        "tp": 4.0,
+        "fp": 3.0,
+        "neutral": 15.0
       }
     },
     "factor:phase_primary:SELL": {
@@ -448,7 +426,259 @@
     },
     "gann_adv:DEG_BIN_300": {
       "BUY": {
-        "tp": 1.0,
+        "tp": 4.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      }
+    },
+    "gann:SQUARE_OF_9_NEXT_LEVEL": {
+      "BUY": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      },
+      "SELL": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      }
+    },
+    "gann:1X1_ANGLE_HOLD": {
+      "BUY": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      },
+      "SELL": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      }
+    },
+    "gann:1X2_ANGLE": {
+      "BUY": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      },
+      "SELL": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      }
+    },
+    "gann:2X1_ANGLE": {
+      "BUY": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      },
+      "SELL": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      }
+    },
+    "gann:TIME_CYCLE_90D": {
+      "BUY": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      },
+      "SELL": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      }
+    },
+    "gann:TIME_CYCLE_360D": {
+      "BUY": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      },
+      "SELL": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      }
+    },
+    "gann:MASTER_PRICE_NUMBER": {
+      "BUY": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      },
+      "SELL": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      }
+    },
+    "ict:KILLZONE_LONDON_OPEN": {
+      "BUY": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      },
+      "SELL": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      }
+    },
+    "ict:KILLZONE_NY_OPEN": {
+      "BUY": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      },
+      "SELL": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      }
+    },
+    "ict:OPTIMAL_TRADE_ENTRY": {
+      "BUY": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      },
+      "SELL": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      }
+    },
+    "ict:MARKET_STRUCTURE_SHIFT": {
+      "BUY": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      },
+      "SELL": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      }
+    },
+    "ict:FAIR_VALUE_GAP": {
+      "BUY": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      },
+      "SELL": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      }
+    },
+    "ict:BREAKER_BLOCK": {
+      "BUY": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      },
+      "SELL": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      }
+    },
+    "ict:POWER_OF_3": {
+      "BUY": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      },
+      "SELL": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      }
+    },
+    "ict:PREVIOUS_DAY_HIGH_LOW": {
+      "BUY": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      },
+      "SELL": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      }
+    },
+    "ict:WEEKLY_BIAS": {
+      "BUY": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      },
+      "SELL": {
+        "tp": 0,
+        "fp": 0,
+        "neutral": 0
+      }
+    },
+    "novel:ENTROPY_COLLAPSE": {
+      "BUY": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      }
+    },
+    "novel:NAKSHATRA_VELOCITY_ANOMALY": {
+      "BUY": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      }
+    },
+    "novel:PLANETARY_COMPRESSION_LOCK": {
+      "BUY": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      }
+    },
+    "novel:RELIABILITY_INVERSION": {
+      "BUY": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      },
+      "SELL": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      }
+    },
+    "novel:CYCLE_ALIGNMENT_RESONANCE": {
+      "BUY": {
+        "tp": 0.0,
+        "fp": 0.0,
+        "neutral": 0.0
+      },
+      "SELL": {
+        "tp": 0.0,
         "fp": 0.0,
         "neutral": 0.0
       }

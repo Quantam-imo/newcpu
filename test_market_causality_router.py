@@ -436,6 +436,239 @@ def test_timeframe_matrix_timeout_uses_enriched_fallback_rows(monkeypatch):
     assert rows["1m"]["status"] == "stale_timeout"
 
 
+def test_timeframe_matrix_refresh_caps_wait_to_client_budget(monkeypatch):
+    captured = {}
+
+    class _PendingFuture:
+        def result(self):
+            raise RuntimeError("pending future should resolve via timeout fallback")
+
+        def done(self):
+            return False
+
+        def cancel(self):
+            return True
+
+    class _Executor:
+        def __init__(self, max_workers):
+            self.max_workers = max_workers
+
+        def submit(self, fn, *args):
+            return _PendingFuture()
+
+        def shutdown(self, wait=False, cancel_futures=True):
+            return None
+
+    def _fake_as_completed(future_map, timeout=None):
+        captured["timeout"] = timeout
+        raise mcl_router.concurrent.futures.TimeoutError()
+        yield  # pragma: no cover
+
+    def _fake_fallback_summary(*, symbol, timeframe, lookback_years, source_mode, started_at, error_text, fast_mode=False):
+        return {
+            "status": "stale_timeout",
+            "signal": "WAIT",
+            "requested_timeframe": timeframe,
+            "applied_timeframe": timeframe,
+            "trade_levels": None,
+            "observation": {},
+        }
+
+    monkeypatch.setattr(mcl_router.concurrent.futures, "ThreadPoolExecutor", _Executor)
+    monkeypatch.setattr(mcl_router.concurrent.futures, "as_completed", _fake_as_completed)
+    monkeypatch.setattr(mcl_router, "_build_timeout_fallback_summary", _fake_fallback_summary)
+    monkeypatch.setattr(mcl_router, "_MATRIX_REFRESH_WAIT_SECONDS", 150.0)
+    monkeypatch.setattr(mcl_router, "_BACKGROUND_SUMMARY_TIMEOUT_SECONDS", 140.0)
+    monkeypatch.setattr(mcl_router, "_MATRIX_REFRESH_CLIENT_BUDGET_SECONDS", 85.0)
+
+    result = mcl_router._compute_timeframe_matrix(
+        refresh=True,
+        symbol="XAUUSD",
+        lookback_years=25,
+        source_mode="combined",
+    )
+
+    assert captured["timeout"] == 85.0
+    assert len(result["rows"]) == len(mcl_router._MATRIX_TIMEFRAMES)
+    assert all(row["status"] == "stale_timeout" for row in result["rows"])
+
+
+def test_timeframe_matrix_refresh_uses_limited_worker_pool(monkeypatch):
+    captured = {}
+
+    class _PendingFuture:
+        def result(self):
+            raise RuntimeError("pending future should resolve via timeout fallback")
+
+        def done(self):
+            return False
+
+        def cancel(self):
+            return True
+
+    class _Executor:
+        def __init__(self, max_workers):
+            captured["max_workers"] = max_workers
+
+        def submit(self, fn, *args):
+            return _PendingFuture()
+
+        def shutdown(self, wait=False, cancel_futures=True):
+            return None
+
+    def _fake_as_completed(future_map, timeout=None):
+        raise mcl_router.concurrent.futures.TimeoutError()
+        yield  # pragma: no cover
+
+    def _fake_fallback_summary(*, symbol, timeframe, lookback_years, source_mode, started_at, error_text, fast_mode=False):
+        return {
+            "status": "stale_timeout",
+            "signal": "WAIT",
+            "requested_timeframe": timeframe,
+            "applied_timeframe": timeframe,
+            "trade_levels": None,
+            "observation": {},
+        }
+
+    monkeypatch.setattr(mcl_router.concurrent.futures, "ThreadPoolExecutor", _Executor)
+    monkeypatch.setattr(mcl_router.concurrent.futures, "as_completed", _fake_as_completed)
+    monkeypatch.setattr(mcl_router, "_build_timeout_fallback_summary", _fake_fallback_summary)
+    monkeypatch.setattr(mcl_router, "_MATRIX_REFRESH_MAX_WORKERS", 2)
+
+    mcl_router._compute_timeframe_matrix(
+        refresh=True,
+        symbol="XAUUSD",
+        lookback_years=25,
+        source_mode="combined",
+    )
+
+    assert captured["max_workers"] == 2
+
+
+def test_timeframe_matrix_refresh_only_deep_refreshes_anchor_timeframes(monkeypatch):
+    calls = {}
+
+    def _fake_compute_summary(refresh, symbol, timeframe, lookback_years, source_mode):
+        calls[timeframe] = bool(refresh)
+        return {
+            "status": "ok",
+            "signal": "BUY",
+            "requested_timeframe": timeframe,
+            "applied_timeframe": timeframe,
+            "trade_levels": None,
+            "observation": {},
+            "summary_mode": None if refresh else "live_snapshot",
+        }
+
+    class _ImmediateFuture:
+        def __init__(self, fn, args):
+            self._fn = fn
+            self._args = args
+            self._done = False
+
+        def result(self):
+            self._done = True
+            return self._fn(*self._args)
+
+        def done(self):
+            return self._done
+
+        def cancel(self):
+            return False
+
+    class _Executor:
+        def __init__(self, max_workers):
+            self.max_workers = max_workers
+
+        def submit(self, fn, *args):
+            return _ImmediateFuture(fn, args)
+
+        def shutdown(self, wait=False, cancel_futures=True):
+            return None
+
+    def _fake_as_completed(future_map, timeout=None):
+        for future in future_map:
+            yield future
+
+    monkeypatch.setattr(mcl_router, "_compute_summary", _fake_compute_summary)
+    monkeypatch.setattr(mcl_router.concurrent.futures, "ThreadPoolExecutor", _Executor)
+    monkeypatch.setattr(mcl_router.concurrent.futures, "as_completed", _fake_as_completed)
+    monkeypatch.setattr(mcl_router, "_MATRIX_REFRESH_DEEP_TIMEFRAMES", ("1d", "4h", "1h"))
+
+    mcl_router._compute_timeframe_matrix(
+        refresh=True,
+        symbol="XAUUSD",
+        lookback_years=25,
+        source_mode="combined",
+    )
+
+    assert calls["1d"] is True
+    assert calls["4h"] is True
+    assert calls["1h"] is True
+    assert calls["30m"] is False
+    assert calls["15m"] is False
+    assert calls["5m"] is False
+    assert calls["1m"] is False
+    assert calls["1w"] is False
+    assert calls["1month"] is False
+
+
+def test_timeframe_matrix_refresh_submits_snapshot_timeframes_before_deep(monkeypatch):
+    submit_order = []
+
+    class _PendingFuture:
+        def result(self):
+            raise RuntimeError("pending")
+
+        def done(self):
+            return False
+
+        def cancel(self):
+            return True
+
+    class _Executor:
+        def __init__(self, max_workers):
+            self.max_workers = max_workers
+
+        def submit(self, fn, *args):
+            timeframe = args[2]
+            submit_order.append(timeframe)
+            return _PendingFuture()
+
+        def shutdown(self, wait=False, cancel_futures=True):
+            return None
+
+    def _fake_as_completed(future_map, timeout=None):
+        raise mcl_router.concurrent.futures.TimeoutError()
+        yield  # pragma: no cover
+
+    def _fake_fallback_summary(*, symbol, timeframe, lookback_years, source_mode, started_at, error_text, fast_mode=False):
+        return {
+            "status": "stale_timeout",
+            "signal": "WAIT",
+            "requested_timeframe": timeframe,
+            "applied_timeframe": timeframe,
+            "trade_levels": None,
+            "observation": {},
+        }
+
+    monkeypatch.setattr(mcl_router.concurrent.futures, "ThreadPoolExecutor", _Executor)
+    monkeypatch.setattr(mcl_router.concurrent.futures, "as_completed", _fake_as_completed)
+    monkeypatch.setattr(mcl_router, "_build_timeout_fallback_summary", _fake_fallback_summary)
+    monkeypatch.setattr(mcl_router, "_MATRIX_REFRESH_DEEP_TIMEFRAMES", ("1d", "4h", "1h"))
+
+    mcl_router._compute_timeframe_matrix(
+        refresh=True,
+        symbol="XAUUSD",
+        lookback_years=25,
+        source_mode="combined",
+    )
+
+    # Non-deep snapshot rows should be enqueued first so they can complete fast.
+    assert submit_order[:6] == ["30m", "15m", "5m", "1m", "1w", "1month"]
+    assert submit_order[6:] == ["1d", "4h", "1h"]
+
+
 def test_compute_summary_reasoning_delta_consecutive_runs(monkeypatch):
     mcl_router._cache_payloads.clear()
     mcl_router._cache_ts_by_key.clear()
@@ -2000,6 +2233,38 @@ def test_status_endpoint_includes_model_confidence():
     assert s["model_confidence"] in ("HIGH", "MEDIUM", "LOW", "CALIBRATING", "LEARNING")
 
 
+def test_status_endpoint_includes_training_readiness(monkeypatch):
+    monkeypatch.setattr(
+        mcl_router,
+        "_get_training_status",
+        lambda: {
+            "status": "ALL_READY",
+            "ready_models": 9,
+            "total_models": 9,
+            "ready_percentage": 100.0,
+        },
+    )
+
+    s = mcl_router.market_causality_status()
+
+    assert s["training_status"] == "ALL_READY"
+    assert s["ready_models"] == 9
+    assert s["total_models"] == 9
+    assert s["ready_percentage"] == 100.0
+
+
+def test_status_endpoint_exposes_matrix_refresh_deep_timeframes(monkeypatch):
+    monkeypatch.setattr(
+        mcl_router,
+        "_MATRIX_REFRESH_DEEP_TIMEFRAMES",
+        ("1d",),
+    )
+
+    s = mcl_router.market_causality_status()
+
+    assert s["matrix_refresh_deep_timeframes"] == ["1d"]
+
+
 def test_status_endpoint_includes_accuracy_and_counts():
     """GET /status must include overall_accuracy, total_outcomes, total_predictions."""
     from astroquant.backend.router_market_causality import market_causality_status
@@ -2019,6 +2284,43 @@ def test_status_endpoint_includes_top_and_weakest_signal():
     valid = {"geometry", "time", "structure", "momentum", "gann", "ict", "confluence"}
     assert s["top_signal"] in valid
     assert s["weakest_signal"] in valid
+
+
+def test_mt5_bridge_status_exposes_compatibility_freshness_fields(monkeypatch):
+    import pandas as pd
+
+    ts = pd.Timestamp("2026-04-29T16:20:00Z")
+    live_path = Path(tempfile.mkstemp(suffix="_mt5_live_5m_intraday.csv")[1])
+
+    try:
+        monkeypatch.setattr(
+            mcl_router,
+            "_live_csv_candidates",
+            lambda symbol, timeframe: [("mt5_live_5m", live_path)],
+        )
+        monkeypatch.setattr(
+            mcl_router,
+            "_read_live_csv_ohlc",
+            lambda path: pd.DataFrame(
+                [{"time": ts, "open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5, "volume": 10.0}]
+            ),
+        )
+        monkeypatch.setattr(
+            mcl_router,
+            "_load_local_live_quote",
+            lambda symbol, timeframe: {"source": "mt5_live_5m", "ts": int(ts.timestamp()), "close": 1.5},
+        )
+        monkeypatch.setattr(mcl_router.time, "time", lambda: float(int(ts.timestamp()) + 200))
+
+        payload = mcl_router.market_causality_mt5_bridge_status(symbol="XAUUSD", timeframe="5m")
+
+        assert payload["bridge_ready"] is True
+        assert payload["bridge_fresh"] is True
+        assert payload["freshness_state"] == "fresh"
+        assert payload["last_bar_epoch"] == int(ts.timestamp())
+        assert payload["last_bar_time"] == "2026-04-29T16:20:00+00:00"
+    finally:
+        live_path.unlink(missing_ok=True)
 
 
 # ── /history includes confluence_score ───────────────────────────────────────

@@ -518,6 +518,29 @@ def confluence_decision(
     else:
         factors["turtle_soup"] = "NONE"
 
+    # TERTIARY 7 — Novel Discovery Signals (ECS, NVA, PACL, RIS, CAR)
+    # These 5 original signals represent cross-domain co-occurrence patterns
+    # not defined in any published trading methodology.  When active, they
+    # contribute up to 2.0 pts weighted by combined strength + count.
+    novel = mem.get("novel_signals") or {}
+    if novel.get("novel_signal_active"):
+        novel_dir = str(novel.get("novel_signal_direction") or "NEUTRAL").upper()
+        novel_str = float(novel.get("novel_combined_strength") or 0.0)
+        novel_cnt = int(novel.get("novel_signal_count") or 0)
+        strongest = str(novel.get("novel_strongest") or "unknown").upper()
+        # Score: 0→2 pts, proportional to strength and count bonus
+        novel_score = min(2.0, novel_str * 1.5 + (novel_cnt - 1) * 0.25)
+        if novel_dir == "BUY":
+            tertiary_buy += novel_score
+        elif novel_dir == "SELL":
+            tertiary_sell += novel_score
+        factors["novel_signals"] = (
+            f"{novel_dir}+{novel_score:.2f} "
+            f"(strongest={strongest}, count={novel_cnt}, strength={novel_str:.3f})"
+        )
+    else:
+        factors["novel_signals"] = "NONE"
+
     # ---- Aggregate buy/sell totals ----
     buy_score  = primary_buy  + secondary_buy  + tertiary_buy
     sell_score = primary_sell + secondary_sell + tertiary_sell

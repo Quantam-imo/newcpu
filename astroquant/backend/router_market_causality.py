@@ -4,6 +4,7 @@ import csv
 import concurrent.futures
 import importlib.util
 import inspect
+import json
 import logging
 import multiprocessing as mp
 import os
@@ -15,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, File, Query, Request, UploadFile
+from fastapi import APIRouter, Body, File, HTTPException, Query, Request, UploadFile
 
 from astroquant.backend.mathematical_engines import LearningFeedbackEngine, MathematicalQuestionChecker
 from astroquant.backend.prediction_tracker import PredictionTracker
@@ -71,10 +72,20 @@ _BACKGROUND_SUMMARY_TIMEOUT_SECONDS = max(
 )
 _MATRIX_TIMEFRAMES = ("1d", "4h", "1h", "30m", "15m", "5m", "1m", "1w", "1month")
 _MATRIX_MAX_WORKERS = max(1, int(os.getenv("MCL_MATRIX_MAX_WORKERS", "9")))
+_MATRIX_REFRESH_MAX_WORKERS = max(1, int(os.getenv("MCL_MATRIX_REFRESH_MAX_WORKERS", "2")))
 _MATRIX_WAIT_SECONDS = max(5.0, float(os.getenv("MCL_MATRIX_WAIT_SECONDS", "18")))
 _MATRIX_REFRESH_WAIT_SECONDS = max(
     _MATRIX_WAIT_SECONDS,
     float(os.getenv("MCL_MATRIX_REFRESH_WAIT_SECONDS", "75")),
+)
+_MATRIX_REFRESH_CLIENT_BUDGET_SECONDS = max(
+    _MATRIX_WAIT_SECONDS + 5.0,
+    float(os.getenv("MCL_MATRIX_REFRESH_CLIENT_BUDGET_SECONDS", "85")),
+)
+_MATRIX_REFRESH_DEEP_TIMEFRAMES = tuple(
+    tf.strip().lower()
+    for tf in str(os.getenv("MCL_MATRIX_REFRESH_DEEP_TIMEFRAMES", "1d")).split(",")
+    if tf.strip()
 )
 _PREDICTION_TRACKER = PredictionTracker()
 _LEARNING_ENGINE = LearningFeedbackEngine(tracker=_PREDICTION_TRACKER)
@@ -1310,9 +1321,9 @@ def _normalize_timeframe(timeframe: str | None) -> str:
 
 
 def _mcl_default_source_mode() -> str:
-    value = str(os.getenv("MCL_DEFAULT_SOURCE_MODE", "live_first") or "live_first").strip().lower()
+    value = str(os.getenv("MCL_DEFAULT_SOURCE_MODE", "combined") or "combined").strip().lower()
     allowed = {"historical_first", "historical_only", "live_first", "live_only", "hybrid", "combined"}
-    return value if value in allowed else "live_first"
+    return value if value in allowed else "combined"
 
 
 def _mcl_databento_enabled() -> bool:
@@ -1541,6 +1552,7 @@ def _live_csv_candidates(symbol: str, timeframe: str | None) -> list[tuple[str, 
     tf = _normalize_timeframe(timeframe)
     data_root = _repo_root() / "market-causality-lab" / "data" / "live"
     mt5_root = data_root / "mt5"
+    incoming_root = mt5_root / "incoming"
     candidates: list[tuple[str, Path]] = []
 
     if tf in {"1m", "5m", "15m", "30m", "1h", "4h", "1d"}:
@@ -1549,6 +1561,8 @@ def _live_csv_candidates(symbol: str, timeframe: str | None) -> list[tuple[str, 
             (f"mt5_live_{tf}", mt5_root / f"{symbol}_live_{tf}_intraday.csv"),
             (f"mt5_export_{tf}", mt5_root / f"{symbol}_{tf}.csv"),
         ])
+        if tf == "5m":
+            candidates.append(("mt5_incoming_5m", incoming_root / f"{symbol}_feed_latest.csv"))
 
     candidates.extend([
         ("local_live_spot", data_root / f"{symbol}_live_spot_intraday.csv"),
@@ -1569,9 +1583,9 @@ def _read_live_csv_ohlc(path: Path) -> Any | None:
         return None
 
     df = None
-    for sep in (";", ","):
+    for sep in (";", ",", "\t", r"\s+"):
         try:
-            trial = pd.read_csv(path, sep=sep)
+            trial = pd.read_csv(path, sep=sep, engine="python")
             if trial is not None and not trial.empty and len(trial.columns) >= 2:
                 df = trial
                 break
@@ -1587,6 +1601,12 @@ def _read_live_csv_ohlc(path: Path) -> Any | None:
         "<HIGH>": "High",
         "<LOW>": "Low",
         "<CLOSE>": "Close",
+        "<TICKVOL>": "Volume",
+        "<VOL>": "Volume",
+        "<VOLUME>": "Volume",
+        "open": "Open",
+        "high": "High",
+        "low": "Low",
         "close": "Close",
         "volume": "Volume",
         "tick_volume": "Volume",
@@ -2480,6 +2500,284 @@ _NEWS_BLOCK_POST_MINUTES: int = int(os.getenv("NEWS_BLOCK_POST_MINUTES", "5"))
 _NEWS_CONFIDENCE_PENALTY: float = float(os.getenv("NEWS_CONFIDENCE_PENALTY", "0.30"))
 
 
+def _build_ai_training_narration(summary: dict[str, Any], tip: dict[str, Any]) -> dict[str, Any]:
+    """Generate a self-knowledge narration block that explains what the AI was trained on,
+    what it currently observes, and how each confirmation layer contributed to the signal.
+    Returns a structured dict with both machine-readable scores and human-readable prose.
+    """
+    direction = tip.get("direction", "WAIT")
+    confidence = tip.get("confidence", 0.0)
+    confluence = tip.get("confluence_score", 0.0)
+    tr = tip.get("trigger_reason", {})
+
+    # ── Training context ──────────────────────────────────────────────────────
+    lookback_years = summary.get("lookback_years", 25)
+    source_mode = summary.get("source_mode", "combined")
+    rows_analyzed = summary.get("rows_analyzed", 0)
+    ai_model_scope = tip.get("training_context", {}).get("ai_model_scope") or "multi-timeframe"
+    ai_model_version = tip.get("training_context", {}).get("ai_model_version") or "v5_elliott_unified"
+
+    # ── Layer scores (what each module contributed) ───────────────────────────
+    layers: dict[str, dict] = {}
+
+    # Layer 1: AI model
+    ai_buy_prob = summary.get("ai_phase_forecast", {}).get("ai_buy_prob", 0.0) if isinstance(summary.get("ai_phase_forecast"), dict) else 0.0
+    phase_proj = (summary.get("ai_phase_forecast") or {}).get("phase_projection", "UNKNOWN")
+    ai_conf_pct = (summary.get("ai_phase_forecast") or {}).get("confidence_pct", round(confidence * 100, 1))
+    layers["ai_model"] = {
+        "vote": direction,
+        "confidence_pct": ai_conf_pct,
+        "phase_projection": phase_proj,
+        "trained_on_years": lookback_years,
+        "trained_on_rows": rows_analyzed,
+        "model_scope": ai_model_scope,
+        "feature_version": ai_model_version,
+        "confirmed": direction in {"BUY", "SELL"},
+        "narration": (
+            f"AI model trained on {lookback_years} years of XAUUSD data ({rows_analyzed:,} bars analysed). "
+            f"Model scope: {ai_model_scope}, feature version: {ai_model_version}. "
+            f"Current vote: {direction} at {ai_conf_pct}% confidence. "
+            f"Phase projection: {phase_proj}."
+        ),
+    }
+
+    # Layer 2: Gann geometry
+    gann_degree = tr.get("gann_degree")
+    gann_proximity = tr.get("gann_angle_proximity", "UNKNOWN")
+    gann_direction = tr.get("gann_trend_direction", "FLAT")
+    gann_duration_h = tr.get("gann_trend_duration_hours")
+    gann_start_price = tr.get("gann_trend_start_price")
+    gann_end_price = tr.get("gann_trend_end_price")
+    gann_delta = tr.get("gann_trend_price_delta")
+    geo_confirmed = summary.get("observation_confirmation_geometry", "UNCONFIRMED")
+    time_confirmed = summary.get("observation_confirmation_time", "UNCONFIRMED")
+    struct_confirmed = summary.get("observation_confirmation_structure", "UNCONFIRMED")
+    tape_confirmed = summary.get("observation_confirmation_tape_action", "UNCONFIRMED")
+    gann_buy_prob = summary.get("gann_buy_prob", 0)
+    gann_sell_prob = summary.get("gann_sell_prob", 0)
+    gann_verdict = summary.get("gann_questions_verdict", "UNKNOWN")
+    gann_confirmed = geo_confirmed == "CONFIRM" and time_confirmed == "ALIGNED"
+    layers["gann_geometry"] = {
+        "degree": gann_degree,
+        "proximity": gann_proximity,
+        "trend_direction": gann_direction,
+        "trend_duration_hours": gann_duration_h,
+        "trend_start_price": gann_start_price,
+        "trend_end_price": gann_end_price,
+        "price_delta": gann_delta,
+        "geometry_confirmed": geo_confirmed,
+        "time_confirmed": time_confirmed,
+        "structure_confirmed": struct_confirmed,
+        "tape_action": tape_confirmed,
+        "buy_probability_pct": gann_buy_prob,
+        "sell_probability_pct": gann_sell_prob,
+        "verdict": gann_verdict,
+        "confirmed": gann_confirmed,
+        "narration": (
+            f"Gann degree: {gann_degree}° (proximity: {gann_proximity}). "
+            f"Trend running {gann_direction} for {gann_duration_h}h "
+            f"from ${gann_start_price} → ${gann_end_price} (Δ${gann_delta}). "
+            f"4 confirmation checks — Geometry: {geo_confirmed}, Time: {time_confirmed}, "
+            f"Structure: {struct_confirmed}, Tape: {tape_confirmed}. "
+            f"Gann probabilistic verdict: {gann_verdict} "
+            f"(BUY {gann_buy_prob}% / SELL {gann_sell_prob}%)."
+        ),
+    }
+
+    # Layer 3: Astrology timing
+    moon_phase = tr.get("moon_phase", "UNKNOWN")
+    nakshatra = tr.get("nakshatra", "UNKNOWN")
+    astro_event = tr.get("astro_timing", "")
+    astro_hours = tr.get("astro_hours_to_event")
+    astro_strength = summary.get("mcl_astro_strength", 0)
+    astro_mindset = summary.get("observation_gann_mindset_bias", "NEUTRAL")
+    astro_confirmed = astro_hours is not None and astro_hours <= 6.0
+    layers["astrology_timing"] = {
+        "moon_phase": moon_phase,
+        "nakshatra": nakshatra,
+        "astro_event": astro_event,
+        "hours_to_event": astro_hours,
+        "astro_strength": astro_strength,
+        "market_bias": astro_mindset,
+        "confirmed": astro_confirmed,
+        "narration": (
+            f"Moon phase: {moon_phase} | Nakshatra: {nakshatra} | Astro strength: {astro_strength}/100. "
+            f"Next astro event: '{astro_event}' in {astro_hours}h. "
+            f"From 25 years of training, this phase historically biases toward: {astro_mindset}. "
+            f"Timing confirmation: {'YES — within 6h window' if astro_confirmed else 'NO — event not in window'}."
+        ),
+    }
+
+    # Layer 4: Cycle & compression
+    comp_phase = summary.get("mcl_compression_phase", "UNKNOWN")
+    comp_score = summary.get("mcl_compression_score", 0.0)
+    comp_energy = summary.get("mcl_compression_energy_stored", 0.0)
+    comp_bias = summary.get("mcl_compression_direction_bias", "NEUTRAL")
+    breakout_near = summary.get("mcl_compression_breakout_near", False)
+    elliott_phase = tr.get("elliott_phase", "UNKNOWN")
+    cycle_event = tr.get("cycle_state", "UNKNOWN")
+    layers["cycle_compression"] = {
+        "phase": comp_phase,
+        "compression_score": comp_score,
+        "energy_stored_pct": comp_energy,
+        "direction_bias": comp_bias,
+        "breakout_near": breakout_near,
+        "elliott_phase": elliott_phase,
+        "confirmed": bool(breakout_near) or comp_energy > 80.0,
+        "narration": (
+            f"Compression phase: {comp_phase} (score: {comp_score}). "
+            f"Energy stored: {comp_energy}% toward breakout. Direction bias: {comp_bias}. "
+            f"Elliott wave position: {elliott_phase}. "
+            f"Breakout imminent: {'YES' if breakout_near else 'NOT YET — accumulating'}. "
+            f"Cycle state: {cycle_event}."
+        ),
+    }
+
+    # Layer 5: Novel Discovery Signals (ECS, NVA, PACL, RIS, CAR)
+    novel_data = (tip or {}).get("novel_signals") or {}
+    novel_active = bool(novel_data.get("novel_signal_active"))
+    novel_dir = str(novel_data.get("novel_signal_direction") or "NEUTRAL")
+    novel_count = int(novel_data.get("novel_signal_count") or 0)
+    novel_strength = float(novel_data.get("novel_combined_strength") or 0.0)
+    novel_strongest = str(novel_data.get("novel_strongest") or "none").upper()
+    # Individual signal narrations
+    _ecs_nar  = (novel_data.get("ecs")  or {}).get("narration", "ECS: Not active.")
+    _nva_nar  = (novel_data.get("nva")  or {}).get("narration", "NVA: Not active.")
+    _pacl_nar = (novel_data.get("pacl") or {}).get("narration", "PACL: Not active.")
+    _ris_nar  = (novel_data.get("ris")  or {}).get("narration", "RIS: Not active.")
+    _car_nar  = (novel_data.get("car")  or {}).get("narration", "CAR: Not active.")
+    # ── Intraday alert level ────────────────────────────────────────────────
+    # Based on backtest accuracy: ECS(100% 1h) + RIS(67% 1h) are primary gates.
+    # Alert levels match observable signal confluence:
+    #   URGENT:     3+ signals active, strength ≥ 0.50, direction agreed
+    #   READY:      2+ signals active, strength ≥ 0.40, direction agreed, includes ECS or RIS
+    #   NEAR_READY: 2+ signals active OR (1 signal AND strength ≥ 0.40)
+    #   FORMING:    1 signal active with strength < 0.40
+    #   IDLE:       no signals active
+    _ecs_sig  = novel_data.get("ecs")  or {}
+    _ris_sig  = novel_data.get("ris")  or {}
+    _ecs_active = bool(_ecs_sig.get("active"))
+    _ris_active = bool(_ris_sig.get("active"))
+    _primary_gate = _ecs_active or _ris_active   # highest-accuracy intraday gates
+
+    if not novel_active:
+        _intraday_alert = "IDLE"
+    elif novel_count >= 3 and novel_strength >= 0.50:
+        _intraday_alert = "URGENT"
+    elif novel_count >= 2 and novel_strength >= 0.40 and _primary_gate:
+        _intraday_alert = "READY"
+    elif novel_count >= 2 or (novel_count == 1 and novel_strength >= 0.40):
+        _intraday_alert = "NEAR_READY"
+    else:
+        _intraday_alert = "FORMING"
+
+    _layer_confirmed = novel_active and novel_count >= 2 and novel_strength >= 0.40
+
+    layers["novel_signals"] = {
+        "active": novel_active,
+        "direction": novel_dir,
+        "signal_count": novel_count,
+        "combined_strength": round(novel_strength, 4),
+        "strongest": novel_strongest,
+        "confirmed": _layer_confirmed,
+        "intraday_alert": _intraday_alert,
+        "primary_gate_active": _primary_gate,  # ECS or RIS — highest intraday accuracy
+        "individual": {
+            "ecs":  novel_data.get("ecs")  or {},
+            "nva":  novel_data.get("nva")  or {},
+            "pacl": novel_data.get("pacl") or {},
+            "ris":  novel_data.get("ris")  or {},
+            "car":  novel_data.get("car")  or {},
+        },
+        "narration": (
+            f"Novel Discovery Signals — {novel_count}/5 active | Alert: {_intraday_alert}"
+            + (f" (strongest: {novel_strongest}, combined_strength={novel_strength:.3f}).\n" if novel_active else ".\n")
+            + f"  {_ecs_nar}\n"
+            + f"  {_nva_nar}\n"
+            + f"  {_pacl_nar}\n"
+            + f"  {_ris_nar}\n"
+            + f"  {_car_nar}"
+        ),
+    }
+
+    # Layer 5: Signal confirmation count
+
+    confirmed_count = sum(1 for l in layers.values() if l.get("confirmed"))
+    total_layers = len(layers)
+    all_agree = all(
+        (l.get("vote") or l.get("trend_direction") or l.get("market_bias") or direction) == direction
+        for l in layers.values()
+        if "vote" in l or "market_bias" in l
+    )
+
+    # ── Overall signal readiness ──────────────────────────────────────────────
+    if direction == "WAIT":
+        readiness = "WAITING"
+        readiness_reason = "AI model output is WAIT — no actionable setup yet."
+    elif confirmed_count >= 3 and confluence >= 0.55:
+        readiness = "READY"
+        readiness_reason = f"{confirmed_count}/{total_layers} layers confirmed. Confluence {confluence:.2f} above threshold."
+    elif confirmed_count >= 2:
+        readiness = "NEAR_READY"
+        readiness_reason = f"{confirmed_count}/{total_layers} layers confirmed. Waiting for {total_layers - confirmed_count} more to align."
+    else:
+        readiness = "FORMING"
+        readiness_reason = f"Only {confirmed_count}/{total_layers} layers confirmed. Setup still forming."
+
+    # ── What needs to happen to activate ─────────────────────────────────────
+    activation_requirements: list[str] = []
+    if not layers["gann_geometry"]["confirmed"]:
+        activation_requirements.append("Gann: price must reach a cardinal angle (0°, 90°, 180°, or 270°) with geometry+time alignment")
+    if not layers["astrology_timing"]["confirmed"]:
+        activation_requirements.append(f"Astro: wait for '{astro_event}' event window to open (within 6h)")
+    if not layers["cycle_compression"]["confirmed"]:
+        activation_requirements.append("Cycle: energy must discharge toward breakout (energy >80% or breakout_near=True)")
+    if not layers["novel_signals"]["confirmed"]:
+        activation_requirements.append("Novel: at least 2 novel discovery signals must fire simultaneously with strength ≥0.40")
+    if direction == "WAIT":
+        activation_requirements.append("AI vote must shift from WAIT to BUY or SELL on next cycle refresh")
+
+    # ── Master narration (plain English) ─────────────────────────────────────
+    master_narration = (
+        f"[WHAT I LEARNED] "
+        f"I was trained on {lookback_years} years of XAUUSD data from 2000–2026, learning how Gann angles, "
+        f"lunar cycles (Moon phases + Nakshatras), Elliott wave patterns, price compression/expansion, and "
+        f"5 novel self-learned cross-domain signals (ECS, NVA, PACL, RIS, CAR) "
+        f"historically correlate with gold price turning points. "
+        f"Feature version: {ai_model_version}. Total bars seen: {rows_analyzed:,}. "
+        f"\n\n[WHAT I SEE NOW — {direction}] "
+        f"Price is at Gann degree {gann_degree}° ({gann_proximity} proximity to key angle). "
+        f"Moon phase: {moon_phase} in Nakshatra {nakshatra} (strength {astro_strength}/100). "
+        f"Compression energy: {comp_energy}% stored, bias {comp_bias}. "
+        f"Elliott wave: {elliott_phase}. "
+        f"Novel signals: {novel_count}/5 active"
+        + (f" ({novel_strongest} leads, dir={novel_dir}, strength={novel_strength:.3f}). " if novel_active else ". ")
+        + f"\n\n[CONFIRMATION STATUS] "
+        f"Signal readiness: {readiness}. "
+        f"{confirmed_count}/{total_layers} confirmation layers active: "
+        f"AI={'✓' if layers['ai_model']['confirmed'] else '○'} "
+        f"Gann={'✓' if layers['gann_geometry']['confirmed'] else '○'} "
+        f"Astro={'✓' if layers['astrology_timing']['confirmed'] else '○'} "
+        f"Cycle={'✓' if layers['cycle_compression']['confirmed'] else '○'} "
+        f"Novel={'✓' if layers['novel_signals']['confirmed'] else '○'}. "
+        f"Confluence score: {confluence:.2f}/1.0. "
+        f"Reason: {readiness_reason} "
+        f"\n\n[TO ACTIVATE TRADE] "
+        + ("; ".join(activation_requirements) if activation_requirements else "All layers confirmed — trade is active.")
+    )
+
+    return {
+        "master_narration": master_narration,
+        "signal_readiness": readiness,
+        "readiness_reason": readiness_reason,
+        "layers_confirmed": confirmed_count,
+        "layers_total": total_layers,
+        "confluence_score": confluence,
+        "activation_requirements": activation_requirements,
+        "layers": layers,
+    }
+
+
 def _build_trade_init_point(summary: dict[str, Any]) -> dict[str, Any]:
     """Build a trade initialisation point object combining astro timing, news window,
     Gann angle geometry, Elliott wave phase, and cycle state into a single actionable dict.
@@ -2500,6 +2798,14 @@ def _build_trade_init_point(summary: dict[str, Any]) -> dict[str, Any]:
             }
             key = str(value or "").strip().upper()
             return float(mapping.get(key, default))
+
+    def _parse_iso_datetime(value: Any) -> datetime | None:
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except Exception:
+            return None
 
     now_utc = datetime.now(tz=timezone.utc)
     now_ts = now_utc.timestamp()
@@ -2541,6 +2847,46 @@ def _build_trade_init_point(summary: dict[str, Any]) -> dict[str, Any]:
     gann_trend_start = summary.get("observation_trend_start_time") or summary.get("observation_signal_start_time")
     gann_trend_end = summary.get("observation_signal_end_time")
     gann_angle_slope = summary.get("observation_geometry_angle_deg")
+    gann_trend_start_price = (
+        summary.get("observation_signal_start_price")
+        or trade_levels.get("entry")
+        or observation.get("latest_price")
+    )
+    gann_trend_end_price = (
+        summary.get("observation_signal_end_price")
+        or observation.get("latest_price")
+        or entry_price
+    )
+
+    trend_start_dt = _parse_iso_datetime(gann_trend_start)
+    trend_end_dt = _parse_iso_datetime(gann_trend_end) or now_utc
+    gann_trend_duration_hours: float | None = None
+    if trend_start_dt is not None and trend_end_dt is not None:
+        gann_trend_duration_hours = round(max(0.0, (trend_end_dt - trend_start_dt).total_seconds() / 3600.0), 2)
+
+    trend_price_delta = None
+    if gann_trend_start_price is not None and gann_trend_end_price is not None:
+        trend_price_delta = round(
+            _safe_float(gann_trend_end_price, 0.0) - _safe_float(gann_trend_start_price, 0.0),
+            6,
+        )
+
+    if trend_price_delta is not None and abs(trend_price_delta) > 0:
+        gann_trend_direction = "UP" if trend_price_delta > 0 else "DOWN"
+    elif direction == "BUY":
+        gann_trend_direction = "UP"
+    elif direction == "SELL":
+        gann_trend_direction = "DOWN"
+    else:
+        gann_trend_direction = "FLAT"
+
+    gann_angle_slope_value = _safe_float(gann_angle_slope, 0.0)
+    if gann_angle_slope_value > 5.0:
+        gann_trend_angle_bias = "ASCENDING"
+    elif gann_angle_slope_value < -5.0:
+        gann_trend_angle_bias = "DESCENDING"
+    else:
+        gann_trend_angle_bias = "FLAT"
 
     # ── Elliott wave phase ────────────────────────────────────────────────────
     # Derive from harmonic pattern or MCL phase state
@@ -2566,6 +2912,7 @@ def _build_trade_init_point(summary: dict[str, Any]) -> dict[str, Any]:
         or summary.get("mcl_timescale_regime")
         or "UNKNOWN"
     ).upper()
+    cycle_progress_pct = summary.get("mcl_future_cycle_progress_pct") or summary.get("mcl_cycle_progress_pct")
 
     # ── News window fusion ────────────────────────────────────────────────────
     news_block_active = False
@@ -2627,13 +2974,19 @@ def _build_trade_init_point(summary: dict[str, Any]) -> dict[str, Any]:
         _score_parts.append(0.15)  # clean signal, no news block
     confluence_score = round(min(1.0, sum(_score_parts)), 3)
 
-    return {
+    tip: dict[str, Any] = {
         "entry_time_utc": entry_time_utc,
         "entry_price": entry_price,
         "direction": direction,
         "confidence": round(raw_confidence, 4),
         "confluence_score": confluence_score,
         "news_block_active": news_block_active,
+        "training_context": {
+            "ai_model_version": summary.get("ai_model_version"),
+            "ai_model_scope": summary.get("ai_model_scope"),
+            "ai_bundle_source": summary.get("ai_bundle_source"),
+            "backtest_winrate": summary.get("mcl_backtest_winrate"),
+        },
         "trigger_reason": {
             "astro_timing": timing_window_str,
             "astro_event": astro_event,
@@ -2645,14 +2998,24 @@ def _build_trade_init_point(summary: dict[str, Any]) -> dict[str, Any]:
             "news_minutes_to_event": news_minutes_to_event,
             "gann_angle_id": gann_angle_id,
             "gann_angle_slope_degrees": gann_angle_slope,
+            "gann_trend_angle_bias": gann_trend_angle_bias,
             "gann_degree": gann_degree,
             "gann_angle_proximity": gann_angle_proximity,
             "gann_trend_start_utc": gann_trend_start,
             "gann_trend_end_utc": gann_trend_end,
+            "gann_trend_start_price": gann_trend_start_price,
+            "gann_trend_end_price": gann_trend_end_price,
+            "gann_trend_price_delta": trend_price_delta,
+            "gann_trend_duration_hours": gann_trend_duration_hours,
+            "gann_trend_direction": gann_trend_direction,
             "cycle_state": cycle_state,
+            "cycle_progress_pct": cycle_progress_pct,
             "elliott_phase": elliott_phase,
         },
     }
+    # Attach self-knowledge narration explaining training, observations, and confirmation
+    tip["ai_training_narration"] = _build_ai_training_narration(summary, tip)
+    return tip
 
 
 def _compute_summary(
@@ -2696,6 +3059,9 @@ def _compute_summary(
             started_at=started_at,
             previous_for_key=previous_for_key if isinstance(previous_for_key, dict) else None,
         )
+        summary["ai_phase_forecast"] = _build_ai_phase_forecast(summary)
+        summary["trade_init_point"] = _build_trade_init_point(summary)
+        summary["ai_training_narration"] = (summary["trade_init_point"] or {}).get("ai_training_narration")
         with _cache_lock:
             _cache_payloads[key] = summary
             _cache_ts_by_key[key] = time.time()
@@ -2915,6 +3281,7 @@ def _compute_summary(
             "ai_model_trade_direction": ((payload.get("ai_model") or {}).get("model_trade_direction")),
             "ai_trigger_direction": ((payload.get("ai_model") or {}).get("trigger_direction")),
             "ai_bundle_source": ((payload.get("ai_model") or {}).get("bundle_source")),
+            "ikzc_signal": (payload.get("ai_model") or {}).get("strategy_signal"),
             "learning_profile": payload.get("learning_profile"),
             "process_timing": payload.get("process_timing"),
             "slowest_process_stage": max(
@@ -2996,6 +3363,7 @@ def _compute_summary(
 
     summary["ai_phase_forecast"] = _build_ai_phase_forecast(summary)
     summary["trade_init_point"] = _build_trade_init_point(summary)
+    summary["ai_training_narration"] = (summary["trade_init_point"] or {}).get("ai_training_narration")
 
     with _cache_lock:
         _status = str(summary.get("status") or "").lower()
@@ -3355,29 +3723,46 @@ def _compute_timeframe_matrix(
     by_tf: dict[str, dict[str, Any]] = {}
     # Use one worker per timeframe so all run concurrently; each worker's
     # subprocess already has its own _SUMMARY_TIMEOUT_SECONDS cap.
-    worker_count = max(1, min(len(_MATRIX_TIMEFRAMES), _MATRIX_MAX_WORKERS))
-    # Keep normal matrix fetches responsive, but allow explicit refresh=true
-    # calls to use a longer budget aligned with deep summary refreshes.
+    refresh_deep_timeframes = {
+        tf for tf in _MATRIX_TIMEFRAMES if str(tf).lower() in set(_MATRIX_REFRESH_DEEP_TIMEFRAMES)
+    }
+    if refresh and not refresh_deep_timeframes:
+        refresh_deep_timeframes = {"1d"}
+    worker_limit = _MATRIX_REFRESH_MAX_WORKERS if refresh else _MATRIX_MAX_WORKERS
+    worker_base = len(refresh_deep_timeframes) if refresh else len(_MATRIX_TIMEFRAMES)
+    worker_count = max(1, min(worker_base, worker_limit))
+    # Keep normal matrix fetches responsive. Refresh calls may wait longer than
+    # standard matrix loads, but they still need to finish inside the UI's
+    # request budget so late timeframes can degrade to fallback rows instead of
+    # forcing the caller to abort the entire request.
     if refresh:
-        # A matrix refresh must wait at least as long as an individual background
-        # summary refresh, otherwise slow but valid timeframes get downgraded to
-        # matrix_cached even though their own /summary refresh would complete.
-        matrix_wait = max(_MATRIX_REFRESH_WAIT_SECONDS, _BACKGROUND_SUMMARY_TIMEOUT_SECONDS + 4.0)
+        matrix_wait = min(
+            _MATRIX_REFRESH_WAIT_SECONDS,
+            _BACKGROUND_SUMMARY_TIMEOUT_SECONDS + 4.0,
+            _MATRIX_REFRESH_CLIENT_BUDGET_SECONDS,
+        )
     else:
         matrix_wait = min(_SUMMARY_TIMEOUT_SECONDS + 4.0, _MATRIX_WAIT_SECONDS)
 
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=worker_count)
-    future_map = {
-        executor.submit(
+    if refresh:
+        ordered_timeframes = [tf for tf in _MATRIX_TIMEFRAMES if tf not in refresh_deep_timeframes]
+        ordered_timeframes.extend([tf for tf in _MATRIX_TIMEFRAMES if tf in refresh_deep_timeframes])
+    else:
+        ordered_timeframes = list(_MATRIX_TIMEFRAMES)
+
+    future_map = {}
+    for tf in ordered_timeframes:
+        tf_refresh = bool(refresh and tf in refresh_deep_timeframes)
+        future = executor.submit(
             _compute_summary,
-            refresh,
+            tf_refresh,
             symbol,
             tf,
             lookback_years,
             source_mode,
-        ): tf
-        for tf in _MATRIX_TIMEFRAMES
-    }
+        )
+        future_map[future] = tf
 
     try:
         try:
@@ -3905,6 +4290,7 @@ def _compute_chart(
     lookback_years: int = 25,
     limit: int = 12000,
     strict_mt5: bool = False,
+    require_fresh_mt5: bool = False,
 ) -> dict[str, Any]:
     symbol = _normalize_symbol(symbol)
     requested_timeframe = _normalize_timeframe(timeframe)
@@ -3913,6 +4299,7 @@ def _compute_chart(
     lookback_years = _normalize_lookback_years(lookback_years)
     limit = max(1, min(int(limit), 50000))
     strict_mt5 = bool(strict_mt5)
+    require_fresh_mt5 = bool(require_fresh_mt5)
     if strict_mt5:
         # Force live-only behavior when user explicitly requests strict MT5 charting.
         source_mode = "live_only"
@@ -4035,6 +4422,12 @@ def _compute_chart(
 
             if _selected is not None and _selected_source.strip().lower().endswith("_spot"):
                 _selected = _resample_to_timeframe(_selected, _tf_norm)
+            if _selected is not None:
+                try:
+                    _selected.attrs["aq_live_source"] = str(_selected_source or "")
+                    _selected.attrs["aq_live_last_epoch"] = int(_selected_ts) if _selected_ts is not None else None
+                except Exception:
+                    pass
             return _selected
         except Exception:
             return None
@@ -4088,35 +4481,51 @@ def _compute_chart(
 
     def _latest_stooq_spot_quote(max_age_seconds: int = 6 * 3600) -> tuple[float | None, int | None]:
         """Fetch latest public XAUUSD spot quote from stooq for stale-chart tail fallback."""
+        _STOOQ_URLS = [
+            "https://stooq.com/q/l/?s=xauusd&f=sd2t2ohlcv&h&e=csv",
+            "https://stooq.com/q/l/?s=gc.f&f=sd2t2ohlcv&h&e=csv",  # GC futures fallback
+        ]
         try:
             import urllib.request as _urllib_req
             from datetime import datetime as _dt, timezone as _tz
 
-            _req = _urllib_req.Request(
-                "https://stooq.com/q/l/?s=xauusd&f=sd2t2ohlcv&h&e=csv",
-                headers={"User-Agent": "Mozilla/5.0"},
-            )
-            with _urllib_req.urlopen(_req, timeout=6) as _resp:
-                _lines = _resp.read().decode().strip().split("\n")
-            if len(_lines) < 2 or _lines[1].startswith("N/A"):
-                return None, None
-            _parts = _lines[1].split(",")
-            if len(_parts) < 7:
-                return None, None
-            _price = float(_parts[6])
-            if _price <= 0:
-                return None, None
-            _dt_text = f"{_parts[1].strip()} {_parts[2].strip()}"
-            try:
-                _ts = int(_dt.strptime(_dt_text, "%Y-%m-%d %H:%M:%S").replace(tzinfo=_tz.utc).timestamp())
-            except Exception:
-                return None, None
-            _now_ts = int(time.time())
-            _ts = min(_ts, _now_ts)
-            _age = int(max(0, _now_ts - _ts))
-            if _age > int(max_age_seconds):
-                return None, None
-            return round(float(_price), 4), _ts
+            for _url in _STOOQ_URLS:
+                try:
+                    _req = _urllib_req.Request(_url, headers={"User-Agent": "Mozilla/5.0"})
+                    with _urllib_req.urlopen(_req, timeout=8) as _resp:
+                        _lines = _resp.read().decode(errors="replace").strip().replace("\r\n", "\n").split("\n")
+                    if len(_lines) < 2:
+                        continue
+                    _data_line = _lines[1].strip()
+                    if not _data_line or _data_line.startswith("N/A"):
+                        continue
+                    _parts = [p.strip() for p in _data_line.split(",")]
+                    if len(_parts) < 7:
+                        continue
+                    # Format: Symbol,Date,Time,Open,High,Low,Close[,Volume]
+                    try:
+                        _price = float(_parts[6])
+                    except (ValueError, IndexError):
+                        continue
+                    if _price <= 0:
+                        continue
+                    _dt_text = f"{_parts[1]} {_parts[2]}"
+                    try:
+                        _ts = int(_dt.strptime(_dt_text, "%Y-%m-%d %H:%M:%S").replace(tzinfo=_tz.utc).timestamp())
+                    except Exception:
+                        try:
+                            _ts = int(_dt.strptime(_parts[1], "%Y-%m-%d").replace(tzinfo=_tz.utc).timestamp())
+                        except Exception:
+                            continue
+                    _now_ts = int(time.time())
+                    _ts = min(_ts, _now_ts)
+                    _age = int(max(0, _now_ts - _ts))
+                    if _age > int(max_age_seconds):
+                        continue
+                    return round(float(_price), 4), _ts
+                except Exception:
+                    continue
+            return None, None
         except Exception:
             return None, None
 
@@ -4163,8 +4572,18 @@ def _compute_chart(
 
         _live_intraday_tfs = {"5m", "15m", "30m", "1h", "4h", "1d"}
         _live_df = None
+        _live_selected_source = None
+        _live_selected_last_epoch = None
         if (not _mode_hist_only) and str(timeframe).lower().strip() in _live_intraday_tfs:
             _live_df = _load_live_intraday_df(timeframe)
+            try:
+                if _live_df is not None:
+                    _live_selected_source = str((_live_df.attrs or {}).get("aq_live_source") or "") or None
+                    _raw_live_last = (_live_df.attrs or {}).get("aq_live_last_epoch")
+                    _live_selected_last_epoch = int(_raw_live_last) if _raw_live_last is not None else None
+            except Exception:
+                _live_selected_source = None
+                _live_selected_last_epoch = None
 
         if strict_mt5:
             try:
@@ -4178,6 +4597,15 @@ def _compute_chart(
 
             if _live_df is None or _live_df.empty:
                 raise RuntimeError("strict_mt5_no_live_dataset")
+
+            _mt5_fresh_max_age_sec = int(max(900, float(os.getenv("MCL_MT5_BRIDGE_FRESH_MAX_AGE_SEC", "900"))))
+            _mt5_age_sec = None
+            if _live_selected_last_epoch is not None:
+                _mt5_age_sec = int(max(0, time.time() - int(_live_selected_last_epoch)))
+            if require_fresh_mt5 and (_mt5_age_sec is None or int(_mt5_age_sec) > _mt5_fresh_max_age_sec):
+                raise RuntimeError(
+                    f"strict_mt5_stale_live_dataset_age_{_mt5_age_sec}_gt_{_mt5_fresh_max_age_sec}"
+                )
 
             # In strict mode, chart must be sourced from MT5 live dataset only.
             df = _live_df
@@ -4222,15 +4650,42 @@ def _compute_chart(
                         "fallback_reason": f"chart_live_only_dataset_{str(timeframe).lower()}",
                     }
                 elif _mode_live_prefer:
-                    df = _live_df
-                    applied_timeframe = str(timeframe)
-                    fallback_meta = {
-                        **(dict(_hist_fb or {})),
-                        "requested_timeframe": requested_timeframe,
-                        "applied_timeframe": str(timeframe),
-                        "fallback_applied": True,
-                        "fallback_reason": f"chart_live_first_dataset_{str(timeframe).lower()}",
-                    }
+                    # live_first: use historical CSV as base, overlay live data on top.
+                    # This gives full historical depth + fresh live candles.
+                    if _hist_ready:
+                        try:
+                            _merged = _pd.concat([_hist_df, _live_df], ignore_index=True)
+                            _merged = _merged.sort_values("time").drop_duplicates(subset=["time"], keep="last")
+                            df = _merged
+                            applied_timeframe = str(_hist_applied_tf)
+                            fallback_meta = {
+                                **(dict(_hist_fb or {})),
+                                "requested_timeframe": requested_timeframe,
+                                "applied_timeframe": str(_hist_applied_tf),
+                                "fallback_applied": True,
+                                "fallback_reason": f"chart_live_first_merged_{str(timeframe).lower()}",
+                            }
+                        except Exception:
+                            # Merge failed — fall back to live only
+                            df = _live_df
+                            applied_timeframe = str(timeframe)
+                            fallback_meta = {
+                                **(dict(_hist_fb or {})),
+                                "requested_timeframe": requested_timeframe,
+                                "applied_timeframe": str(timeframe),
+                                "fallback_applied": True,
+                                "fallback_reason": f"chart_live_first_dataset_{str(timeframe).lower()}",
+                            }
+                    else:
+                        df = _live_df
+                        applied_timeframe = str(timeframe)
+                        fallback_meta = {
+                            **(dict(_hist_fb or {})),
+                            "requested_timeframe": requested_timeframe,
+                            "applied_timeframe": str(timeframe),
+                            "fallback_applied": True,
+                            "fallback_reason": f"chart_live_first_dataset_{str(timeframe).lower()}",
+                        }
                 elif _mode_merge:
                     if _hist_ready:
                         _tf_norm_merge = str(timeframe).lower().strip()
@@ -4928,6 +5383,26 @@ def _compute_chart(
             stale_seconds = int(max(0, time.time() - latest_candle_time))
             data_stale = bool(stale_seconds > stale_threshold_seconds)
 
+        _live_selected_age_seconds = None
+        if _live_selected_last_epoch is not None:
+            _live_selected_age_seconds = int(max(0, time.time() - int(_live_selected_last_epoch)))
+        _mt5_bridge_source_selected = bool(str(_live_selected_source or "").lower().startswith("mt5_"))
+        _mt5_fresh_threshold_seconds = int(max(900, stale_threshold_seconds * 3))
+        _mt5_bridge_fresh = bool(
+            _mt5_bridge_source_selected
+            and _live_selected_age_seconds is not None
+            and int(_live_selected_age_seconds) <= _mt5_fresh_threshold_seconds
+        )
+
+        if _live_selected_source:
+            chart_data_source = f"live:{_live_selected_source}"
+        else:
+            chart_data_source = "historical"
+        if str(live_gap_reason or "").find("stooq_tail") >= 0:
+            chart_data_source = f"{chart_data_source}+stooq_tail"
+        elif str(live_gap_reason or "").find("live_quote_tail") >= 0:
+            chart_data_source = f"{chart_data_source}+local_quote_tail"
+
         historical_depth_fn = getattr(module, "_historical_depth_years", None)
         depth_years = None
         if callable(historical_depth_fn) and not df.empty:
@@ -4953,12 +5428,20 @@ def _compute_chart(
             "symbol": symbol,
             "source_mode": source_mode,
             "strict_mt5": strict_mt5,
+            "require_fresh_mt5": require_fresh_mt5,
             "requested_timeframe": requested_timeframe,
             "applied_timeframe": str(applied_timeframe),
             "lookback_years": effective_lookback_years,
             "historical_depth_years": depth_years,
             "rows": len(rows),
             "candles": rows,
+            "chart_data_source": chart_data_source,
+            "chart_live_dataset_source": _live_selected_source,
+            "chart_live_dataset_last_time": _live_selected_last_epoch,
+            "chart_live_dataset_age_seconds": _live_selected_age_seconds,
+            "chart_mt5_bridge_source_selected": _mt5_bridge_source_selected,
+            "chart_mt5_bridge_fresh": _mt5_bridge_fresh,
+            "chart_mt5_fresh_threshold_seconds": _mt5_fresh_threshold_seconds,
             "timeframe_fallback_applied": bool(fallback_meta.get("fallback_applied")),
             "timeframe_fallback_reason": fallback_meta.get("fallback_reason"),
             "live_gap_fill_applied": live_gap_fill_applied,
@@ -4979,6 +5462,7 @@ def _compute_chart(
             "symbol": symbol,
             "source_mode": source_mode,
             "strict_mt5": strict_mt5,
+            "require_fresh_mt5": require_fresh_mt5,
             "requested_timeframe": requested_timeframe,
             "lookback_years": effective_lookback_years,
             "candles": [],
@@ -4993,7 +5477,7 @@ def market_causality_summary(
     symbol: str = Query(default="XAUUSD"),
     timeframe: str = Query(default="1d"),
     lookback_years: int = Query(default=25, ge=1, le=100),
-    source_mode: str = Query(default="live_first"),
+    source_mode: str = Query(default="combined"),
 ) -> dict[str, Any]:
     """Unified bridge endpoint for market-causality-lab summary data."""
     return _compute_summary(
@@ -5102,6 +5586,7 @@ def market_causality_status() -> dict[str, Any]:
         cache_keys = sorted(list(_cache_payloads.keys()))
 
     cal = _LEARNING_ENGINE.get_model_calibration()
+    training = _get_training_status()
 
     return {
         "module_path": str(_module_path()),
@@ -5112,9 +5597,14 @@ def market_causality_status() -> dict[str, Any]:
         "background_summary_timeout_seconds": _BACKGROUND_SUMMARY_TIMEOUT_SECONDS,
         "matrix_wait_seconds": _MATRIX_WAIT_SECONDS,
         "matrix_refresh_wait_seconds": _MATRIX_REFRESH_WAIT_SECONDS,
+        "matrix_refresh_deep_timeframes": list(_MATRIX_REFRESH_DEEP_TIMEFRAMES),
         "cache_entries": len(cache_keys),
         "cache_keys": cache_keys,
         # Model health summary
+        "training_status": training.get("status"),
+        "ready_models": training.get("ready_models"),
+        "total_models": training.get("total_models"),
+        "ready_percentage": training.get("ready_percentage"),
         "model_confidence": cal["model_confidence"],
         "overall_accuracy": round(cal["overall_accuracy"], 4),
         "total_outcomes": cal["total_outcomes"],
@@ -5129,7 +5619,7 @@ def market_causality_engines(
     symbol: str = Query(default="XAUUSD"),
     timeframe: str = Query(default="1d"),
     lookback_years: int = Query(default=25, ge=1, le=100),
-    source_mode: str = Query(default="live_first"),
+    source_mode: str = Query(default="combined"),
 ) -> dict[str, Any]:
     """
     Return the raw output of every MCL analytical engine for the current bar.
@@ -5249,10 +5739,11 @@ def market_causality_engines(
 def market_causality_chart(
     symbol: str = Query(default="XAUUSD"),
     timeframe: str = Query(default="1d"),
-    source_mode: str = Query(default="live_first"),
+    source_mode: str = Query(default="combined"),
     lookback_years: int = Query(default=25, ge=1, le=100),
     limit: int = Query(default=12000, ge=1, le=50000),
     strict_mt5: bool = Query(default=False),
+    require_fresh_mt5: bool = Query(default=False),
 ) -> dict[str, Any]:
     """Historical candlestick data for the MCL dashboard chart."""
     return _compute_chart(
@@ -5262,6 +5753,7 @@ def market_causality_chart(
         lookback_years=lookback_years,
         limit=limit,
         strict_mt5=strict_mt5,
+        require_fresh_mt5=require_fresh_mt5,
     )
 
 
@@ -5318,33 +5810,52 @@ def market_causality_live_price(
         return None
 
     def _fetch_stooq_quote() -> dict[str, Any] | None:
-        try:
-            _req = _urllib_req.Request(
-                "https://stooq.com/q/l/?s=xauusd&f=sd2t2ohlcv&h&e=csv",
-                headers={"User-Agent": "Mozilla/5.0"},
-            )
-            with _urllib_req.urlopen(_req, timeout=6) as _r:
-                _lines = _r.read().decode().strip().split("\n")
-            if len(_lines) < 2 or _lines[1].startswith("N/A"):
-                return None
-            _fields = _lines[1].split(",")
-            _price = float(_fields[6])
-            _dt_str = f"{_fields[1]} {_fields[2]}"
-            _ts = int(_pd.Timestamp(_dt_str).timestamp())
-            _now_ts = int(time.time())
-            if _ts > _now_ts + 120:
-                _ts = _now_ts
-            _age = int(max(0, time.time() - _ts))
-            if _price <= 0 or _age > max_age_seconds:
-                return None
-            return {
-                "price": round(float(_price), 4),
-                "source": "stooq_xauusd_spot",
-                "spot": True,
-                "ts": _ts,
-            }
-        except Exception:
-            return None
+        _STOOQ_SYMBOLS = ["xauusd", "gc.f"]
+        for _sym in _STOOQ_SYMBOLS:
+            try:
+                _req = _urllib_req.Request(
+                    f"https://stooq.com/q/l/?s={_sym}&f=sd2t2ohlcv&h&e=csv",
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                with _urllib_req.urlopen(_req, timeout=8) as _r:
+                    _lines = _r.read().decode(errors="replace").strip().replace("\r\n", "\n").split("\n")
+                if len(_lines) < 2:
+                    continue
+                _data = _lines[1].strip()
+                if not _data or _data.startswith("N/A"):
+                    continue
+                _fields = [f.strip() for f in _data.split(",")]
+                if len(_fields) < 7:
+                    continue
+                try:
+                    _price = float(_fields[6])
+                except (ValueError, IndexError):
+                    continue
+                if _price <= 0:
+                    continue
+                _dt_str = f"{_fields[1]} {_fields[2]}"
+                try:
+                    _ts = int(_pd.Timestamp(_dt_str).timestamp())
+                except Exception:
+                    try:
+                        _ts = int(_pd.Timestamp(_fields[1]).timestamp())
+                    except Exception:
+                        _ts = int(time.time())
+                _now_ts = int(time.time())
+                if _ts > _now_ts + 120:
+                    _ts = _now_ts
+                _age = int(max(0, time.time() - _ts))
+                if _age > max_age_seconds:
+                    continue
+                return {
+                    "price": round(float(_price), 4),
+                    "source": f"stooq_{_sym}_spot",
+                    "spot": True,
+                    "ts": _ts,
+                }
+            except Exception:
+                continue
+        return None
 
     def _fetch_mt5_local_quote() -> dict[str, Any] | None:
         try:
@@ -5671,6 +6182,22 @@ def market_causality_mt5_bridge_status(
     best_quote = _load_local_live_quote(symbol=symbol, timeframe=timeframe)
     bridge_sources = [item for item in bridge_files if str(item.get("source") or "").startswith("mt5_")]
     bridge_ready = any(bool(item.get("exists")) and int(item.get("rows") or 0) > 0 for item in bridge_sources)
+    mt5_latest = None
+    if bridge_sources:
+        mt5_latest = max(bridge_sources, key=lambda item: int(item.get("last_ts") or 0))
+    mt5_latest_ts = int((mt5_latest or {}).get("last_ts") or 0) or None
+    mt5_latest_age_seconds = int(max(0, time.time() - mt5_latest_ts)) if mt5_latest_ts is not None else None
+    mt5_fresh_threshold_seconds = int(max(900, float(os.getenv("MCL_MT5_BRIDGE_FRESH_MAX_AGE_SEC", "900"))))
+    mt5_bridge_fresh = bool(mt5_latest_age_seconds is not None and mt5_latest_age_seconds <= mt5_fresh_threshold_seconds)
+    if not bridge_ready:
+        freshness_state = "missing"
+    elif mt5_bridge_fresh:
+        freshness_state = "fresh"
+    else:
+        freshness_state = "stale"
+    last_bar_time = None
+    if mt5_latest_ts is not None:
+        last_bar_time = datetime.fromtimestamp(mt5_latest_ts, tz=timezone.utc).isoformat()
 
     return {
         "status": "ok",
@@ -5678,38 +6205,81 @@ def market_causality_mt5_bridge_status(
         "timeframe": timeframe,
         "mt5_runtime": mt5_runtime,
         "bridge_ready": bridge_ready,
+        "bridge_latest": mt5_latest,
+        "bridge_latest_age_seconds": mt5_latest_age_seconds,
+        "bridge_fresh": mt5_bridge_fresh,
+        "freshness_state": freshness_state,
+        "bridge_fresh_threshold_seconds": mt5_fresh_threshold_seconds,
+        "last_bar_epoch": mt5_latest_ts,
+        "last_bar_time": last_bar_time,
         "bridge_files": bridge_files,
         "best_live_quote": best_quote,
         "chart_ingestion_ready": bool(best_quote),
         "message": (
-            "MT5 bridge files detected; MCL chart can ingest XAUUSD from bridge"
-            if bridge_ready
-            else "No MT5 bridge files detected yet; chart will use existing local/live fallback"
+            "MT5 bridge files detected and fresh; chart can ingest current XAUUSD bridge data"
+            if bridge_ready and mt5_bridge_fresh
+            else (
+                "MT5 bridge files detected but stale; chart may use fallback tails until expert feed updates"
+                if bridge_ready
+                else "No MT5 bridge files detected yet; chart will use existing local/live fallback"
+            )
         ),
         "updated_at": int(time.time()),
     }
 
 
 @router.post("/mt5_upload")
+@router.post("/upload_mt5_feed")
 async def market_causality_mt5_upload(
     request: Request,
     symbol: str = Query(default="XAUUSD"),
     timeframe: str = Query(default="5m"),
 ) -> dict[str, Any]:
-    """Accept an MT5 CSV export as raw body or multipart from any HTTP client."""
+    """Accept an MT5 CSV export as raw body from a local MT5 sender script."""
     symbol = _normalize_symbol(symbol)
+
+    # Optional shared-secret auth for public Codespace URLs.
+    required_token = str(os.getenv("MCL_MT5_UPLOAD_TOKEN", "")).strip()
+    provided_token = str(request.headers.get("x-mt5-upload-token", "")).strip()
+    if required_token and provided_token != required_token:
+        raise HTTPException(status_code=401, detail="invalid upload token")
+
     incoming_dir = _repo_root() / "market-causality-lab" / "data" / "live" / "mt5" / "incoming"
     incoming_dir.mkdir(parents=True, exist_ok=True)
     dest = incoming_dir / "XAUUSD_feed_latest.csv"
     content = await request.body()
     if not content:
-        return {"status": "error", "message": "empty file"}
-    dest.write_bytes(content)
+        raise HTTPException(status_code=400, detail="empty file")
+    if len(content) > 2_000_000:
+        raise HTTPException(status_code=413, detail="file too large")
+
+    try:
+        text = content.decode("utf-8-sig", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"invalid utf-8 csv: {exc}") from exc
+
+    lines = [ln.strip() for ln in text.replace("\r\n", "\n").replace("\r", "\n").split("\n") if ln.strip()]
+    if len(lines) < 3:
+        raise HTTPException(status_code=400, detail="not enough rows")
+    header = lines[0].replace(" ", "")
+    if not header.lower().startswith("date;open;high;low;close"):
+        raise HTTPException(status_code=400, detail="invalid header")
+
+    tmp_dest = incoming_dir / "XAUUSD_feed_latest.csv.tmp"
+    tmp_dest.write_bytes(content)
+    tmp_dest.replace(dest)
+
+    latest_date = ""
+    if len(lines) > 1 and ";" in lines[-1]:
+        latest_date = lines[-1].split(";", 1)[0].strip()
+
     return {
         "status": "ok",
         "symbol": symbol,
         "timeframe": timeframe,
         "bytes": len(content),
+        "rows": max(0, len(lines) - 1),
+        "latest_date": latest_date,
         "dest": str(dest),
         "ts": int(time.time()),
     }
@@ -5720,7 +6290,7 @@ def market_causality_timeframe_matrix(
     refresh: bool = Query(default=False),
     symbol: str = Query(default="XAUUSD"),
     lookback_years: int = Query(default=25, ge=1, le=100),
-    source_mode: str = Query(default="live_first"),
+    source_mode: str = Query(default="combined"),
 ) -> dict[str, Any]:
     """Aggregated timeframe-wise AI observation matrix payload."""
     return _compute_timeframe_matrix(
@@ -5729,6 +6299,291 @@ def market_causality_timeframe_matrix(
         lookback_years=lookback_years,
         source_mode=source_mode,
     )
+
+
+@router.get("/ai_narration")
+def market_causality_ai_narration(
+    symbol: str = Query(default="XAUUSD"),
+    timeframe: str = Query(default="1d"),
+    lookback_years: int = Query(default=25, ge=1, le=30),
+    source_mode: str = Query(default="combined"),
+) -> dict[str, Any]:
+    """Return the AI self-knowledge training narration block — explains what the AI was trained on,
+    what it currently observes across all 4 confirmation layers (AI model, Gann, Astrology, Cycle),
+    and what needs to happen for a trade signal to activate.
+    """
+    try:
+        summary = _compute_summary(
+            refresh=False,
+            symbol=symbol,
+            timeframe=timeframe,
+            lookback_years=lookback_years,
+            source_mode=source_mode,
+        )
+        narration = summary.get("ai_training_narration") or {}
+        tip = summary.get("trade_init_point") or {}
+        return {
+            "status": "ok",
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "source_mode": source_mode,
+            "signal": summary.get("signal"),
+            "confidence": summary.get("confidence"),
+            "signal_readiness": narration.get("signal_readiness"),
+            "readiness_reason": narration.get("readiness_reason"),
+            "layers_confirmed": narration.get("layers_confirmed"),
+            "layers_total": narration.get("layers_total"),
+            "confluence_score": narration.get("confluence_score"),
+            "activation_requirements": narration.get("activation_requirements", []),
+            "master_narration": narration.get("master_narration"),
+            "layers": narration.get("layers", {}),
+            "trade_levels": summary.get("trade_levels"),
+            "entry_time_utc": tip.get("entry_time_utc"),
+            "entry_price": tip.get("entry_price"),
+            "updated_at": summary.get("updated_at"),
+        }
+    except Exception as exc:
+        return {"status": "error", "error": str(exc)}
+
+
+@router.get("/ai_trade_history")
+def market_causality_ai_trade_history(
+    limit: int = Query(default=10, ge=1, le=100),
+) -> dict[str, Any]:
+    """Return AI's past trade identifications and outcomes.
+    Shows how the AI identified each trade (which concepts, layers, confidence),
+    what price action occurred, and whether the prediction was correct.
+    This demonstrates the AI's learning journey and accuracy patterns.
+    """
+    try:
+        outcomes = _PREDICTION_TRACKER.load_outcomes()
+        predictions = _PREDICTION_TRACKER.load_predictions()
+        
+        # Get requested limit of recent outcomes
+        recent_outcomes = outcomes[-limit:] if outcomes else []
+        
+        # Count stats
+        total = len(outcomes)
+        correct = sum(1 for o in outcomes if o.get("was_correct"))
+        win_rate = (correct / total * 100) if total > 0 else 0.0
+        
+        # Average move per direction
+        buy_trades = [o for o in outcomes if o.get("predicted_direction") == "BUY"]
+        sell_trades = [o for o in outcomes if o.get("predicted_direction") == "SELL"]
+        avg_buy_move = sum(abs(o.get("actual_move_pips", 0)) for o in buy_trades) / len(buy_trades) if buy_trades else 0
+        avg_sell_move = sum(abs(o.get("actual_move_pips", 0)) for o in sell_trades) / len(sell_trades) if sell_trades else 0
+        
+        # Build trade history items
+        trade_items = []
+        for outcome in recent_outcomes:
+            pred_id = str(outcome.get("prediction_id", "unknown"))
+            predicted = outcome.get("predicted_direction", "UNKNOWN")
+            actual = outcome.get("outcome_direction", "UNKNOWN")
+            was_correct = outcome.get("was_correct", False)
+            realized_price = outcome.get("realized_price")
+            actual_move = outcome.get("actual_move_pips", 0)
+            accuracy_score = outcome.get("accuracy_score", 0.0)
+            timeframe_reached = outcome.get("timeframe_reached")
+            
+            # Determine how trade was identified (which layers were active)
+            # Based on the prediction structure stored
+            pred_match = next((p for p in predictions if str(p.get("prediction_id", "")).strip() == pred_id.strip()), None)
+            concepts_applied = []
+            gann_confirmed = False
+            astro_confirmed = False
+            
+            if pred_match:
+                concepts_applied = pred_match.get("concepts_applied", [])
+                if any("gann" in c.lower() for c in concepts_applied):
+                    gann_confirmed = True
+                if any("astro" in c.lower() for c in concepts_applied):
+                    astro_confirmed = True
+            
+            trade_items.append({
+                "prediction_id": pred_id[:8],
+                "predicted_direction": predicted,
+                "actual_direction": actual,
+                "was_correct": was_correct,
+                "result": "WIN" if was_correct else "LOSS",
+                "realized_price": realized_price,
+                "actual_move_pips": round(actual_move, 2),
+                "accuracy_score": round(accuracy_score, 2),
+                "timeframe_reached": timeframe_reached,
+                "concepts_applied": concepts_applied[:5],  # Top 5 concepts
+                "concepts_total": len(concepts_applied),
+                "gann_confirmed": gann_confirmed,
+                "astro_confirmed": astro_confirmed,
+            })
+        
+        return {
+            "status": "ok",
+            "trade_history_summary": {
+                "total_trades": total,
+                "correct_predictions": correct,
+                "incorrect_predictions": total - correct,
+                "win_rate_pct": round(win_rate, 1),
+                "avg_move_buy_pips": round(avg_buy_move, 2),
+                "avg_move_sell_pips": round(avg_sell_move, 2),
+            },
+            "recent_trades": trade_items,
+            "identification_process": {
+                "step_1": "AI Model: 140 features trained on 25yr XAUUSD data → outputs BUY/SELL/WAIT with confidence",
+                "step_2": "Gann Layer: 4 checks (geometry, time, structure, tape) on sacred angles & price-time squares",
+                "step_3": "Astro Layer: Moon phase, nakshatra, event window, and historical phase bias confirmation",
+                "step_4": "Cycle Layer: Compression energy (0-100%), Elliott position, direction bias, breakout imminence",
+                "confirmation": "Signal READY when ≥3 layers confirmed + confluence ≥0.55",
+            },
+            "learning_mechanism": {
+                "post_trade_outcome": "After timeframe closes, actual price action is recorded",
+                "concept_reinforcement": "Successful concepts get higher weights; failed concepts trigger drift detection",
+                "model_drift_check": "If accuracy drops <55%, model recalibration is triggered",
+                "feedback_loop": "Each outcome updates the learning profile; AI learns which phases work when",
+            },
+            "next_actions": [
+                "POST_01: Record outcome (direction match, price realized)",
+                "POST_02: Mark failed concepts if prediction was wrong",
+                "REINFORCE: Weight concepts that were successful higher",
+                "DETECT_DRIFT: If 3+ concepts fail in a row, flag model recalibration",
+            ],
+        }
+    except Exception as exc:
+        logging.exception("ai_trade_history failed: %s", exc)
+        return {"status": "error", "error": str(exc)}
+
+
+@router.get("/ai_learning_concepts")
+def market_causality_ai_learning_concepts() -> dict[str, Any]:
+    """Return a comprehensive map of all AI learning concepts, what they mean, and their empirical performance.
+    Shows how many distinct patterns the AI has learned to recognize and confirm in trade signals.
+    """
+    try:
+        # Use absolute path to MCL models directory
+        mcl_dir = "/workspaces/newcpu/market-causality-lab"
+        concepts_path = os.path.join(mcl_dir, "data", "ai_models", "concept_reasoning_state.json")
+        if not os.path.exists(concepts_path):
+            return {
+                "status": "error",
+                "message": "Learning state not yet populated (models still initializing)",
+            }
+        
+        with open(concepts_path) as f:
+            concept_data = json.load(f)
+        
+        concepts = concept_data.get("concept_stats", {})
+        
+        # Organize by category
+        categories = {}
+        for concept_name, concept_stats in concepts.items():
+            prefix = concept_name.split(":")[0]
+            if prefix not in categories:
+                categories[prefix] = {
+                    "count": 0,
+                    "concepts": [],
+                    "description": "",
+                    "examples": []
+                }
+            
+            categories[prefix]["count"] += 1
+            categories[prefix]["concepts"].append({
+                "name": concept_name,
+                "stats": concept_stats,
+            })
+        
+        # Add descriptions
+        descriptions = {
+            "ai_model": "Core AI pattern recognition trained on 25 years of XAUUSD data",
+            "astro": "Lunar cycles (phases, nakshatras) and astrological event timing",
+            "factor": "Composite factors from phase, Elliott wave, model votes, and harmonic patterns",
+            "gann": "Gann's sacred angles and harmonic zone theory",
+            "gann_adv": "Advanced Gann: price-time squares, reversals, degree bins",
+            "liquidity": "Smart money liquidity sweeps and order clustering",
+            "news": "Economic news timing, planetary aspects, Gann event alignment",
+            "orderflow": "Aggressive buying/selling pressure and order imbalances",
+            "phase": "Market phase: Accumulation (low vol) vs Expansion (high vol)",
+            "regime": "Trend, Range, and Weak Trend regimes",
+            "structure": "Up/Down impulse wave structure",
+            "volatility": "Low, Medium, High volatility regimes",
+        }
+        
+        for cat in categories:
+            categories[cat]["description"] = descriptions.get(cat, "")
+            # Add first 3 concept names as examples
+            categories[cat]["examples"] = [c["name"] for c in categories[cat]["concepts"][:3]]
+        
+        # Compute performance metrics
+        total_concepts = len(concepts)
+        total_updates = concept_data.get("meta", {}).get("updates", 0)
+        last_update = concept_data.get("meta", {}).get("last_update", "unknown")
+        
+        # Count strongest concepts (perfect or near-perfect performance on BUY)
+        strong_concepts = []
+        for concept_name, concept_stats in concepts.items():
+            buy_stats = concept_stats.get("BUY", {})
+            tp = buy_stats.get("tp", 0)
+            fp = buy_stats.get("fp", 0)
+            if tp > 0 and fp == 0:
+                strong_concepts.append({
+                    "concept": concept_name,
+                    "true_positives": tp,
+                    "false_positives": fp,
+                    "accuracy": "100%"
+                })
+        
+        return {
+            "status": "ok",
+            "learning_metrics": {
+                "total_distinct_concepts": total_concepts,
+                "learning_categories": len(categories),
+                "total_concept_updates": total_updates,
+                "last_concept_update": last_update,
+                "confirmation_layers": 4,  # AI Model, Gann, Astro, Cycle
+                "feature_dimensions": 140,  # v5_elliott_unified
+                "active_model_timeframes": 8,  # 5m, 15m, 30m, 1h, 4h, 1d, 1w, 1month
+                "training_years": 25,
+            },
+            "categories": {
+                cat: {
+                    "count": data["count"],
+                    "description": data["description"],
+                    "examples": data["examples"],
+                }
+                for cat, data in categories.items()
+            },
+            "strongest_concepts": {
+                "concept": "AI concepts with 100% precision (true_positives > 0, false_positives = 0)",
+                "count": len(strong_concepts),
+                "examples": strong_concepts[:10],
+            },
+            "signal_confirmation_pipeline": {
+                "layer_1": "AI Model Vote — trained on 140 features, 25 years, multi-timeframe consensus",
+                "layer_2": "Gann Geometry — 4 checks (geometry, time, structure, tape) validating price/time alignment",
+                "layer_3": "Astrology Timing — moon phase + nakshatra + event window confirmation",
+                "layer_4": "Cycle Compression — energy stored, breakout imminence, Elliott wave position",
+                "signal_ready_criteria": "≥3 layers confirmed AND confluence score ≥0.55",
+            },
+            "learning_sources": {
+                "price_data": "Historical XAUUSD: 6,980–164,358 bars per timeframe (2000–2026)",
+                "pattern_recognition": "Elliott waves, harmonic zones, price-time relationships",
+                "cyclical_patterns": "Moon phases, nakshatras, astrological events, seasonal bias",
+                "market_microstructure": "Liquidity sweeps, orderflow imbalances, institutional clustering",
+                "post_trade_feedback": "Outcome recording, concept reinforcement, drift detection",
+            },
+            "next_enhancements": [
+                "Order book microstructure (depth, bid-ask dynamics)",
+                "Intermarket correlations (USD/GC, equity leading indicators)",
+                "Sentiment scoring (social media, news tone, VIX regime)",
+                "Geopolitical event calendar with historical impact",
+                "Central bank calendar (FOMC, ECB, BOJ pre/post)",
+                "Seasonal patterns (Q-based, monthly, day-of-week)",
+                "Volatility regime shifts (GARCH, transition probs)",
+                "Smart money tracking (institutional flow, COT)",
+                "Time-zone bias (session handoffs, market opens)",
+                "Execution vector (optimal entry timing, delay impact)",
+            ],
+        }
+    except Exception as exc:
+        logging.exception("ai_learning_concepts failed: %s", exc)
+        return {"status": "error", "error": str(exc)}
 
 
 @router.get("/gann_qa")
@@ -9005,3 +9860,197 @@ def get_model_calibration() -> dict[str, Any]:
     confidence_score (0-100), drift_percentage, and days_since_retrain.
     """
     return _get_model_drift_status()
+
+
+@router.get("/novel_signals")
+def get_novel_signals(
+    symbol: str = Query(default="XAUUSD"),
+    timeframe: str = Query(default="15m"),
+    lookback_years: int = Query(default=25, ge=1, le=30),
+    source_mode: str = Query(default="combined"),
+) -> dict[str, Any]:
+    """
+        Return the 6 novel AI-discovered cross-domain trading signals with intraday alert level.
+
+    Signals (all discovered from 26-year AI training on XAU/USD 15m data):
+            ECS  — Entropy Collapse Signal         (68.5% at 8h, 80% at 20h, 224 events, 3yr validated)
+            NVA  — Gann Rotation Velocity Anomaly  (57-67% accuracy at 4h, fires ~4% of bars)
+            PACL — Compression Structure Lock      (28-56% accuracy, fires ~9% of bars)
+            RIS  — Reliability Inversion Signal    (67% accuracy at 1h, fires ~1.4% of bars)
+            CAR  — Gann-Wave Harmonic Resonance    (62-88% accuracy, fires ~0.8% of bars)
+            VSTB/CBS — Clean BOS Signal             (56% accuracy at 15m, fires ~6% of bars, 494 events, 3yr validated)
+
+        ECS RIGOROUS EVALUATION (ecs_rigorous_eval.py, 3yr, 649k bars, 224 events):
+          15m=40%(worse than random), 1h=45%, 4h=55%, 8h=68.5%, 20h=75.4%
+          Expectancy peaks at BAR 80 (20h) NOT bar 8 — ECS is a SWING signal.
+          Retest entry: 60% win but 8.41x R:R (best expectancy +0.176%).
+          Regime: 2012-2018=83%, 2019-2021=57%, 2022-2026=80%. Does NOT fire in 2000-2011.
+          volume_zscore REMOVED from signal — 0% populated in scanner.
+        CBS/VSTB (Clean BOS Signal): 56% at 15m (494 events, 3yr). Best short-term structural signal.
+        NOTE: All order_flow fields (volume_zscore, flow_imbalance etc.) are 0% populated in scanner.
+
+    Alert levels:
+      IDLE       — no signals active
+      FORMING    — 1 signal active, strength < 0.40
+      NEAR_READY — 2+ signals active OR 1 signal with strength ≥ 0.40
+      READY      — 2+ signals, strength ≥ 0.40, ECS or RIS (primary intraday gates) active
+      URGENT     — 3+ signals, strength ≥ 0.50, strongest directional confluence
+
+    Recommended intraday use: enter only when READY or URGENT,
+    confirming direction agrees with the main AI signal.
+    """
+    try:
+        summary = _compute_summary(
+            refresh=False,
+            symbol=symbol,
+            timeframe=timeframe,
+            lookback_years=lookback_years,
+            source_mode=source_mode,
+        )
+        narration = summary.get("ai_training_narration") or {}
+        novel_layer = (narration.get("layers") or {}).get("novel_signals") or {}
+        individual = novel_layer.get("individual") or {}
+
+        # Pull individual signal states
+        def _sig_summary(name: str, acc_1h: str, acc_2h: str, acc_4h: str, acc_8h: str) -> dict[str, Any]:
+            s = individual.get(name) or {}
+            return {
+                "active": bool(s.get("active")),
+                "direction": str(s.get("direction") or "NEUTRAL"),
+                "strength": float(s.get("strength") or 0.0),
+                "components": s.get("components") or {},
+                "narration": s.get("narration") or f"{name.upper()}: Not active.",
+                "backtest_accuracy": {
+                    "1h": acc_1h,
+                    "2h": acc_2h,
+                    "4h": acc_4h,
+                    "8h": acc_8h,
+                    "note": "3-month backtest, XAU/USD 15m, 2025-2026",
+                },
+            }
+
+        intraday_alert = novel_layer.get("intraday_alert", "IDLE")
+
+        # Recommended action per alert level
+        _action_map = {
+            "IDLE":       "No novel signal. Wait for primary AI confirmation only.",
+            "FORMING":    "1 signal forming. Monitor but do not act on novel signals alone.",
+            "NEAR_READY": "2+ signals or strong single signal. Prepare entry — wait for READY.",
+            "READY":      "Primary gate (ECS/RIS) + companion signal aligned. Entry valid when AI direction agrees.",
+            "URGENT":     "3+ signals with high strength. High-conviction entry. Size up if AI agrees.",
+        }
+
+        return {
+            "status": "ok",
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "updated_at": summary.get("updated_at"),
+            "main_ai_signal": summary.get("signal"),
+            "main_ai_confidence": summary.get("confidence"),
+            # Composite novel signal state
+            "novel_signal_active": novel_layer.get("active", False),
+            "novel_signal_direction": novel_layer.get("direction", "NEUTRAL"),
+            "novel_signal_count": novel_layer.get("signal_count", 0),
+            "novel_strongest": novel_layer.get("strongest", "NONE"),
+            "novel_combined_strength": novel_layer.get("combined_strength", 0.0),
+            "layer_confirmed": novel_layer.get("confirmed", False),
+            "primary_gate_active": novel_layer.get("primary_gate_active", False),
+            # Intraday alert
+            "intraday_alert": intraday_alert,
+            "intraday_recommended_action": _action_map.get(intraday_alert, ""),
+            # Individual signal details — accuracy from rigorous past-data backtests
+            "signals": {
+                "ecs":  _sig_summary("ecs",  "45%",  "51%",  "55%", "69%"),   # 224 events, 3yr (swing)
+                "nva":  _sig_summary("nva",  "57%",  "52%",  "67%", "67%"),
+                "pacl": _sig_summary("pacl", "28%",  "47%",  "39%", "56%"),
+                "ris":  _sig_summary("ris",  "67%",  "60%",  "47%", "13%"),
+                "car":  _sig_summary("car",  "62%",  "62%",  "50%", "88%"),
+                "vstb": _sig_summary("vstb", "56%",  "54%",  "47%", "55%"),   # 494 events, 3yr (15m)
+                "frv":  _sig_summary("frv",  "54%",  "54%",  "54%", "53%"),   # 19k events, 26yr (5m-1h scalp)
+                "ict":  _sig_summary("ict",  "N/A",  "N/A",  "N/A", "N/A"),   # ICT Composite: multi-concept alignment
+            },
+            # Intraday guide (from rigorous past-data testing)
+            "intraday_guide": {
+                "mandatory_signal": "ECS at 8h-20h — 68.5% at 8h, 75.4% at 20h (224 events, 3yr). Best swing signal.",
+                "scalp_signal":     "FRV at 5m-1h — 54.3% at 15m, 53.7% at 1h (19,246 events, 26yr). Best short-term signal.",
+                "buy_side_swing":   "ECS (BUY) + CBS/VSTB (BUY) — coiled energy + clean BOS = aligned swing entry",
+                "buy_side_scalp":   "FRV (BUY) = bearish displacement in uptrend — fade the drop, target mean-reversion",
+                "sell_side_swing":  "ECS (SELL) + RIS (SELL) — entropy collapse + inversion = reversal",
+                "sell_side_scalp":  "FRV (SELL) = bullish displacement in downtrend — fade the spike, target mean-reversion",
+                "swing_signal":     "ECS alone (8h-20h hold): E[R @8h]=+0.165%, E[R @20h]=+0.402% per trade",
+                "scalp_signal_detail": "FRV alone (5m-1h): win=54%, E[R]=+0.002% per trade. Stack with VSTB for confirmation.",
+                "avoid": [
+                    "ECS at 15m: only 40% win (WORSE than random — ECS is a swing signal only)",
+                    "ECS at 1h: only 45% — do NOT scalp ECS",
+                    "CBS/VSTB at 4h+: degrades to 47%",
+                    "FRV at 4h+: edge decays to 51.8% (use for 15m-1h only)",
+                    "PACL alone at 1h: 28%",
+                ],
+                "frv_signal_facts": {
+                    "full_name": "FRV — Fade Reversal Signal (5-min scalp, AI-discovered from 649k bars)",
+                    "logic": "Fades overextended displacement moves when the dominant trend disagrees",
+                    "buy_trigger": "displacement_bearish (big drop) + hh_hl (bull EMA stack) — fade the drop in uptrend",
+                    "sell_trigger": "displacement_bullish (big rise) + ll_lh (bear EMA stack) — fade the spike in downtrend",
+                    "accuracy": {"15m": "54.3%", "30m": "54.2%", "1h": "53.7%", "2h": "53.0%", "4h": "51.8%"},
+                    "regime_stable": "2012-2018=54.4%, 2019-2021=54.6%, 2022-2026=52.1% — works in ALL regimes",
+                    "events_tested": "19,246 events over 26 years (649k bars)",
+                    "baseline": "XAU/USD 4-bar random baseline = 40.1% (right-skewed asset). FRV gives +14% edge.",
+                    "use": "5m scalp, max 1h hold. Exit at nearest prior swing high/low.",
+                    "best_combo": "FRV active + ECS quiet (low velocity/force) = highest probability scalp",
+                },
+                "entry_type_guide": {
+                    "immediate": "77.8% win, 1.70x R:R — best for catching fast moves",
+                    "retest":    "60.0% win, 8.41x R:R — best EXPECTANCY (+0.176%), breakout→pullback→continuation",
+                },
+                "expectancy_peak": "ECS expectancy peaks at bar 80 (20h hold), NOT bar 8. The '8-bar myth' is debunked.",
+                "ecs_regime_test": {
+                    "2000-2011": "0 events — ECS does not fire in pre-2012 market structure",
+                    "2012-2018": "83.3% at 8h (range/bear regime — works well)",
+                    "2019-2021": "57.1% at 8h (COVID shock — volatile, weaker)",
+                    "2022-2026": "80.0% at 8h (macro vol regime — strong)",
+                },
+                "vstb_note": "CBS/VSTB 3yr (494 events): 15m=56.3% best. Clean BOS (bos_up AND NOT bos_down AND tstr>5).",
+                "best_horizon_per_signal": {
+                    "FRV":  "5m-1h SCALP ONLY (54.3% at 15m, fades to 51.8% at 4h) — AI-discovered from 649k bars",
+                    "ECS":  "8h-20h swing (NOT a scalp — 40% at 15m, 45% at 1h)",
+                    "VSTB": "15m structural momentum (56.3%; degrades to 47% at 4h)",
+                    "RIS":  "1-2h intraday reversal",
+                    "NVA":  "4-8h momentum continuation",
+                    "CAR":  "8h+ swing, resonance-based",
+                    "PACL": "8h+ accumulation/distribution",
+                    "ICT":  "Intraday to swing — quality filter (need score>=0.30, 2+ confirming conditions)",
+                },
+                "ict_concepts_implemented": {
+                    "pd_array":          "Premium/Discount/Equilibrium — price position in 50-bar range. Buy in discount (<45%), sell in premium (>55%).",
+                    "htf_daily_bias":    "Daily HTF Bias — is today above/below prior day's midpoint? Filter intraday entries by bias direction.",
+                    "htf_weekly_bias":   "Weekly HTF Bias — price position vs weekly midpoint (480-bar range).",
+                    "judas_swing":       "Judas Swing — false session open spike that liquidates retail before real move. Rejection wick > 50% of bar range.",
+                    "silver_bullet":     "Silver Bullet — 10-11am or 2-3pm EST: FVG + displacement + kill zone + PD array alignment.",
+                    "ndog_nwog":         "NDOG/NWOG — New Day/Week Opening Gap. Price tends to fill these gaps as magnets.",
+                    "propulsion_block":  "Propulsion Block — the last OB that directly caused the current impulse. Higher-confidence OB than generic.",
+                    "consequent_ce":     "CE (Consequent Encroachment) — exact 50% midpoint of an FVG. ICT's most precise entry level.",
+                    "liquidity_void":    "Liquidity Void — fast impulse with no pullback. Void will eventually be filled.",
+                    "mms_programs":      "MMS Programs — EMA stack + PD position + swing structure = Buy/Sell program active.",
+                    "smt_proxy":         "SMT Proxy — intra-asset session momentum divergence (true SMT requires 2 correlated assets).",
+                    "ict_composite":     "ICT Composite Signal — unified score from all ICT concepts. Active when score>=0.30 AND 2+ conditions align.",
+                },
+                "ict_already_trained": {
+                    "bos_choch":       "BOS/CHoCH — in scanner structure context + feature pipeline",
+                    "mss":             "MSS (Market Structure Shift) — in scanner trigger context",
+                    "displacement":    "Displacement — in scanner trigger context (displacement_bullish/bearish)",
+                    "fvg":             "FVG (Fair Value Gap) — in scanner location context",
+                    "order_blocks":    "Order Blocks (bullish/bearish) — in scanner location context",
+                    "equal_highs_lows":"Equal Highs/Lows — in scanner location context",
+                    "liquidity_sweep": "Liquidity Sweeps (buy/sell side) — in scanner liquidity engine",
+                    "turtle_soup":     "Turtle Soup — full engine in scanner",
+                    "amd_phase":       "AMD (Accumulation/Manipulation/Distribution) — full engine in amd_ifvg_engine.py",
+                    "ifvg":            "IFVG (Inversion FVG) — full engine in amd_ifvg_engine.py",
+                    "kill_zones":      "Kill Zones (London Open, NY Open) — in feature pipeline",
+                    "ote":             "OTE (Optimal Trade Entry 61.8-79%) — in feature pipeline _compute_gann_ict_layer()",
+                    "power_of_3":      "Power of 3 — AMD phase mapped to ICT PoP3 in feature pipeline",
+                    "weekly_bias":     "Weekly Bias — in feature pipeline gann layer",
+                },
+            },
+        }
+    except Exception as exc:
+        return {"status": "error", "error": str(exc)}

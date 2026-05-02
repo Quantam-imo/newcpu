@@ -269,6 +269,68 @@
             const tl = data.trade_levels || null;
             setText("mclTradeLevels", tl ? `Entry ${tl.entry} | SL ${tl.stop_loss} | TP ${tl.take_profit} | R ${tl.r_ratio}` : "--");
 
+            // ── IKZC Trade Signal Card ───────────────────────────────────────
+            const ikzc = data.ikzc_signal || null;
+            const ikzcCard = document.getElementById("ikzcCard");
+            if (ikzcCard) {
+                if (ikzc && ikzc.active) {
+                    const dir = String(ikzc.direction || "").toUpperCase();
+                    const isBuy = dir === "BUY";
+                    const dirColor = isBuy ? "#10b981" : "#ef4444";
+                    const dirBg = isBuy ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)";
+
+                    ikzcCard.style.display = "block";
+                    ikzcCard.style.borderTopColor = dirColor;
+                    ikzcCard.style.background = `linear-gradient(135deg, ${dirBg} 0%, transparent 60%)`;
+                    ikzcCard.style.borderRadius = "8px";
+                    ikzcCard.style.padding = "10px";
+
+                    const badge = document.getElementById("ikzcBadge");
+                    if (badge) {
+                        badge.textContent = `⚡ ${dir}`;
+                        badge.style.background = dirBg;
+                        badge.style.color = dirColor;
+                        badge.style.border = `1px solid ${dirColor}`;
+                    }
+
+                    setText("ikzcEntry",     ikzc.entry     != null ? Number(ikzc.entry).toFixed(2)     : "--");
+                    setText("ikzcStop",      ikzc.stop      != null ? Number(ikzc.stop).toFixed(2)      : "--");
+                    setText("ikzcRR",        ikzc.rr_ratio  != null ? `1 : ${Number(ikzc.rr_ratio).toFixed(1)}` : "--");
+                    setText("ikzcTP1",       ikzc.tp1       != null ? Number(ikzc.tp1).toFixed(2)       : "--");
+                    setText("ikzcTP2",       ikzc.tp2       != null ? Number(ikzc.tp2).toFixed(2)       : "--");
+                    setText("ikzcKZ",        ikzc.kill_zone ? String(ikzc.kill_zone).replace(/_/g, " ").toUpperCase() : "--");
+                    setText("ikzcProb",      ikzc.model_prob  != null ? `${(Number(ikzc.model_prob) * 100).toFixed(1)}%` : "--");
+                    setText("ikzcICTScore",  ikzc.ict_score   != null ? Number(ikzc.ict_score).toFixed(2)  : "--");
+                    setText("ikzcConcepts",  ikzc.ict_concepts != null ? `${ikzc.ict_concepts} active`     : "--");
+                    setText("ikzcPD",        ikzc.pd_position_pct != null ? `${(Number(ikzc.pd_position_pct)*100).toFixed(0)}% ${Number(ikzc.pd_position_pct) <= 0.45 ? "(Discount)" : Number(ikzc.pd_position_pct) >= 0.55 ? "(Premium)" : "(Equil.)"}` : "--");
+                    setText("ikzcConfidence", ikzc.confidence != null ? `${(Number(ikzc.confidence)*100).toFixed(0)}%` : "--");
+
+                    const signalsEl = document.getElementById("ikzcSignals");
+                    if (signalsEl) {
+                        const sigs = Array.isArray(ikzc.active_signals) ? ikzc.active_signals : [];
+                        signalsEl.innerHTML = sigs.length
+                            ? sigs.map(s => `<span style="background:rgba(99,102,241,0.18);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;font-size:10px;padding:2px 7px;border-radius:4px;">${s}</span>`).join("")
+                            : `<span style="color:#64748b;font-size:11px;">--</span>`;
+                    }
+
+                    const sz = ikzc.position_sizing || {};
+                    setText("ikzcSizing", sz.lots != null
+                        ? `${sz.lots} lots | Risk $${sz.dollar_risk} | Stop ${sz.stop_distance} pts`
+                        : "--");
+
+                    const gatesEl = document.getElementById("ikzcGates");
+                    if (gatesEl) {
+                        const gates = Array.isArray(ikzc.gates_passed) ? ikzc.gates_passed : [];
+                        gatesEl.innerHTML = gates.length
+                            ? gates.map(g => `<div>✓ ${String(g).replace(/_/g," ")}</div>`).join("")
+                            : "--";
+                    }
+                } else {
+                    ikzcCard.style.display = "none";
+                }
+            }
+            // ────────────────────────────────────────────────────────────────
+
             // ── MCL Engines ─────────────────────────────────────────────────
             setText("mclEngGannDegree", data.mcl_gann_degree != null ? String(data.mcl_gann_degree) : "--");
             setText("mclEngGannZone", data.mcl_gann_zone || "--");
@@ -425,6 +487,58 @@
             <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
                 <div style="color:var(--muted);font-size:12px;">Trade Levels</div>
                 <div id="mclTradeLevels" style="font-weight:600;">--</div>
+            </div>
+            <div id="ikzcCard" style="margin-top:8px;border-top:2px solid #334155;padding-top:8px;display:none;">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;">
+                    <strong style="font-size:13px;letter-spacing:0.04em;">🎯 IKZC TRADE SIGNAL</strong>
+                    <span id="ikzcBadge" style="font-size:13px;font-weight:800;padding:3px 12px;border-radius:6px;letter-spacing:0.06em;">--</span>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
+                    <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:8px;text-align:center;">
+                        <div style="color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Entry</div>
+                        <div id="ikzcEntry" style="font-size:15px;font-weight:700;margin-top:2px;">--</div>
+                    </div>
+                    <div style="background:rgba(239,68,68,0.10);border-radius:6px;padding:8px;text-align:center;">
+                        <div style="color:#ef4444;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">Stop Loss</div>
+                        <div id="ikzcStop" style="font-size:15px;font-weight:700;color:#ef4444;margin-top:2px;">--</div>
+                    </div>
+                    <div style="background:rgba(16,185,129,0.10);border-radius:6px;padding:8px;text-align:center;">
+                        <div style="color:#10b981;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">R:R Ratio</div>
+                        <div id="ikzcRR" style="font-size:15px;font-weight:700;color:#10b981;margin-top:2px;">--</div>
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+                    <div style="background:rgba(16,185,129,0.07);border-radius:6px;padding:8px;text-align:center;">
+                        <div style="color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">TP1 (50% close)</div>
+                        <div id="ikzcTP1" style="font-size:14px;font-weight:700;color:#10b981;margin-top:2px;">--</div>
+                        <div style="color:#64748b;font-size:10px;margin-top:2px;">+1.5R</div>
+                    </div>
+                    <div style="background:rgba(16,185,129,0.10);border-radius:6px;padding:8px;text-align:center;">
+                        <div style="color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:.05em;">TP2 (full close)</div>
+                        <div id="ikzcTP2" style="font-size:14px;font-weight:700;color:#10b981;margin-top:2px;">--</div>
+                        <div style="color:#64748b;font-size:10px;margin-top:2px;">+3.0R</div>
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;">
+                    <div><span style="color:#64748b;font-size:11px;">Kill Zone</span><br><strong id="ikzcKZ" style="font-size:12px;">--</strong></div>
+                    <div><span style="color:#64748b;font-size:11px;">Model Prob</span><br><strong id="ikzcProb" style="font-size:12px;">--</strong></div>
+                    <div><span style="color:#64748b;font-size:11px;">ICT Score</span><br><strong id="ikzcICTScore" style="font-size:12px;">--</strong></div>
+                    <div><span style="color:#64748b;font-size:11px;">ICT Concepts</span><br><strong id="ikzcConcepts" style="font-size:12px;">--</strong></div>
+                    <div><span style="color:#64748b;font-size:11px;">PD Position</span><br><strong id="ikzcPD" style="font-size:12px;">--</strong></div>
+                    <div><span style="color:#64748b;font-size:11px;">Confidence</span><br><strong id="ikzcConfidence" style="font-size:12px;">--</strong></div>
+                </div>
+                <div style="margin-bottom:6px;">
+                    <div style="color:#64748b;font-size:11px;margin-bottom:3px;">Active Signals</div>
+                    <div id="ikzcSignals" style="display:flex;flex-wrap:wrap;gap:4px;">--</div>
+                </div>
+                <div style="margin-bottom:6px;">
+                    <div style="color:#64748b;font-size:11px;margin-bottom:3px;">Position Sizing (per $10,000)</div>
+                    <div id="ikzcSizing" style="font-size:12px;font-weight:600;">--</div>
+                </div>
+                <div>
+                    <div style="color:#64748b;font-size:11px;margin-bottom:3px;">Gates Passed</div>
+                    <div id="ikzcGates" style="font-size:10px;line-height:1.7;color:#94a3b8;">--</div>
+                </div>
             </div>
             <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
                 <div style="color:var(--muted);font-size:12px;">Observation Telemetry</div>

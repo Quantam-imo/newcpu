@@ -121,8 +121,9 @@ def _train_for_dataframe(
     stop_return_pct: float,
     feature_version: str,
     setup_mode: str,
+    max_scan_records: int | None = None,
 ) -> dict:
-    memory = scan_market(df)
+    memory = scan_market(df, max_records=max_scan_records)
     result = train_and_register_from_memory(
         memory,
         horizon=max(1, int(horizon)),
@@ -195,8 +196,8 @@ def main() -> int:
     parser.add_argument(
         "--feature-version",
         default="v3_amd_cycle_state",
-        choices=["v3_amd_cycle_state", "v4_layered_execution", "v5_elliott_unified"],
-        help="Feature schema to train. v4_layered_execution adds layered execution context; v5_elliott_unified adds Elliott-wave and unified cycle/angle/astro/phase alignment features.",
+        choices=["v3_amd_cycle_state", "v4_layered_execution", "v5_elliott_unified", "v6_gann_ict", "v7_novel_discovery", "v8_vstb", "v9_ict_extended"],
+        help="Feature schema to train. v9_ict_extended (213 features) adds full ICT engine: PD Arrays, HTF bias, Judas Swing, Silver Bullet, NDOG/NWOG, Propulsion Blocks, CE, Liquidity Voids, MMS programs, SMT proxy, FRV signal, and ICT Composite signal.",
     )
     parser.add_argument(
         "--setup-mode",
@@ -213,6 +214,13 @@ def main() -> int:
         "--master-cycles",
         default="data/reports/master_cycles_25y.csv",
         help="Master 25Y ordered cycle ledger (moon/nakshatra/planetary/gann) to inject as cycle events",
+    )
+    parser.add_argument(
+        "--max-scan-records",
+        type=int,
+        default=5000,
+        help="Cap the number of bars passed to scan_market (dense recent + sparse historical). "
+             "Default 5000 keeps training under ~3 minutes. Use 0 for unlimited (slow).",
     )
     args = parser.parse_args()
 
@@ -254,6 +262,9 @@ def main() -> int:
             df = integrate_news_features(df, news_df)
             df = _add_master_cycle_state_features(df, args.master_cycles)
 
+            max_scan = int(args.max_scan_records) if int(args.max_scan_records) > 0 else None
+            if max_scan:
+                print(f"  [scan] max_scan_records={max_scan} (use --max-scan-records 0 for unlimited)")
             train_result = _train_for_dataframe(
                 df,
                 args.horizon,
@@ -265,6 +276,7 @@ def main() -> int:
                 stop_return_pct=float(args.stop_return_pct),
                 feature_version=str(args.feature_version),
                 setup_mode=str(args.setup_mode),
+                max_scan_records=max_scan,
             )
             train_result["timeframe"] = tf
             train_result["dataset"] = str(path)

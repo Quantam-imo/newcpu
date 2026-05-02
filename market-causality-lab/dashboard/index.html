@@ -2783,6 +2783,7 @@
                     <span id="chartMetaTf">Applied TF: --</span>
                     <span class="chart-data-freshness-pill" id="chartFreshnessPill">CHART --</span>
                     <span class="chart-live-source-pill down" id="chartLiveSourcePill">MT5 DOWN</span>
+                    <span id="chartBridgeAge" style="color:#94a3b8;font-size:11px;">Bridge: --</span>
                     <span id="chartLiveTag" style="color:#fcd34d;display:none;">&#9679; LIVE</span>
                 </div>
             </div>
@@ -3911,6 +3912,7 @@
         const MCL_OVERLAY_AUTO_MODE_STORAGE_KEY = "mcl_overlay_auto_mode";
         const MCL_USER_MODE_STORAGE_KEY = "mcl_user_experience_mode";
         const INSTITUTIONAL_TREND_WINDOW_MS = 30000;
+        const TUNNEL_AUTH_HINT = "Port authentication required. Open this Codespace URL directly and complete sign-in for port 8000, then reload.";
         const ICEBERG_PROFILE_STORAGE_KEY = "mcl_iceberg_threshold_profile";
         const ICEBERG_THRESHOLD_PROFILES = {
             conservative: {
@@ -3943,6 +3945,16 @@
                 if (Object.prototype.hasOwnProperty.call(ICEBERG_THRESHOLD_PROFILES, stored)) return stored;
             } catch (_) {}
             return "balanced";
+        }
+
+        function _isTunnelAuthResponse(response) {
+            try {
+                if (!response || Number(response.status) !== 401) return false;
+                const header = String(response.headers?.get("www-authenticate") || "").toLowerCase();
+                return header.includes("tunnel");
+            } catch (_) {
+                return false;
+            }
         }
 
         function _setIcebergProfileKey(profileKey) {
@@ -6090,7 +6102,10 @@
             params.set("symbol", symbol);
             params.set("timeframe", effectiveTimeframe);
             params.set("source_mode", selectedSourceMode());
-            if (selectedStrictMt5Mode()) params.set("strict_mt5", "1");
+            if (selectedStrictMt5Mode()) {
+                params.set("strict_mt5", "1");
+                params.set("require_fresh_mt5", "1");
+            }
             params.set("lookback_years", String(_chartLookbackYearsForTimeframe(effectiveTimeframe)));
             params.set("limit", String(_chartLimitForTimeframe(effectiveTimeframe)));
 
@@ -6099,6 +6114,9 @@
                 const timer = setTimeout(() => controller.abort(), timeoutMs);
                 try {
                     const response = await fetch(url, { signal: controller.signal });
+                    if (_isTunnelAuthResponse(response)) {
+                        throw new Error(TUNNEL_AUTH_HINT);
+                    }
                     if (!response.ok) {
                         throw new Error(`Chart API HTTP ${response.status}`);
                     }
@@ -6118,7 +6136,10 @@
                     retryParams.set("symbol", symbol);
                     retryParams.set("timeframe", "5m");
                     retryParams.set("source_mode", selectedSourceMode());
-                    if (selectedStrictMt5Mode()) retryParams.set("strict_mt5", "1");
+                    if (selectedStrictMt5Mode()) {
+                        retryParams.set("strict_mt5", "1");
+                        retryParams.set("require_fresh_mt5", "1");
+                    }
                     retryParams.set("lookback_years", String(DEFAULT_LOOKBACK_YEARS));
                     retryParams.set("limit", String(_chartLimitForTimeframe("5m")));
                     payload = await _fetchChartPayload(`${API_BASE}/market_causality/chart?${retryParams.toString()}`);
@@ -6134,6 +6155,22 @@
                 }
             }
             if (String(payload.status || "").toLowerCase() !== "ok") {
+                if (/^strict_mt5_stale_live_dataset_age_/i.test(String(payload.error || ""))) {
+                    _updateChartBridgeMeta(payload, []);
+                    _updateMt5StrictStaleBanner(payload, []);
+                    if (statusEl) {
+                        statusEl.className = "chart-status status-warning";
+                        statusEl.textContent = "Strict MT5 mode requires a fresh expert feed. Current MT5 bridge data is stale.";
+                    }
+                    if (freshnessEl) {
+                        freshnessEl.classList.remove("live");
+                        freshnessEl.classList.add("stale");
+                        freshnessEl.textContent = "MT5 STRICT STALE";
+                    }
+                    _chartDebugState.error = String(payload.error || "strict_mt5_stale");
+                    _renderChartDebug();
+                    return;
+                }
                 _chartDebugState.error = String(payload.error || "chart_load_failed");
                 _renderChartDebug();
                 throw new Error(payload.error || "chart load failed");
@@ -6257,6 +6294,7 @@
                 statusEl.className = "chart-status";
                 statusEl.textContent = `Loaded ${normalized.length} candles (${depth}) | mode:${sourceMode}${strictTag}${symbolTfNorm}${fallback}${gapFill}${staleMeta}${lastBar}`;
             }
+            _updateChartBridgeMeta(payload, normalized);
             _updateMt5StrictStaleBanner(payload, normalized);
             _updateWheelAiLearning();
             _renderLiveMatchStatus();
@@ -9378,11 +9416,16 @@
             if (!banner) return;
 
             const strictOn = selectedStrictMt5Mode() || payload?.strict_mt5 === true;
-            const staleSecondsRaw = Number(payload?.stale_seconds);
+            const staleSecondsRaw = Number(payload?.chart_live_dataset_age_seconds ?? payload?.stale_seconds);
             const staleSeconds = Number.isFinite(staleSecondsRaw) ? staleSecondsRaw : null;
-            const staleThresholdRaw = Number(payload?.stale_threshold_seconds);
+            const staleThresholdRaw = Number(payload?.chart_mt5_fresh_threshold_seconds ?? payload?.stale_threshold_seconds);
             const staleThreshold = Number.isFinite(staleThresholdRaw) ? staleThresholdRaw : null;
-            const dataStale = payload?.data_stale === true || (staleSeconds != null && staleThreshold != null && staleSeconds > staleThreshold);
+            const strictStaleError = /^strict_mt5_stale_live_dataset_age_/i.test(String(payload?.error || ""));
+            const bridgeFresh = payload?.chart_mt5_bridge_fresh;
+            const dataStale = strictStaleError
+                || bridgeFresh === false
+                || payload?.data_stale === true
+                || (staleSeconds != null && staleThreshold != null && staleSeconds > staleThreshold);
 
             if (!strictOn || !dataStale) {
                 banner.classList.remove("active");
@@ -9396,7 +9439,7 @@
             const lastIso = latest && Number.isFinite(Number(latest.time))
                 ? new Date(Number(latest.time) * 1000).toISOString().replace("T", " ").slice(0, 16)
                 : "--";
-            const gapNote = String(payload?.live_gap_reason || "no fallback allowed in strict mode");
+            const gapNote = String(payload?.live_gap_reason || payload?.chart_data_source || payload?.error || "no fallback allowed in strict mode");
 
             banner.textContent = `MT5 FEED STALE (${_formatAgeSeconds(staleSeconds)}) | Last MT5 bar: ${lastIso} UTC | Strict mode ON | ${gapNote}`;
             banner.classList.add("active");
@@ -9571,6 +9614,51 @@
             pillEl.textContent = state.label;
         }
 
+        function _updateChartBridgeMeta(payload, normalizedCandles) {
+            const pillEl = document.getElementById("chartLiveSourcePill");
+            const ageEl = document.getElementById("chartBridgeAge");
+            if (!pillEl && !ageEl) return;
+
+            const source = String(payload?.chart_live_dataset_source || payload?.chart_data_source || "");
+            const ageRaw = Number(payload?.chart_live_dataset_age_seconds);
+            const age = Number.isFinite(ageRaw) ? ageRaw : null;
+            const mt5Selected = payload?.chart_mt5_bridge_source_selected === true;
+            const mt5Fresh = payload?.chart_mt5_bridge_fresh;
+            const chartDataSource = String(payload?.chart_data_source || "").toLowerCase();
+            const strictStale = /^strict_mt5_stale_live_dataset_age_/i.test(String(payload?.error || ""));
+            const lastClose = Array.isArray(normalizedCandles) && normalizedCandles.length
+                ? Number(normalizedCandles[normalizedCandles.length - 1]?.close)
+                : null;
+
+            if (pillEl) {
+                if (strictStale || (mt5Selected && mt5Fresh === false)) {
+                    pillEl.className = "chart-live-source-pill stale";
+                    pillEl.textContent = "MT5 STALE";
+                } else if (mt5Selected && mt5Fresh === true) {
+                    pillEl.className = "chart-live-source-pill live";
+                    pillEl.textContent = "MT5 LIVE";
+                } else if (chartDataSource.includes("stooq")) {
+                    pillEl.className = "chart-live-source-pill fallback";
+                    pillEl.textContent = "STQ FALLBACK";
+                } else if (chartDataSource.includes("historical")) {
+                    pillEl.className = "chart-live-source-pill fallback";
+                    pillEl.textContent = "HISTORICAL";
+                } else {
+                    _updateChartSourcePill(source, age, false, Number.isFinite(lastClose) ? lastClose : null);
+                }
+            }
+
+            if (ageEl) {
+                if (age != null) {
+                    ageEl.textContent = `Bridge: ${_formatAgeSeconds(age)} old`;
+                } else if (source) {
+                    ageEl.textContent = `Bridge: ${source}`;
+                } else {
+                    ageEl.textContent = "Bridge: --";
+                }
+            }
+        }
+
         function _updateLivePriceBadge(price, source, age, isSpot) {
             const badge = document.getElementById("livePriceBadge");
             const srcEl = document.getElementById("livePriceSource");
@@ -9663,6 +9751,9 @@
                     });
                     const url = `${API_BASE}/market_causality/live_price?${params.toString()}`;
                     const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
+                    if (_isTunnelAuthResponse(res)) {
+                        throw new Error(TUNNEL_AUTH_HINT);
+                    }
                     if (!res.ok) throw new Error(`HTTP ${res.status}`);
                     return res.json();
                 };
@@ -9708,7 +9799,12 @@
                     driftLearning: null,
                 };
                 _updateLivePriceBadge(null, null, null, null);
-                console.warn("MCL live price poll failed:", err?.message || err);
+                const msg = String(err?.message || err || "");
+                if (msg.toLowerCase().includes("signal timed out")) {
+                    console.info("MCL live price poll timeout (non-fatal):", msg);
+                } else {
+                    console.warn("MCL live price poll failed:", msg);
+                }
             }
         }
 
@@ -9859,16 +9955,25 @@
             const tf     = _appliedChartTimeframe || document.getElementById("timeframeSelect")?.value || DEFAULT_TIMEFRAME;
             if (!mclCandlesSeries) return;
             const params = new URLSearchParams({ symbol, timeframe: tf, lookback_years: "1", limit: "5", source_mode: selectedSourceMode() });
-            if (selectedStrictMt5Mode()) params.set("strict_mt5", "1");
+            if (selectedStrictMt5Mode()) {
+                params.set("strict_mt5", "1");
+                params.set("require_fresh_mt5", "1");
+            }
             fetch(`${API_BASE}/market_causality/chart?${params}`)
                 .then((r) => r.json())
                 .then((payload) => {
+                    if (String(payload?.status || "").toLowerCase() !== "ok") {
+                        _updateChartBridgeMeta(payload, []);
+                        _updateMt5StrictStaleBanner(payload, []);
+                        return;
+                    }
                     const refreshAppliedTf = String(payload?.applied_timeframe || tf || DEFAULT_TIMEFRAME).toLowerCase();
                     _appliedChartTimeframe = refreshAppliedTf;
                     const candles = Array.isArray(payload.candles) ? payload.candles : [];
                     const normalized = candles
                         .map((r) => ({ time: Number(r.time), open: Number(r.open), high: Number(r.high), low: Number(r.low), close: Number(r.close) }))
                         .filter((r) => Number.isFinite(r.time) && Number.isFinite(r.close));
+                    _updateChartBridgeMeta(payload, normalized);
                     normalized.forEach((c) => { try { mclCandlesSeries.update(c); } catch (_) {} });
                     loadChartOverlays(symbol, refreshAppliedTf).catch(() => {});
                     _updateMt5StrictStaleBanner(payload, normalized);
