@@ -1487,6 +1487,37 @@
         .sc-sound-btn.sound-on { background: rgba(16,185,129,0.15); border-color: #10b981; color: #10b981; }
         .sc-alert-status { font-size: 10px; color: var(--muted); }
 
+        /* ── Scorecard History Log ──────────────────────────────────────────── */
+        .sc-history-log {
+            max-height: 260px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--surface-alt);
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-strong) transparent;
+        }
+        .sc-hist-row {
+            display: grid;
+            grid-template-columns: 110px 64px 56px 1fr auto;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-bottom: 1px solid rgba(148,163,184,0.08);
+            font-size: 11px;
+        }
+        .sc-hist-row:last-child { border-bottom: none; }
+        .sc-hist-row:first-child { border-radius: 8px 8px 0 0; }
+        .sc-hist-ts   { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .sc-hist-verd { font-weight: 700; border-radius: 4px; padding: 2px 7px; text-align: center; font-size: 10px; }
+        .sc-hist-verd.go   { background: rgba(16,185,129,0.15); color: #10b981; }
+        .sc-hist-verd.wait { background: rgba(245,158,11,0.15);  color: #f59e0b; }
+        .sc-hist-verd.nogo { background: rgba(239,68,68,0.15);   color: #ef4444; }
+        .sc-hist-score { color: var(--text); font-variant-numeric: tabular-nums; }
+        .sc-hist-signal { color: var(--muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sc-hist-new { animation: scHistPop 0.4s ease; }
+        @keyframes scHistPop { from { background: rgba(56,189,248,0.12); } to { background: transparent; } }
+
         /* ── Risk Settings Bar ───────────────────────────────────────────── */
         .risk-settings-bar {
             display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
@@ -3680,6 +3711,18 @@
             </div>
 
             <div class="section">
+                <div class="section-title">� Scorecard History
+                    <span style="display:inline-flex;gap:6px;margin-left:10px;vertical-align:middle;">
+                        <button id="histClearBtn" class="sc-alert-btn" title="Clear history">🗑 Clear</button>
+                        <span id="histCount" style="font-size:10px;color:var(--muted);align-self:center;"></span>
+                    </span>
+                </div>
+                <div id="scorecardHistoryLog" class="sc-history-log">
+                    <div style="font-size:11px;color:var(--muted);padding:8px;">No history yet — run analysis to populate.</div>
+                </div>
+            </div>
+
+            <div class="section">
                 <div class="section-title">💰 Risk Management Calculator</div>
                 <div class="risk-settings-bar">
                     <label class="risk-setting-label">Account Size ($)
@@ -4612,6 +4655,7 @@
                 "ict smart money concepts",
                 "multi-timeframe structure detection",
                 "risk management calculator",
+                "scorecard history",
             ];
             const hideForTrader = [
                 "gann deep q&a",
@@ -6851,6 +6895,85 @@
             }).join("");
         }
 
+        // ── MCL HISTORY LOG ───────────────────────────────────────────────────
+        const _mclHistory = (() => {
+            const STORAGE_KEY = "mcl_scorecard_history";
+            const MAX_ENTRIES = 200;
+
+            function _load() {
+                try {
+                    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+                } catch (_e) { return []; }
+            }
+
+            function _save(entries) {
+                try {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(0, MAX_ENTRIES)));
+                } catch (_e) {}
+            }
+
+            function push(verdict, passCount, totalChecks, signal, avgInst) {
+                const entries = _load();
+                const now = new Date();
+                entries.unshift({
+                    ts:       now.toISOString(),
+                    verdict,
+                    pass:     passCount,
+                    total:    totalChecks,
+                    score:    Math.round(passCount / totalChecks * 100),
+                    signal:   String(signal || "--").toUpperCase(),
+                    inst:     avgInst,
+                });
+                _save(entries);
+                _render(entries, true);
+            }
+
+            function _fmtTs(iso) {
+                try {
+                    const d = new Date(iso);
+                    const pad = (n) => String(n).padStart(2, "0");
+                    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} `
+                         + `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+                } catch (_e) { return iso; }
+            }
+
+            function _render(entries, highlight) {
+                const log   = document.getElementById("scorecardHistoryLog");
+                const count = document.getElementById("histCount");
+                if (!log) return;
+                if (!entries || entries.length === 0) {
+                    log.innerHTML = `<div style="font-size:11px;color:var(--muted);padding:8px;">No history yet — run analysis to populate.</div>`;
+                    if (count) count.textContent = "";
+                    return;
+                }
+                if (count) count.textContent = `${entries.length} entr${entries.length === 1 ? "y" : "ies"}`;
+                log.innerHTML = entries.map((e, i) => `
+                    <div class="sc-hist-row${highlight && i === 0 ? " sc-hist-new" : ""}">
+                        <span class="sc-hist-ts">${_fmtTs(e.ts)}</span>
+                        <span class="sc-hist-verd ${e.verdict === "GO" ? "go" : e.verdict === "WAIT" ? "wait" : "nogo"}">${_escapeHtml(e.verdict)}</span>
+                        <span class="sc-hist-score">${e.pass}/${e.total} (${e.score}%)</span>
+                        <span class="sc-hist-signal">${_escapeHtml(e.signal)} · inst ${e.inst}%</span>
+                        <span style="color:var(--muted);font-size:10px;">${e.verdict === "GO" ? "✅" : e.verdict === "WAIT" ? "⏳" : "🚫"}</span>
+                    </div>
+                `).join("");
+            }
+
+            function clear() {
+                _save([]);
+                _render([], false);
+            }
+
+            function init() {
+                const btn = document.getElementById("histClearBtn");
+                if (btn) btn.addEventListener("click", () => {
+                    if (confirm("Clear all scorecard history?")) clear();
+                });
+                _render(_load(), false);
+            }
+
+            return { push, init };
+        })();
+
         // ── MCL ALERT SYSTEM ──────────────────────────────────────────────────
         const _mclAlerts = (() => {
             let _notifyEnabled = localStorage.getItem("mcl_notify") === "1";
@@ -7098,6 +7221,8 @@
 
             // Fire alert if verdict changed
             _mclAlerts.check(verdict, passCount, checks.length);
+            // Record in history log
+            _mclHistory.push(verdict, passCount, checks.length, signalDominant, avgInst);
         }
 
         // ── RISK MANAGEMENT CALCULATOR ────────────────────────────────────────
@@ -12098,6 +12223,7 @@
 
             // ── Alert system — wire notification + sound buttons ─────────────
             _mclAlerts.init();
+            _mclHistory.init();
 
             // ── Risk settings — pre-populate inputs from localStorage ────────
             (function _initRiskSettings() {
