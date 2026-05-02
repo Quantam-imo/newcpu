@@ -1212,6 +1212,47 @@
             margin-bottom: 12px;
         }
 
+        /* ── Novel AI Signals ────────────────────────────────────────────── */
+        .novel-alert-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            border: 1px solid rgba(255,255,255,0.12);
+            background: rgba(100,116,139,0.2);
+            color: #94a3b8;
+        }
+        .novel-alert-badge.idle    { background: rgba(71,85,105,0.2);   color: #94a3b8; border-color: rgba(71,85,105,0.4); }
+        .novel-alert-badge.forming { background: rgba(234,179,8,0.15);  color: #fde047; border-color: rgba(234,179,8,0.4); }
+        .novel-alert-badge.near_ready { background: rgba(249,115,22,0.15); color: #fdba74; border-color: rgba(249,115,22,0.4); }
+        .novel-alert-badge.ready   { background: rgba(34,197,94,0.15);  color: #86efac; border-color: rgba(34,197,94,0.4); }
+        .novel-alert-badge.urgent  { background: rgba(239,68,68,0.2);   color: #fca5a5; border-color: rgba(239,68,68,0.5); }
+        .novel-signals-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-top: 10px;
+        }
+        @media (max-width: 600px) { .novel-signals-grid { grid-template-columns: 1fr 1fr; } }
+        .novel-sig-card {
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 10px;
+            font-size: 11px;
+        }
+        .novel-sig-card.active-buy  { border-color: rgba(34,197,94,0.5);  background: rgba(34,197,94,0.07); }
+        .novel-sig-card.active-sell { border-color: rgba(239,68,68,0.5);  background: rgba(239,68,68,0.07); }
+        .novel-sig-name  { font-weight: 700; font-size: 12px; color: var(--text); margin-bottom: 3px; }
+        .novel-sig-dir   { font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 3px; display: inline-block; }
+        .novel-sig-dir.buy  { background: rgba(34,197,94,0.2); color: #86efac; }
+        .novel-sig-dir.sell { background: rgba(239,68,68,0.2); color: #fca5a5; }
+        .novel-sig-dir.neutral { background: rgba(100,116,139,0.2); color: #94a3b8; }
+        .novel-sig-strength { float: right; font-weight: 600; color: var(--muted); font-size: 10px; }
+        .novel-sig-acc  { color: #64748b; margin-top: 3px; font-size: 10px; }
+
         .driver-item {
             background: var(--surface-alt);
             padding: 10px;
@@ -1230,6 +1271,232 @@
             font-size: 12px;
             color: var(--muted);
         }
+
+        /* ── ICT/SMC Smart Money Panel ────────────────────────────────────── */
+        .ict-smc-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        @media (max-width: 800px) { .ict-smc-grid { grid-template-columns: 1fr; } }
+        .ict-smc-card {
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px;
+        }
+        .ict-smc-card-title { font-weight: 700; font-size: 11px; color: var(--accent); margin-bottom: 6px; letter-spacing: 0.05em; text-transform: uppercase; }
+        .ict-smc-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid rgba(148,163,184,0.1); }
+        .ict-smc-row:last-child { border-bottom: none; }
+        .ict-smc-label { color: var(--muted); }
+        .ict-smc-value { font-weight: 600; color: var(--text); }
+        .ict-smc-value.active { color: #10b981; }
+        .ict-smc-value.warning { color: #f59e0b; }
+        .ict-smc-value.danger { color: #ef4444; }
+
+        /* ── ICT Live Setup Alert Banner ─────────────────────────────────── */
+        .ict-alert-banner {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid rgba(16,185,129,0.5);
+            background: rgba(16,185,129,0.08);
+            margin-bottom: 10px;
+            font-size: 12px;
+            color: #86efac;
+            animation: ict-pulse 2s ease-in-out infinite;
+        }
+        .ict-alert-banner.danger {
+            border-color: rgba(239,68,68,0.5);
+            background: rgba(239,68,68,0.08);
+            color: #fca5a5;
+        }
+        .ict-alert-banner.warning {
+            border-color: rgba(245,158,11,0.5);
+            background: rgba(245,158,11,0.08);
+            color: #fde68a;
+        }
+        .ict-alert-icon { font-size: 20px; flex-shrink: 0; }
+        .ict-alert-body { flex: 1; line-height: 1.5; }
+        .ict-alert-title { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+        .ict-alert-detail { font-size: 11px; opacity: 0.85; }
+        @keyframes ict-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.3); }
+            50%       { box-shadow: 0 0 0 6px rgba(16,185,129,0); }
+        }
+        .ict-alert-banner.danger  { animation-name: ict-pulse-danger; }
+        .ict-alert-banner.warning { animation-name: ict-pulse-warn; }
+        @keyframes ict-pulse-danger {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.3); }
+            50%       { box-shadow: 0 0 0 6px rgba(239,68,68,0); }
+        }
+        @keyframes ict-pulse-warn {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.3); }
+            50%       { box-shadow: 0 0 0 6px rgba(245,158,11,0); }
+        }
+
+        /* ── Kill Zone Bar ───────────────────────────────────────────────── */
+        .kill-zone-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 6px 14px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            font-size: 11px;
+            color: var(--muted);
+        }
+        .kill-zone-bar .kz-label { font-weight: 700; color: var(--accent); letter-spacing: 0.06em; }
+        .kz-session {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            font-weight: 600;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+        .kz-session.active-session { border-color: rgba(56,189,248,0.5); background: rgba(56,189,248,0.10); color: #7dd3fc; }
+        .kz-session.kill-zone-active { border-color: rgba(16,185,129,0.6); background: rgba(16,185,129,0.14); color: #6ee7b7; animation: kz-glow 1.8s ease-in-out infinite; }
+        .kz-session.overlap-zone { border-color: rgba(245,158,11,0.6); background: rgba(245,158,11,0.12); color: #fcd34d; animation: kz-glow-warn 1.8s ease-in-out infinite; }
+        @keyframes kz-glow      { 0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,0.35)} 50%{box-shadow:0 0 0 5px rgba(16,185,129,0)} }
+        @keyframes kz-glow-warn { 0%,100%{box-shadow:0 0 0 0 rgba(245,158,11,0.35)} 50%{box-shadow:0 0 0 5px rgba(245,158,11,0)} }
+        #kzUtcClock { font-variant-numeric: tabular-nums; font-size: 11px; color: var(--muted); margin-left: auto; }
+
+        /* ── HTF → LTF Cascade Panel ─────────────────────────────────────── */
+        .cascade-row {
+            display: flex;
+            align-items: center;
+            gap: 0;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        .cascade-row:last-child { border-bottom: none; }
+        .cascade-tf { width: 56px; font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; flex-shrink: 0; }
+        .cascade-arrow { font-size: 13px; margin: 0 4px; color: var(--border); flex-shrink: 0; }
+        .cascade-bar {
+            flex: 1;
+            height: 20px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            padding: 0 8px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            background: rgba(148,163,184,0.08);
+            color: var(--muted);
+            border: 1px solid var(--border);
+            transition: background 0.3s;
+        }
+        .cascade-bar.bull  { background: rgba(16,185,129,0.15); color: #6ee7b7; border-color: rgba(16,185,129,0.35); }
+        .cascade-bar.bear  { background: rgba(239,68,68,0.12);  color: #fca5a5; border-color: rgba(239,68,68,0.35); }
+        .cascade-bar.wait  { background: rgba(245,158,11,0.10); color: #fcd34d; border-color: rgba(245,158,11,0.3); }
+        .cascade-bar.break { background: rgba(239,68,68,0.20);  color: #f87171; border-color: rgba(239,68,68,0.5); outline: 2px solid rgba(239,68,68,0.4); }
+        .cascade-detail { width: 130px; font-size: 10px; color: var(--muted); flex-shrink: 0; margin-left: 8px; }
+        .cascade-container { padding: 4px 0; }
+
+        /* ── Trade Decision Scorecard ────────────────────────────────────── */
+        .scorecard-shell {
+            display: flex;
+            gap: 14px;
+            align-items: stretch;
+            flex-wrap: wrap;
+        }
+        .scorecard-verdict {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-width: 120px;
+            padding: 16px;
+            border-radius: 10px;
+            border: 2px solid var(--border);
+            background: var(--surface-alt);
+            text-align: center;
+        }
+        .scorecard-verdict.go    { border-color: #10b981; background: rgba(16,185,129,0.10); }
+        .scorecard-verdict.wait  { border-color: #f59e0b; background: rgba(245,158,11,0.10); }
+        .scorecard-verdict.nogo  { border-color: #ef4444; background: rgba(239,68,68,0.10); }
+        .scorecard-verdict-icon  { font-size: 32px; line-height: 1; margin-bottom: 4px; }
+        .scorecard-verdict-label { font-size: 18px; font-weight: 800; letter-spacing: 0.08em; }
+        .scorecard-verdict.go    .scorecard-verdict-label { color: #10b981; }
+        .scorecard-verdict.wait  .scorecard-verdict-label { color: #f59e0b; }
+        .scorecard-verdict.nogo  .scorecard-verdict-label { color: #ef4444; }
+        .scorecard-verdict-score { font-size: 11px; color: var(--muted); margin-top: 4px; }
+        .scorecard-checks {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 6px;
+            align-content: start;
+        }
+        .scorecard-check {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--surface-alt);
+            font-size: 11px;
+        }
+        .scorecard-check .sc-icon { font-size: 14px; flex-shrink: 0; }
+        .scorecard-check .sc-label { color: var(--muted); flex: 1; }
+        .scorecard-check .sc-val   { font-weight: 700; color: var(--text); }
+        .scorecard-check.pass { border-color: rgba(16,185,129,0.35); background: rgba(16,185,129,0.07); }
+        .scorecard-check.fail { border-color: rgba(239,68,68,0.25);  background: rgba(239,68,68,0.05); }
+        .scorecard-check.warn { border-color: rgba(245,158,11,0.3);  background: rgba(245,158,11,0.06); }
+
+        /* ── Risk Management Card ────────────────────────────────────────── */
+        .risk-card {
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .risk-card-title { font-size: 10px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+        .risk-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding: 3px 0; border-bottom: 1px solid rgba(148,163,184,0.08); }
+        .risk-row:last-child { border-bottom: none; }
+        .risk-label { color: var(--muted); }
+        .risk-val { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+        .risk-val.good { color: #10b981; }
+        .risk-val.warn { color: #f59e0b; }
+        .risk-val.bad  { color: #ef4444; }
+        .risk-bar-wrap { width: 100%; background: rgba(148,163,184,0.1); border-radius: 4px; height: 6px; margin-top: 6px; overflow: hidden; }
+        .risk-bar-fill { height: 100%; border-radius: 4px; transition: width 0.4s; }
+        .risk-bar-fill.good { background: #10b981; }
+        .risk-bar-fill.warn { background: #f59e0b; }
+        .risk-bar-fill.bad  { background: #ef4444; }
+
+        /* ── Volume & Microstructure Panel ──────────────────────────────── */
+        .volume-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        @media (max-width: 1200px) { .volume-grid { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 800px) { .volume-grid { grid-template-columns: 1fr; } }
+        .volume-card {
+            background: var(--surface-alt);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 12px;
+            text-align: center;
+        }
+        .volume-card-label { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 6px; }
+        .volume-card-value { font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
+        .volume-card-value.high { color: #10b981; }
+        .volume-card-value.medium { color: #f59e0b; }
+        .volume-card-value.low { color: #ef4444; }
+        .volume-card-detail { font-size: 10px; color: var(--muted); }
 
         .math-verdict {
             display: inline-block;
@@ -2679,6 +2946,18 @@
         </div>
     </div>
 
+    <!-- ICT Kill Zone + Session bar — live clock, updates every second -->
+    <div class="kill-zone-bar" id="killZoneBar">
+        <span class="kz-label">SESSION</span>
+        <span class="kz-session" id="kzAsia">🌏 Asia</span>
+        <span class="kz-session" id="kzLondon">🇬🇧 London</span>
+        <span class="kz-session" id="kzNY">🗽 New York</span>
+        <span class="kz-session" id="kzOverlap">⚡ Overlap</span>
+        <span style="margin-left:6px;color:var(--border);">|</span>
+        <span id="kzStatus" style="font-weight:700;">—</span>
+        <span id="kzUtcClock">00:00:00 UTC</span>
+    </div>
+
     <div class="container">
         <div id="messageBox"></div>
 
@@ -2821,7 +3100,7 @@
               </div>
             <div id="mclChartStatus" class="chart-status">Loading chart data...</div>
             <div id="mt5StrictStaleBanner" class="mt5-strict-stale-banner" role="alert"></div>
-            <div id="mclChartDebug" class="chart-status" style="font-size:11px;color:#94a3b8;white-space:normal;word-break:break-word;">
+            <div id="mclChartDebug" class="chart-status" style="font-size:11px;color:#94a3b8;white-space:normal;word-break:break-word;display:none;">
                 Chart debug: booting...
             </div>
             <!-- Stale-TF badge: shown while background summary refresh is in progress -->
@@ -3007,6 +3286,19 @@
                 </ul>
             </div>
 
+            <!-- Novel AI Signals -->
+            <div class="section" id="novelSignalsSection">
+                <div class="section-title">
+                    🧬 Novel AI Signals
+                    <span id="novelAlertBadge" class="novel-alert-badge idle" style="margin-left:10px;">IDLE</span>
+                    <span id="novelSignalsAge" style="font-size:10px;color:var(--muted);margin-left:8px;"></span>
+                </div>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:6px;" id="novelRecommendedAction">Load analysis to detect novel signals.</div>
+                <div class="novel-signals-grid" id="novelSignalsGrid">
+                    <!-- filled by JS -->
+                </div>
+            </div>
+
             <!-- Market Structure -->
             <div class="section">
                 <div class="section-title">📈 Market Structure</div>
@@ -3030,6 +3322,26 @@
                     <li>
                         <span class="label">Institutional</span>
                         <span class="value" id="cardInstitutional">--</span>
+                    </li>
+                    <li>
+                        <span class="label">Structure Alignment</span>
+                        <span class="value" id="cardStructureAlign">--</span>
+                    </li>
+                    <li>
+                        <span class="label">Regime Strength</span>
+                        <span class="value" id="cardRegimeStrength">--</span>
+                    </li>
+                    <li>
+                        <span class="label">Volatility State</span>
+                        <span class="value" id="cardVolatilityState">--</span>
+                    </li>
+                    <li>
+                        <span class="label">Breakout Risk</span>
+                        <span class="value" id="cardBreakoutRisk">--</span>
+                    </li>
+                    <li>
+                        <span class="label">Execution Stance</span>
+                        <span class="value" id="cardExecutionStance">--</span>
                     </li>
                 </ul>
             </div>
@@ -3255,6 +3567,80 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <div class="section" id="mtfStructureSection">
+                <div class="section-title">🧭 Multi-Timeframe Structure Detection</div>
+                <div id="mtfStructureSummary" class="reason-panel" style="margin-bottom:10px;">Load analysis to map structure regime and potential shift zones per timeframe.</div>
+                <div class="matrix-shell">
+                    <table class="matrix-table" id="mtfStructureTable">
+                        <thead>
+                            <tr>
+                                <th>Timeframe</th>
+                                <th>Phase</th>
+                                <th>Trend</th>
+                                <th>Signal</th>
+                                <th>Alignment</th>
+                                <th>Regime</th>
+                                <th>Shift Risk</th>
+                                <th>Likely Shift</th>
+                                <th>Breakout Level</th>
+                                <th>Breakdown Level</th>
+                                <th>Shift Trigger</th>
+                                <th>Shift Condition</th>
+                                <th>Potential Shift Zone</th>
+                                <th>Execution Stance</th>
+                            </tr>
+                        </thead>
+                        <tbody id="mtfStructureBody">
+                            <tr>
+                                <td colspan="13">Load analysis to compute multi-timeframe structure map.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">🔐 ICT Smart Money Concepts</div>
+                <div id="ictSmcSummary" class="reason-panel" style="margin-bottom:10px;">Derived smart money structure concepts: premium/discount zones, consolidation, liquidity, momentum.</div>
+                <!-- Live setup alert — shown only when a PRO confluence fires -->
+                <div id="ictAlertBanner" class="ict-alert-banner" style="display:none;"></div>
+                <div id="ictSmcGrid" class="ict-smc-grid" style="display:grid;">
+                    <!-- Populated by _renderIctSmcPanel() -->
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">📊 Volume & Market Microstructure</div>
+                <div id="volumeMicroSummary" class="reason-panel" style="margin-bottom:10px;">Market microstructure: compression energy, bar activity, momentum, participation.</div>
+                <div id="volumeMicroGrid" class="volume-grid" style="display:grid;">
+                    <!-- Populated by _renderVolumeMicroPanel() -->
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">🌊 HTF → LTF Bias Cascade</div>
+                <div id="htfCascadeSummary" class="reason-panel" style="margin-bottom:10px;">Bias flow from higher timeframes down to lower timeframes. Break points highlight where alignment shifts.</div>
+                <div id="htfCascadeContainer" class="cascade-container">
+                    <div style="font-size:11px;color:var(--muted);padding:8px;">Load analysis to build cascade map.</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">🎯 Trade Decision Scorecard</div>
+                <div id="scorecardSummary" class="reason-panel" style="margin-bottom:10px;">Unified GO / WAIT / NO-GO decision aggregating all panel signals.</div>
+                <div id="scorecardShell" class="scorecard-shell">
+                    <div style="font-size:11px;color:var(--muted);padding:8px;">Load analysis to generate scorecard.</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <div class="section-title">💰 Risk Management Calculator</div>
+                <div id="riskMgmtSummary" class="reason-panel" style="margin-bottom:10px;">Entry / Stop / Target levels, R:R ratios, and position sizing from trade levels.</div>
+                <div id="riskMgmtGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:6px;">
+                    <div style="font-size:11px;color:var(--muted);padding:8px;">Load analysis to calculate risk parameters.</div>
                 </div>
             </div>
 
@@ -4168,13 +4554,17 @@
                 "top decision drivers",
                 "ai model decision",
                 "performance",
+                "htf → ltf bias cascade",
+                "volume & market microstructure",
+                "ict smart money concepts",
+                "multi-timeframe structure detection",
+                "risk management calculator",
             ];
             const hideForTrader = [
                 "gann deep q&a",
                 "mathematical validation",
                 "52-question gann score",
-                "top decision drivers",
-                "ai model decision",
+                "htf → ltf bias cascade",
             ];
 
             sections.forEach((section) => {
@@ -4398,6 +4788,132 @@
             if (summary) return summary;
             if (chain.length > 0) return chain.map((x) => String(x || "").trim()).filter(Boolean).join(" | ");
             return "--";
+        }
+
+        function _msDirection(value) {
+            const text = String(value || "").toUpperCase();
+            if (!text) return "NEUTRAL";
+            if (
+                text.includes("BUY") || text.includes("BULL") || text.includes("LONG") ||
+                text.includes("ACCUM") || text.includes("UP")
+            ) return "BUY";
+            if (
+                text.includes("SELL") || text.includes("BEAR") || text.includes("SHORT") ||
+                text.includes("DISTRI") || text.includes("DOWN")
+            ) return "SELL";
+            return "NEUTRAL";
+        }
+
+        function _msClamp01(value, fallback = 0.5) {
+            const n = Number(value);
+            if (!Number.isFinite(n)) return fallback;
+            const normalized = n > 1 ? n / 100 : n;
+            return Math.max(0, Math.min(1, normalized));
+        }
+
+        function _setMarketValue(id, text, cls = "") {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = text;
+            el.className = cls ? `value ${cls}` : "value";
+        }
+
+        function _renderMarketStructureModule(data) {
+            const phase = data.phase || "--";
+            const trend = data.trend || "--";
+            const trap = data.trap || "--";
+            const institutional = data.institutional_decision || "--";
+            const biasLabel = data.bias_label || "--";
+            const biasScoreNum = Number(data.bias_score);
+            const biasScoreTxt = Number.isFinite(biasScoreNum) ? biasScoreNum.toFixed(3) : null;
+            const bias = biasLabel !== "--" ? (biasScoreTxt ? `${biasLabel} (${biasScoreTxt})` : biasLabel) : "--";
+
+            _setMarketValue("cardPhase", phase);
+            _setMarketValue("cardTrend", trend);
+            _setMarketValue("cardBias", bias);
+            _setMarketValue("cardTrap", trap);
+            _setMarketValue("cardInstitutional", institutional);
+
+            const signalDir = _msDirection(data.signal || data.filtered_signal || "WAIT");
+            const trendDir = _msDirection(trend);
+            const biasDir = _msDirection(biasLabel);
+            const instDir = _msDirection(institutional);
+
+            const dirVotes = [trendDir, biasDir, instDir].filter((d) => d !== "NEUTRAL");
+            const alignedVotes = signalDir === "NEUTRAL"
+                ? 0
+                : dirVotes.filter((d) => d === signalDir).length;
+            const rawAlignment = signalDir === "NEUTRAL"
+                ? (dirVotes.length > 1
+                    ? Math.max(
+                        dirVotes.filter((d) => d === "BUY").length,
+                        dirVotes.filter((d) => d === "SELL").length,
+                    ) / dirVotes.length
+                    : 0.5)
+                : (dirVotes.length > 0 ? alignedVotes / dirVotes.length : 0.5);
+
+            const trapText = String(trap || "").toUpperCase();
+            const trapActive = !!trapText && trapText !== "--" && !trapText.includes("NONE") && !trapText.includes("NO_TRAP");
+            const alignment = Math.max(0, rawAlignment - (trapActive ? 0.15 : 0));
+
+            const confidence = _msClamp01(data.confidence, 0.5);
+            const biasStrength = _msClamp01(Math.abs(biasScoreNum), 0.5);
+            const mathScore = _msClamp01(data.math_score_pct, 0.5);
+            const gannScore = _msClamp01(data.gann_questions_pct, 0.5);
+            const validation = (mathScore + gannScore) / 2;
+            const comp = data.compression || {};
+            const compScore = _msClamp01(comp.score, 0.4);
+            const phaseText = String(comp.phase || "OPEN").toUpperCase();
+            const breakoutNear = Boolean(comp.breakout_near);
+
+            const regimeStrength = Math.round((
+                confidence * 0.35 +
+                biasStrength * 0.25 +
+                alignment * 0.25 +
+                validation * 0.15
+            ) * 100);
+
+            const alignmentLabel = alignment >= 0.8 ? "STRONG"
+                : alignment >= 0.6 ? "MODERATE"
+                : "CONFLICTED";
+            const alignmentCls = alignment >= 0.8 ? "status-ok"
+                : alignment >= 0.6 ? "status-warning"
+                : "status-error";
+            _setMarketValue("cardStructureAlign", `${alignmentLabel} (${Math.round(alignment * 100)}%)`, alignmentCls);
+
+            const regimeCls = regimeStrength >= 72 ? "status-ok"
+                : regimeStrength >= 55 ? "status-warning"
+                : "status-error";
+            _setMarketValue("cardRegimeStrength", `${regimeStrength}%`, regimeCls);
+
+            let volatilityState = "NORMAL";
+            if (phaseText === "SILENT" || compScore >= 0.75) volatilityState = "COILED";
+            else if (phaseText === "CONTRACTING" || compScore >= 0.55) volatilityState = "BUILDING";
+            else if (phaseText === "RELEASED" || phaseText === "EXPANDING") volatilityState = "EXPANDED";
+
+            const volCls = volatilityState === "COILED" ? "status-warning"
+                : volatilityState === "EXPANDED" ? "status-ok"
+                : "";
+            _setMarketValue("cardVolatilityState", `${volatilityState} (${phaseText})`, volCls);
+
+            let breakoutRisk = "LOW";
+            if (breakoutNear || (volatilityState === "COILED" && compScore >= 0.7)) breakoutRisk = "HIGH";
+            else if (volatilityState === "BUILDING" || compScore >= 0.55) breakoutRisk = "MEDIUM";
+            const breakoutCls = breakoutRisk === "HIGH" ? "status-error"
+                : breakoutRisk === "MEDIUM" ? "status-warning"
+                : "status-ok";
+            _setMarketValue("cardBreakoutRisk", breakoutRisk, breakoutCls);
+
+            let stance = "WAIT";
+            if (signalDir !== "NEUTRAL") {
+                if (alignment >= 0.67 && regimeStrength >= 65 && !trapActive) stance = `FOLLOW_${signalDir}`;
+                else if (trapActive || alignment < 0.5) stance = "DEFENSIVE";
+                else stance = "CONFIRM_FIRST";
+            }
+            const stanceCls = stance.startsWith("FOLLOW") ? "status-ok"
+                : stance === "WAIT" || stance === "DEFENSIVE" ? "status-warning"
+                : "status-error";
+            _setMarketValue("cardExecutionStance", stance.replaceAll("_", " "), stanceCls);
         }
 
         function _formatWheelNumber(value, digits = 2) {
@@ -5110,11 +5626,11 @@
                         const flowSvg = flowPath ? `
                             <svg class="wheel-flow-svg" viewBox="0 0 360 360" aria-hidden="true">
                                 <defs>
-                                    <marker id="wheelArrowHead" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto">
+                                    <marker id="wheelArrowHead2" markerWidth="10" markerHeight="10" refX="6" refY="3" orient="auto">
                                         <path d="M0,0 L0,6 L7,3 z" fill="currentColor"></path>
                                     </marker>
                                 </defs>
-                                <path class="wheel-flow-path" d="${flowPath}" stroke-dasharray="12 10" marker-end="url(#wheelArrowHead)"></path>
+                                <path class="wheel-flow-path" d="${flowPath}" stroke-dasharray="12 10" marker-end="url(#wheelArrowHead2)"></path>
                                 <circle class="wheel-flow-dot" cx="${orbitPoints[currentPhaseCode]?.x ?? 180}" cy="${orbitPoints[currentPhaseCode]?.y ?? 180}" r="5" fill="#f8fafc"></circle>
                                 <circle class="wheel-flow-dot" cx="${orbitPoints[nextPhaseIndex]?.x ?? 180}" cy="${orbitPoints[nextPhaseIndex]?.y ?? 180}" r="5" fill="#fcd34d"></circle>
                             </svg>
@@ -5251,6 +5767,1269 @@
                 timingWindow,
                 why,
             };
+        }
+
+        function _buildMtfStructureSnapshot(row) {
+            const tf = String(row?.timeframe || row?.applied_timeframe || row?.requested_timeframe || "--").toLowerCase();
+            const signal = String(row?.signal || row?.filtered_signal || "WAIT").toUpperCase();
+            const trend = String(row?.trend || "UNKNOWN").toUpperCase();
+            const phase = String(row?.phase || "UNKNOWN").toUpperCase();
+            const biasLabel = String(row?.bias_label || "");
+            const trapText = String(row?.trap || "NONE").toUpperCase();
+            const institutional = String(row?.institutional_decision || "");
+            const tradeLevels = row?.trade_levels || {};
+            const compression = row?.compression || {};
+
+            const signalDir = _matchDirectionTag(signal);
+            const trendDir = _matchDirectionTag(trend);
+            const biasDir = _matchDirectionTag(biasLabel);
+            const instDir = _matchDirectionTag(institutional);
+
+            const directionalVotes = [trendDir, biasDir, instDir].filter((d) => d === "BUY" || d === "SELL");
+            const aligned = directionalVotes.filter((d) => d === signalDir).length;
+            const alignmentRaw = (signalDir === "BUY" || signalDir === "SELL")
+                ? (directionalVotes.length > 0 ? aligned / directionalVotes.length : 0.5)
+                : (directionalVotes.length > 1
+                    ? Math.max(
+                        directionalVotes.filter((d) => d === "BUY").length,
+                        directionalVotes.filter((d) => d === "SELL").length,
+                    ) / directionalVotes.length
+                    : 0.5);
+
+            const trapActive = !!trapText && trapText !== "NONE" && trapText !== "--" && !trapText.includes("NO_TRAP");
+            const breakoutNear = Boolean(compression?.breakout_near);
+            const compPhase = String(compression?.phase || "OPEN").toUpperCase();
+            const compScore = _msClamp01(compression?.score, 0.4);
+            const confidence = _msClamp01(row?.confidence, 0.5);
+            const biasScore = Math.abs(Number(row?.bias_score));
+            const biasStrength = _msClamp01(Number.isFinite(biasScore) ? biasScore : 0.5, 0.5);
+            const gannScore = _msClamp01(row?.gann_questions_pct, 0.5);
+            const mathScore = _msClamp01(row?.math_score_pct, 0.5);
+
+            const alignment = Math.max(0, alignmentRaw - (trapActive ? 0.15 : 0));
+            const regime = Math.round((
+                confidence * 0.34 +
+                biasStrength * 0.22 +
+                alignment * 0.29 +
+                ((gannScore + mathScore) / 2) * 0.15
+            ) * 100);
+
+            let shiftRisk = "LOW";
+            if (trapActive || alignment < 0.5 || regime < 52) shiftRisk = "HIGH";
+            else if (breakoutNear || compScore >= 0.6 || alignment < 0.7 || regime < 66) shiftRisk = "MEDIUM";
+
+            let likelyShift = "NONE";
+            if (signalDir === "BUY" && (trapActive || alignment < 0.5 || instDir === "SELL")) likelyShift = "DOWN";
+            else if (signalDir === "SELL" && (trapActive || alignment < 0.5 || instDir === "BUY")) likelyShift = "UP";
+            else if (breakoutNear && signalDir !== "BUY" && trendDir === "BUY") likelyShift = "UP";
+            else if (breakoutNear && signalDir !== "SELL" && trendDir === "SELL") likelyShift = "DOWN";
+
+            const triggerParts = [];
+            if (trapActive) triggerParts.push("trap pressure");
+            if (breakoutNear) triggerParts.push("compression release");
+            if (alignment < 0.55) triggerParts.push("signal-vs-structure conflict");
+            if (regime < 55) triggerParts.push("weak regime");
+            if (compPhase === "SILENT") triggerParts.push("silent phase");
+            const shiftTrigger = triggerParts.length > 0 ? triggerParts.join(" | ") : "trend continuation";
+
+            const entry = _asFiniteNumber(tradeLevels?.entry);
+            const stop = _asFiniteNumber(tradeLevels?.stop_loss);
+            const target = _asFiniteNumber(tradeLevels?.take_profit);
+            const obs = row?.observation || {};
+            const latest = _asFiniteNumber(
+                obs?.latest_price
+                ?? row?.observation_latest_price
+                ?? obs?.signal_end_price
+                ?? row?.observation_signal_end_price
+            );
+            const start = _asFiniteNumber(obs?.signal_start_price ?? row?.observation_signal_start_price);
+            const end = _asFiniteNumber(obs?.signal_end_price ?? row?.observation_signal_end_price);
+
+            const levelPool = [entry, stop, target, latest, start, end].filter((n) => Number.isFinite(n));
+            const structureHigh = levelPool.length > 0 ? Math.max(...levelPool) : null;
+            const structureLow = levelPool.length > 0 ? Math.min(...levelPool) : null;
+            const baseRange = (structureHigh != null && structureLow != null)
+                ? Math.max(Math.abs(structureHigh - structureLow), (latest != null ? Math.abs(latest) * 0.0008 : 0.25))
+                : (latest != null ? Math.abs(latest) * 0.0012 : 0.35);
+            const shiftBuffer = baseRange * 0.18;
+
+            const breakoutLevel = structureHigh != null ? structureHigh + shiftBuffer : null;
+            const breakdownLevel = structureLow != null ? structureLow - shiftBuffer : null;
+
+            let shiftCondition = "inside structure range";
+            if (breakoutLevel != null && breakdownLevel != null) {
+                shiftCondition = `close > ${breakoutLevel.toFixed(4)} (bull shift) | close < ${breakdownLevel.toFixed(4)} (bear shift)`;
+            } else if (breakoutLevel != null) {
+                shiftCondition = `close > ${breakoutLevel.toFixed(4)} for upside shift`;
+            } else if (breakdownLevel != null) {
+                shiftCondition = `close < ${breakdownLevel.toFixed(4)} for downside shift`;
+            }
+
+            let shiftZone = "--";
+            if (likelyShift === "UP") {
+                shiftZone = [
+                    breakoutLevel != null ? `up-break>${breakoutLevel.toFixed(4)}` : null,
+                    entry != null ? `reclaim>${entry.toFixed(4)}` : null,
+                    target != null ? `expansion->${target.toFixed(4)}` : null,
+                ].filter(Boolean).join(" | ") || "watch reclaim above recent structure high";
+            } else if (likelyShift === "DOWN") {
+                shiftZone = [
+                    breakdownLevel != null ? `down-break<${breakdownLevel.toFixed(4)}` : null,
+                    entry != null ? `break<${entry.toFixed(4)}` : null,
+                    stop != null ? `fail-safe@${stop.toFixed(4)}` : null,
+                ].filter(Boolean).join(" | ") || "watch break below recent structure low";
+            } else {
+                shiftZone = [
+                    breakoutLevel != null ? `up>${breakoutLevel.toFixed(4)}` : null,
+                    breakdownLevel != null ? `down<${breakdownLevel.toFixed(4)}` : null,
+                    entry != null ? `pivot ${entry.toFixed(4)}` : null,
+                    target != null ? `target ${target.toFixed(4)}` : null,
+                ].filter(Boolean).join(" | ") || "rotation likely inside current range";
+            }
+
+            // Near-breakout/breakdown detection (within 0.25% of level)
+            const nearBreakout = Number.isFinite(latest) && Number.isFinite(breakoutLevel)
+                && Math.abs(latest - breakoutLevel) / Math.max(1e-9, Math.abs(latest)) <= 0.0025;
+            const nearBreakdown = Number.isFinite(latest) && Number.isFinite(breakdownLevel)
+                && Math.abs(latest - breakdownLevel) / Math.max(1e-9, Math.abs(latest)) <= 0.0025;
+
+            // Escalate shiftRisk when price is imminent on a level
+            if ((nearBreakout || nearBreakdown) && shiftRisk === "LOW") shiftRisk = "MEDIUM";
+
+            let stance = "WAIT";
+            if ((signalDir === "BUY" || signalDir === "SELL") && shiftRisk === "LOW" && regime >= 68 && alignment >= 0.7) {
+                stance = `FOLLOW ${signalDir}`;
+            } else if (shiftRisk === "HIGH") {
+                stance = "DEFENSIVE";
+            } else if (nearBreakout || nearBreakdown) {
+                stance = "BREAKOUT WATCH";
+            } else if (signalDir === "BUY" || signalDir === "SELL") {
+                stance = "CONFIRM FIRST";
+            }
+
+            return {
+                timeframe: tf,
+                phase,
+                trend,
+                signal,
+                alignmentPct: Math.round(alignment * 100),
+                regime,
+                shiftRisk,
+                likelyShift,
+                breakoutLevel,
+                breakdownLevel,
+                nearBreakout,
+                nearBreakdown,
+                shiftTrigger,
+                shiftCondition,
+                shiftZone,
+                stance,
+            };
+        }
+
+        function _renderMultiTimeframeStructurePanel(rows) {
+            const body = document.getElementById("mtfStructureBody");
+            const summaryEl = document.getElementById("mtfStructureSummary");
+            if (!body) return;
+
+            const validRows = Array.isArray(rows)
+                ? rows.filter((row) => {
+                    if (!row) return false;
+                    const status = String(row.status || "ok").toLowerCase();
+                    return status === "ok" || status === "stale_timeout" || status === "";
+                })
+                : [];
+
+            if (validRows.length === 0) {
+                body.innerHTML = `<tr><td colspan="13">No structure rows available yet.</td></tr>`;
+                if (summaryEl) summaryEl.textContent = "Structure map pending...";
+                return;
+            }
+
+            const snapshots = validRows
+                .map((row) => _buildMtfStructureSnapshot(row))
+                .sort((a, b) => _timeframeOrderIndex(a.timeframe, MATRIX_TIMEFRAMES) - _timeframeOrderIndex(b.timeframe, MATRIX_TIMEFRAMES));
+
+            const riskCounts = {
+                HIGH: snapshots.filter((s) => s.shiftRisk === "HIGH").length,
+                MEDIUM: snapshots.filter((s) => s.shiftRisk === "MEDIUM").length,
+                LOW: snapshots.filter((s) => s.shiftRisk === "LOW").length,
+            };
+            const upShifts = snapshots.filter((s) => s.likelyShift === "UP").length;
+            const downShifts = snapshots.filter((s) => s.likelyShift === "DOWN").length;
+            const nearBreakouts = snapshots.filter((s) => s.nearBreakout || s.nearBreakdown).length;
+            const avgRegime = snapshots.length > 0
+                ? (snapshots.reduce((acc, s) => acc + Number(s.regime || 0), 0) / snapshots.length).toFixed(1)
+                : "--";
+
+            if (summaryEl) {
+                summaryEl.textContent = `Regime avg ${avgRegime}% | Shift risk: HIGH ${riskCounts.HIGH}, MED ${riskCounts.MEDIUM}, LOW ${riskCounts.LOW} | Likely shift map: UP ${upShifts}, DOWN ${downShifts} | Near breakout levels: ${nearBreakouts}`;
+            }
+
+            body.innerHTML = snapshots.map((s) => {
+                const alignClass = s.alignmentPct >= 80 ? "status-ok" : s.alignmentPct >= 60 ? "status-warning" : "status-error";
+                const regimeClass = s.regime >= 70 ? "status-ok" : s.regime >= 55 ? "status-warning" : "status-error";
+                const riskClass = s.shiftRisk === "HIGH" ? "status-error" : s.shiftRisk === "MEDIUM" ? "status-warning" : "status-ok";
+                const shiftClass = s.likelyShift === "UP" ? "status-ok" : s.likelyShift === "DOWN" ? "status-error" : "";
+                return `
+                    <tr>
+                        <td><span class="matrix-pill">${_escapeHtml(String(s.timeframe || "--").toUpperCase())}</span></td>
+                        <td>${_escapeHtml(s.phase || "--")}</td>
+                        <td>${_escapeHtml(s.trend || "--")}</td>
+                        <td>${_escapeHtml(s.signal || "--")}</td>
+                        <td><span class="${alignClass}">${_escapeHtml(String(s.alignmentPct))}%</span></td>
+                        <td><span class="${regimeClass}">${_escapeHtml(String(s.regime))}%</span></td>
+                        <td><span class="${riskClass}">${_escapeHtml(s.shiftRisk || "--")}</span></td>
+                        <td><span class="${shiftClass}">${_escapeHtml(s.likelyShift || "--")}</span></td>
+                        <td>${Number.isFinite(s.breakoutLevel) ? `${_escapeHtml(Number(s.breakoutLevel).toFixed(4))}${s.nearBreakout ? ' <span title="Price within 0.25% of breakout level" style="color:#f59e0b;font-weight:700">⚡ IMMINENT</span>' : ""}` : "--"}</td>
+                        <td>${Number.isFinite(s.breakdownLevel) ? `${_escapeHtml(Number(s.breakdownLevel).toFixed(4))}${s.nearBreakdown ? ' <span title="Price within 0.25% of breakdown level" style="color:#ef4444;font-weight:700">⚡ IMMINENT</span>' : ""}` : "--"}</td>
+                        <td class="reason">${_escapeHtml(s.shiftTrigger || "--")}</td>
+                        <td class="reason">${_escapeHtml(s.shiftCondition || "--")}</td>
+                        <td>${_escapeHtml(s.shiftZone || "--")}</td>
+                        <td>${_escapeHtml(s.stance || "--")}</td>
+                    </tr>
+                `;
+            }).join("");
+        }
+
+        function _deriveIctSmcMetrics(row) {
+            // Compute ICT/SMC-derived metrics from matrix row data
+            const tf = String(row?.timeframe || row?.applied_timeframe || row?.requested_timeframe || "--").toLowerCase();
+            const gannZone = String(row?.gann?.zone || "").toLowerCase(); // "premium", "discount", "equilibrium"
+            const compression = row?.compression || {};
+            const observation = row?.observation || {};
+            const signal = String(row?.signal || "WAIT").toUpperCase();
+            const trend = String(row?.trend || "UNKNOWN").toUpperCase();
+            const bias = String(row?.bias_label || "NEUTRAL").toUpperCase();
+            const liquidity = String(observation.liquidity_signal || "OPEN").toUpperCase();
+            const breakoutNear = Boolean(compression?.breakout_near || row?.mcl_compression_breakout_near);
+            const compressionPhase = String(compression?.phase || "OPEN").toUpperCase();
+            const compressionBias = String(row?.mcl_compression_direction_bias || "NEUTRAL").toUpperCase();
+            const compressionEnergy = Number(compression?.energy_stored || 0);
+            const tradeLevels = row?.trade_levels || {};
+            const latestPrice = _asFiniteNumber(observation?.latest_price ?? row?.observation_latest_price);
+            const startPrice = _asFiniteNumber(observation?.signal_start_price ?? row?.observation_signal_start_price);
+            const endPrice = _asFiniteNumber(observation?.signal_end_price ?? row?.observation_signal_end_price);
+            
+            // 1. Derive Premium/Discount/Equilibrium
+            let pdZone = gannZone === "premium" ? "PREMIUM" : gannZone === "discount" ? "DISCOUNT" : "EQUILIBRIUM";
+            
+            // 2. Derive market structure state (similar to ICT context)
+            let structureState = "NEUTRAL";
+            if (compressionPhase === "SILENCE") structureState = "ACCUMULATION";
+            else if (compressionPhase === "EXPANSION" && breakoutNear) structureState = "BREAKOUT IMMINENT";
+            else if (compressionPhase === "EXPANSION") structureState = "DISPLACEMENT";
+            else if (compressionPhase === "RETRACEMENT") structureState = "RETRACEMENT";
+            
+            // 3. Derive liquidity state
+            let liquidityState = liquidity.includes("SWEEP") || liquidity.includes("BLOCK") ? "SWEEP ACTIVE" : liquidity.includes("POOL") ? "POOL FORMING" : "OPEN";
+            
+            // 4. Bias alignment score
+            const biasAlignment = (signal === bias || trend === bias) ? "ALIGNED" : (signal === trend) ? "PARTIAL" : "DIVERGE";
+            
+            // 5. Breakout/Breakdown risk
+            const structureRisk = breakoutNear ? "HIGH-BREAKOUT NEAR" : compressionPhase === "EXPANSION" ? "MEDIUM-EXPANDING" : "LOW";
+            
+            // 6. ORDER BLOCK PROXIMITY — use actual trade_levels for precise distance
+            let orderBlockProx = "NORMAL";
+            let orderBlockBadge = "";
+            const tlEntry  = _asFiniteNumber(tradeLevels?.entry   ?? tradeLevels?.entry_price);
+            const tlStop   = _asFiniteNumber(tradeLevels?.stop_loss ?? tradeLevels?.stop);
+            const tlTarget = _asFiniteNumber(tradeLevels?.take_profit ?? tradeLevels?.target ?? tradeLevels?.tp);
+            const tlRR     = _asFiniteNumber(tradeLevels?.rr_ratio ?? tradeLevels?.risk_reward);
+            if (Number.isFinite(latestPrice)) {
+                const allLevels = [tlEntry, tlStop, tlTarget].filter(Number.isFinite);
+                if (allLevels.length > 0) {
+                    const minDist = Math.min(...allLevels.map((lvl) => Math.abs(latestPrice - lvl) / Math.max(1e-9, Math.abs(latestPrice))));
+                    if (minDist <= 0.005) {
+                        orderBlockProx = "OB IMMINENT";
+                        orderBlockBadge = "⚡";
+                    } else if (minDist <= 0.015) {
+                        orderBlockProx = "OB NEAR";
+                        orderBlockBadge = "📍";
+                    }
+                }
+            }
+            
+            // 7. FAIR VALUE GAP (FVG) DETECTION
+            let fvgState = "NONE";
+            let fvgBadge = "";
+            if (Number.isFinite(startPrice) && Number.isFinite(endPrice) && Number.isFinite(latestPrice)) {
+                const fvgHigh = Math.max(startPrice, endPrice);
+                const fvgLow = Math.min(startPrice, endPrice);
+                const fvgSize = Math.abs(fvgHigh - fvgLow);
+                if (fvgSize > 0) {
+                    const fvgMid = (fvgHigh + fvgLow) / 2;
+                    const distToMid = Math.abs(latestPrice - fvgMid) / Math.max(1e-9, fvgSize);
+                    if (startPrice > endPrice && latestPrice < fvgLow) { // Bullish FVG, price below
+                        fvgState = "BULL FVG UNFILLED";
+                        fvgBadge = "🔺";
+                    } else if (startPrice < endPrice && latestPrice > fvgHigh) { // Bearish FVG, price above
+                        fvgState = "BEAR FVG UNFILLED";
+                        fvgBadge = "🔻";
+                    } else if (distToMid < 0.3) {
+                        fvgState = "FVG TESTING";
+                        fvgBadge = "🎯";
+                    }
+                }
+            }
+            
+            // 8. MARKET PHASE LABEL (Accumulation/Markup/Distribution/Markdown)
+            let marketPhase = "BALANCED";
+            if (compressionPhase === "SILENCE" && compressionEnergy >= 0.5) {
+                marketPhase = "ACCUMULATION";
+            } else if (compressionPhase === "EXPANSION" && signal === "BUY" && !breakoutNear) {
+                marketPhase = "MARKUP";
+            } else if (compressionPhase === "SILENCE" && trend === "DOWN") {
+                marketPhase = "DISTRIBUTION";
+            } else if (compressionPhase === "EXPANSION" && signal === "SELL" && !breakoutNear) {
+                marketPhase = "MARKDOWN";
+            } else if (compressionPhase === "RETRACEMENT") {
+                marketPhase = "RETRACEMENT";
+            }
+            
+            // ADVANCED ICT CONCEPTS
+            // 9. JUDAS SWING: Trap structure where price fakes direction then reverses
+            let judasSwinBadge = "";
+            let judassWingDescription = "NONE";
+            const trapText = String(row?.trap || "").toUpperCase();
+            const hasActiveTrap = trapText && trapText !== "--" && trapText !== "NONE";
+            if (hasActiveTrap && signal !== trend) {
+                // Signal conflicts with trend = potential Judas Swing setup
+                judassWingDescription = signal === "BUY" ? "BEAR TRAP SETUP" : "BULL TRAP SETUP";
+                judasSwinBadge = "🪤";
+            } else if (compressionPhase === "EXPANSION" && biasAlignment === "DIVERGE") {
+                judassWingDescription = "REVERSAL RISK";
+                judasSwinBadge = "⚠️";
+            }
+            
+            // 10. LIQUIDITY VOID: Areas with no volume/price coverage
+            let liquidityVoidBadge = "";
+            let liquidityVoidDescription = "NORMAL";
+            if (liquidityState === "SWEEP ACTIVE" && compressionEnergy >= 0.7) {
+                liquidityVoidDescription = "VOID FORMING";
+                liquidityVoidBadge = "⊘";
+            } else if (Number.isFinite(endPrice) && Number.isFinite(startPrice)) {
+                const voidGap = Math.abs(endPrice - startPrice) / Math.max(1e-9, Math.abs(startPrice));
+                if (voidGap > 0.015) {
+                    liquidityVoidDescription = "GAP VOID";
+                    liquidityVoidBadge = "⬜";
+                }
+            }
+            
+            // 11. SMART MONEY MANIPULATION: Price action at compression boundaries
+            let manipulationBadge = "";
+            let manipulationScore = 0; // 0-100
+            const manipulationFactors = [];
+            if (breakoutNear) manipulationFactors.push(20);
+            if (liquidityState === "SWEEP ACTIVE") manipulationFactors.push(25);
+            if (compressionEnergy >= 0.6) manipulationFactors.push(20);
+            if (biasAlignment === "DIVERGE") manipulationFactors.push(15);
+            if (orderBlockProx === "OB IMMINENT" || orderBlockProx === "OB NEAR") manipulationFactors.push(20);
+            manipulationScore = manipulationFactors.length > 0 ? manipulationFactors.reduce((a, b) => a + b) : 0;
+            if (manipulationScore >= 70) manipulationBadge = "🎭 HIGH";
+            else if (manipulationScore >= 50) manipulationBadge = "🎭 MEDIUM";
+            else if (manipulationScore > 0) manipulationBadge = "🎭 LOW";
+            
+            // 12. BREAK OF STRUCTURE (BOS): Detect institutional-grade structure breaks
+            let bosDescription = "NONE";
+            let bosBadge = "";
+            if (structureState === "BREAKOUT IMMINENT") {
+                bosDescription = signal === "BUY" ? "BOS UP IMMINENT" : "BOS DOWN IMMINENT";
+                bosBadge = signal === "BUY" ? "📈" : "📉";
+            } else if (compressionPhase === "EXPANSION" && breakoutNear && signal !== "WAIT") {
+                bosDescription = signal === "BUY" ? "BOS UP FORMING" : "BOS DOWN FORMING";
+                bosBadge = signal === "BUY" ? "⬆️" : "⬇️";
+            }
+
+            // 14. NWOG/NDOG — New Week/Day Opening Gap
+            // ICT concept: gaps between prior session close and new session open create
+            // magnetic draw zones that price tends to fill (or avoid, creating a void).
+            let gapDescription = "NONE";
+            let gapBadge = "";
+            let gapBias = "";
+            if (Number.isFinite(startPrice) && Number.isFinite(latestPrice)) {
+                const gapPct = (latestPrice - startPrice) / Math.max(1e-9, Math.abs(startPrice));
+                const absGap = Math.abs(gapPct);
+                const tfLower = tf.toLowerCase();
+                // NDOG: 1m–4h; NWOG: 1d+
+                const isWeekly = tfLower === "1w" || tfLower === "1d";
+                const label = isWeekly ? "NWOG" : "NDOG";
+                if (absGap >= 0.006) {
+                    // Large unfilled gap — price away from open
+                    gapDescription = gapPct > 0 ? `${label} ABOVE` : `${label} BELOW`;
+                    gapBadge = gapPct > 0 ? "🔼" : "🔽";
+                    gapBias = gapPct > 0 ? "FILL DOWN" : "FILL UP";
+                } else if (absGap >= 0.002) {
+                    // Price testing the gap zone
+                    gapDescription = `${label} TESTING`;
+                    gapBadge = "🎯";
+                    gapBias = "FILLING";
+                } else {
+                    // Price at/near the opening — no significant gap
+                    gapDescription = "AT OPEN";
+                    gapBias = "NONE";
+                }
+            }
+
+            // 15. PROPULSION BLOCK — continuation structure after BOS
+            // After a BOS, the last consolidation before the break becomes a propulsion block.
+            // Price re-test of this zone = high-probability continuation entry.
+            let propBlockDescription = "NONE";
+            let propBlockBadge = "";
+            const hasBos = bosDescription !== "NONE";
+            if (hasBos && (orderBlockProx === "OB NEAR" || orderBlockProx === "OB IMMINENT")) {
+                // BOS confirmed AND price back at OB level = propulsion re-test
+                propBlockDescription = signal === "BUY" ? "BULL PROPULSION" : "BEAR PROPULSION";
+                propBlockBadge = signal === "BUY" ? "🚀" : "💥";
+            } else if (hasBos && compressionPhase === "RETRACEMENT") {
+                // BOS confirmed, price retracing → potential propulsion setup forming
+                propBlockDescription = "PROP SETUP FORMING";
+                propBlockBadge = "⏳";
+            }
+
+            // 16. EQUAL HIGHS / EQUAL LOWS (EQH / EQL)
+            // ICT: equal highs/lows are liquidity pools — institutions target them for sweeps.
+            // Proxy: when start and end price are within 0.1% of each other, price is ranging
+            // at a previous level — likely accumulating a liquidity pool.
+            let eqhEqlDescription = "NONE";
+            let eqhEqlBadge = "";
+            if (Number.isFinite(startPrice) && Number.isFinite(endPrice) && Number.isFinite(latestPrice)) {
+                const levelDiff = Math.abs(startPrice - endPrice) / Math.max(1e-9, Math.abs(startPrice));
+                if (levelDiff <= 0.001) {
+                    // Price tested same level twice — equal high or equal low forming
+                    eqhEqlDescription = latestPrice >= startPrice ? "EQUAL HIGH 🎯" : "EQUAL LOW 🎯";
+                    eqhEqlBadge = "💧";
+                } else if (levelDiff <= 0.003 && liquidityState === "SWEEP ACTIVE") {
+                    // Near-equal level with active sweep = liquidity grab in progress
+                    eqhEqlDescription = "LIQ SWEEP AT LEVEL";
+                    eqhEqlBadge = "🌊";
+                }
+            }
+
+            // 17. CHANGE OF CHARACTER (CHoCH)
+            // ICT: CHoCH occurs when price breaks the last opposing swing structure for the first
+            // time — signals a shift from accumulation/distribution to markup/markdown.
+            // Proxy: signal and trend disagree (opposing forces) PLUS compression expanding.
+            let chochDescription = "NONE";
+            let chochBadge = "";
+            if (signal !== "WAIT" && trend !== "UNKNOWN") {
+                const bullTrend = trend === "UP" || trend === "BUY";
+                const bearSignal = signal === "SELL";
+                const bullSignal = signal === "BUY";
+                const bearTrend  = trend === "DOWN" || trend === "SELL";
+                if (bullTrend && bearSignal && compressionPhase === "EXPANSION") {
+                    // Bullish trend but bearish signal expanding = CHoCH bearish
+                    chochDescription = "CHoCH BEARISH";
+                    chochBadge = "🔄📉";
+                } else if (bearTrend && bullSignal && compressionPhase === "EXPANSION") {
+                    // Bearish trend but bullish signal expanding = CHoCH bullish
+                    chochDescription = "CHoCH BULLISH";
+                    chochBadge = "🔄📈";
+                } else if (biasAlignment === "DIVERGE" && breakoutNear) {
+                    // Bias diverging near breakout = character change likely imminent
+                    chochDescription = "CHoCH IMMINENT";
+                    chochBadge = "⚠️🔄";
+                }
+            }
+
+            // 13. INSTITUTIONAL-GRADE SETUP SCORE: 0-100% confidence this is a pro setup
+            let institutionalScore = 0;
+            const proSetupChecks = {
+                alignedZone:      pdZone !== "EQUILIBRIUM" ? 10 : 0,
+                alignedStructure: structureState !== "NEUTRAL" ? 10 : 0,
+                alignedBias:      biasAlignment === "ALIGNED" ? 10 : 0,
+                activeOB:         (orderBlockProx === "OB NEAR" || orderBlockProx === "OB IMMINENT") ? 10 : 0,
+                activeFVG:        fvgState !== "NONE" ? 10 : 0,
+                lowRisk:          structureRisk === "LOW" ? 8 : (structureRisk.includes("MEDIUM") ? 4 : 0),
+                noTrap:           !hasActiveTrap ? 8 : 0,
+                hasBos:           hasBos ? 10 : 0,
+                propulsion:       propBlockDescription !== "NONE" ? 8 : 0,
+                eqhEql:           eqhEqlDescription !== "NONE" ? 8 : 0,
+                choch:            chochDescription !== "NONE" ? 8 : 0,
+            };
+            institutionalScore = Object.values(proSetupChecks).reduce((a, b) => a + b, 0);
+            // Normalise to 0-100 (max possible = 100)
+            institutionalScore = Math.min(100, institutionalScore);
+            let institutionalBadge = "";
+            if (institutionalScore >= 75) institutionalBadge = "🏛️ PRO";
+            else if (institutionalScore >= 60) institutionalBadge = "🏛️ SEMI-PRO";
+            else if (institutionalScore >= 45) institutionalBadge = "🏛️ DEVELOPING";
+
+            return {
+                tf,
+                pdZone,
+                structureState,
+                liquidityState,
+                biasAlignment,
+                structureRisk,
+                compressionBias,
+                orderBlockProx,
+                orderBlockBadge,
+                fvgState,
+                fvgBadge,
+                marketPhase,
+                judassWingDescription,
+                judasSwinBadge,
+                liquidityVoidDescription,
+                liquidityVoidBadge,
+                manipulationScore,
+                manipulationBadge,
+                bosDescription,
+                bosBadge,
+                gapDescription,
+                gapBadge,
+                gapBias,
+                propBlockDescription,
+                propBlockBadge,
+                eqhEqlDescription,
+                eqhEqlBadge,
+                chochDescription,
+                chochBadge,
+                institutionalScore,
+                institutionalBadge,
+                // trade levels (passed through for Risk panel)
+                tlEntry,
+                tlStop,
+                tlTarget,
+                tlRR,
+            };
+        }
+
+        function _renderIctSmcPanel(rows) {
+            const grid = document.getElementById("ictSmcGrid");
+            const summaryEl = document.getElementById("ictSmcSummary");
+            if (!grid) return;
+
+            const validRows = Array.isArray(rows)
+                ? rows.filter((row) => {
+                    if (!row) return false;
+                    const status = String(row.status || "ok").toLowerCase();
+                    return status === "ok" || status === "stale_timeout" || status === "";
+                })
+                : [];
+
+            if (validRows.length === 0) {
+                grid.innerHTML = `<div class="ict-smc-card"><p style="font-size:11px;color:var(--muted);">No smart money metrics available yet.</p></div>`;
+                if (summaryEl) summaryEl.textContent = "ICT/SMC metrics pending analysis...";
+                return;
+            }
+
+            const metrics = validRows
+                .map((row) => _deriveIctSmcMetrics(row))
+                .sort((a, b) => _timeframeOrderIndex(a.tf, MATRIX_TIMEFRAMES) - _timeframeOrderIndex(b.tf, MATRIX_TIMEFRAMES));
+
+            // Single-pass summary accumulation (avoids 11 separate filter passes)
+            const _modeOf = (arr) => {
+                if (!arr.length) return "--";
+                const counts = new Map();
+                for (const v of arr) counts.set(v, (counts.get(v) || 0) + 1);
+                let best = arr[0], bestN = 0;
+                counts.forEach((n, v) => { if (n > bestN) { best = v; bestN = n; } });
+                return { dominant: best, pct: Math.round((bestN / arr.length) * 100) };
+            };
+
+            let obNearCount = 0, fvgActiveCount = 0, judasTrapCount = 0, voidCount = 0,
+                highManipCount = 0, bosCount = 0, proSetupCount = 0, instScoreSum = 0;
+            const pdArr = [], structArr = [], biasArr = [];
+            for (const m of metrics) {
+                if (m.orderBlockProx !== "NORMAL") obNearCount++;
+                if (m.fvgState !== "NONE") fvgActiveCount++;
+                if (m.judassWingDescription !== "NONE") judasTrapCount++;
+                if (m.liquidityVoidDescription !== "NORMAL") voidCount++;
+                if (m.manipulationScore >= 70) highManipCount++;
+                if (m.bosDescription !== "NONE") bosCount++;
+                if (m.institutionalScore >= 75) proSetupCount++;
+                instScoreSum += Number(m.institutionalScore || 0);
+                pdArr.push(m.pdZone);
+                structArr.push(m.structureState);
+                biasArr.push(m.biasAlignment);
+            }
+            const avgInstScore = metrics.length > 0 ? Math.round(instScoreSum / metrics.length) : 0;
+
+            // CROSS-TF CONFIRMATION: O(n) Map-based mode finding
+            const pdMode = _modeOf(pdArr);
+            const structMode = _modeOf(structArr);
+            const biasMode = _modeOf(biasArr);
+            const pdConfirmation = pdMode.pct;
+            const structConfirmation = structMode.pct;
+            const biasConfirmation = biasMode.pct;
+
+            const overallConfidence = Math.round((pdConfirmation + structConfirmation + biasConfirmation) / 3);
+            const confirmationBadge = overallConfidence >= 75 ? "🔒" : (overallConfidence >= 50 ? "⚠️" : "❓");
+
+            if (summaryEl) {
+                summaryEl.textContent = `${confirmationBadge} Cross-TF ${overallConfidence}% | 🏛️ Pro setup: ${proSetupCount}/${metrics.length} (avg ${avgInstScore}%) | 🪤 Judas traps: ${judasTrapCount} | ⊘ Voids: ${voidCount} | 🎭 High manip: ${highManipCount} | 📈/📉 BOS: ${bosCount} | OB: ${obNearCount} | FVG: ${fvgActiveCount}`;
+            }
+
+            // ── LIVE SETUP ALERT BANNER ───────────────────────────────────────
+            const alertBanner = document.getElementById("ictAlertBanner");
+            if (alertBanner) {
+                // Gather alert-worthy setups: PRO score + strong bias confirmed across TFs
+                const proMetrics = metrics.filter((m) => m.institutionalScore >= 75);
+                const propulsionMetrics = metrics.filter((m) => m.propBlockDescription !== "NONE");
+                const gapFillMetrics = metrics.filter((m) => m.gapBias === "FILL UP" || m.gapBias === "FILL DOWN");
+                
+                if (overallConfidence >= 75 && proMetrics.length >= 2) {
+                    // STRONG ALERT: multiple TFs confirmed PRO setup
+                    const propDetail = propulsionMetrics.length > 0
+                        ? ` | 🚀 Propulsion on: ${propulsionMetrics.map((m) => m.tf.toUpperCase()).join(", ")}`
+                        : "";
+                    const gapDetail = gapFillMetrics.length > 0
+                        ? ` | 🎯 Gap fill draw on: ${gapFillMetrics.map((m) => `${m.tf.toUpperCase()} ${m.gapBias}`).join(", ")}`
+                        : "";
+                    const tfs = proMetrics.map((m) => m.tf.toUpperCase()).join(", ");
+                    alertBanner.className = "ict-alert-banner";
+                    alertBanner.style.display = "flex";
+                    alertBanner.innerHTML = `
+                        <span class="ict-alert-icon">🏛️</span>
+                        <div class="ict-alert-body">
+                            <div class="ict-alert-title">PRO SETUP DETECTED — ${overallConfidence}% Cross-TF Confidence</div>
+                            <div class="ict-alert-detail">Confirmed on: ${_escapeHtml(tfs)}${_escapeHtml(propDetail)}${_escapeHtml(gapDetail)}</div>
+                        </div>
+                    `;
+                } else if (overallConfidence >= 50 && proMetrics.length >= 1) {
+                    // FORMING ALERT: one TF PRO, moderate cross-TF alignment
+                    alertBanner.className = "ict-alert-banner warning";
+                    alertBanner.style.display = "flex";
+                    alertBanner.innerHTML = `
+                        <span class="ict-alert-icon">⚠️</span>
+                        <div class="ict-alert-body">
+                            <div class="ict-alert-title">SETUP FORMING — ${overallConfidence}% Cross-TF Confidence</div>
+                            <div class="ict-alert-detail">Monitor: ${_escapeHtml(proMetrics.map((m) => m.tf.toUpperCase()).join(", "))} for confirmation before entry.</div>
+                        </div>
+                    `;
+                } else {
+                    alertBanner.style.display = "none";
+                }
+            }
+
+            grid.innerHTML = metrics.map((m) => {
+                const pdColor = m.pdZone === "PREMIUM" ? "warning" : m.pdZone === "DISCOUNT" ? "active" : "";
+                const structColor = m.structureState === "ACCUMULATION" ? "active" : m.structureState === "BREAKOUT IMMINENT" ? "danger" : "warning";
+                const biasColor = m.biasAlignment === "ALIGNED" ? "active" : m.biasAlignment === "PARTIAL" ? "warning" : "danger";
+                const phaseColor = m.marketPhase === "ACCUMULATION" ? "active" : m.marketPhase === "MARKUP" ? "warning" : m.marketPhase === "DISTRIBUTION" ? "danger" : "warning";
+                const obColor = m.orderBlockProx === "OB IMMINENT" ? "danger" : m.orderBlockProx === "OB NEAR" ? "warning" : "";
+                const fvgColor = m.fvgState.includes("BULL") ? "active" : m.fvgState.includes("BEAR") ? "danger" : "";
+                const manipColor = m.manipulationScore >= 70 ? "danger" : (m.manipulationScore >= 50 ? "warning" : "");
+                const bosColor = m.bosDescription.includes("FORMING") ? "warning" : (m.bosDescription.includes("IMMINENT") ? "danger" : "");
+                const instColor = m.institutionalScore >= 75 ? "active" : (m.institutionalScore >= 60 ? "warning" : "");
+                return `
+                    <div class="ict-smc-card">
+                        <div class="ict-smc-card-title">${_escapeHtml(m.tf.toUpperCase())} ${m.marketPhase === "BALANCED" ? "" : "📊"}</div>
+                        <div class="ict-smc-row">
+                            <span class="ict-smc-label">Zone</span>
+                            <span class="ict-smc-value ${pdColor}">${_escapeHtml(m.pdZone)}</span>
+                        </div>
+                        <div class="ict-smc-row">
+                            <span class="ict-smc-label">Structure</span>
+                            <span class="ict-smc-value ${structColor}">${_escapeHtml(m.structureState)}</span>
+                        </div>
+                        <div class="ict-smc-row">
+                            <span class="ict-smc-label">Market Phase</span>
+                            <span class="ict-smc-value ${phaseColor}">${_escapeHtml(m.marketPhase)}</span>
+                        </div>
+                        <div class="ict-smc-row">
+                            <span class="ict-smc-label">Order Block</span>
+                            <span class="ict-smc-value ${obColor}">${_escapeHtml(m.orderBlockProx)} ${m.orderBlockBadge}</span>
+                        </div>
+                        <div class="ict-smc-row">
+                            <span class="ict-smc-label">FVG State</span>
+                            <span class="ict-smc-value ${fvgColor}">${_escapeHtml(m.fvgState)} ${m.fvgBadge}</span>
+                        </div>
+                        <div class="ict-smc-row">
+                            <span class="ict-smc-label">Bias Align</span>
+                            <span class="ict-smc-value ${biasColor}">${_escapeHtml(m.biasAlignment)}</span>
+                        </div>
+                        <div class="ict-smc-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px; margin-top: 6px;">
+                            <span class="ict-smc-label">Judas Swing</span>
+                            <span class="ict-smc-value">${_escapeHtml(m.judassWingDescription)} ${m.judasSwinBadge}</span>
+                        </div>
+                        <div class="ict-smc-row">
+                            <span class="ict-smc-label">Liquidity Void</span>
+                            <span class="ict-smc-value">${_escapeHtml(m.liquidityVoidDescription)} ${m.liquidityVoidBadge}</span>
+                        </div>
+                        <div class="ict-smc-row">
+                            <span class="ict-smc-label">Manipulation</span>
+                            <span class="ict-smc-value ${manipColor}">${m.manipulationBadge} ${Number(m.manipulationScore)}%</span>
+                        </div>
+                        <div class="ict-smc-row">
+                            <span class="ict-smc-label">Break of Structure</span>
+                            <span class="ict-smc-value ${bosColor}">${_escapeHtml(m.bosDescription)} ${m.bosBadge}</span>
+                        </div>
+                        <div class="ict-smc-row">
+                            <span class="ict-smc-label">Gap (NWOG/NDOG)</span>
+                            <span class="ict-smc-value ${m.gapDescription.includes("ABOVE") || m.gapDescription.includes("BELOW") ? "warning" : m.gapDescription === "AT OPEN" ? "active" : ""}">${_escapeHtml(m.gapDescription)} ${m.gapBadge}${m.gapBias && m.gapBias !== "NONE" ? ` <span style="font-size:9px;color:var(--muted);">(${_escapeHtml(m.gapBias)})</span>` : ""}</span>
+                        </div>
+                        <div class="ict-smc-row">
+                            <span class="ict-smc-label">Propulsion Block</span>
+                            <span class="ict-smc-value ${m.propBlockDescription.includes("BULL") ? "active" : m.propBlockDescription.includes("BEAR") ? "danger" : m.propBlockDescription !== "NONE" ? "warning" : ""}">${_escapeHtml(m.propBlockDescription)} ${m.propBlockBadge}</span>
+                        </div>
+                        <div class="ict-smc-row">
+                            <span class="ict-smc-label">EQH / EQL</span>
+                            <span class="ict-smc-value ${m.eqhEqlDescription !== "NONE" ? "warning" : ""}">${_escapeHtml(m.eqhEqlDescription)} ${m.eqhEqlBadge}</span>
+                        </div>
+                        <div class="ict-smc-row">
+                            <span class="ict-smc-label">CHoCH</span>
+                            <span class="ict-smc-value ${m.chochDescription.includes("BULLISH") ? "active" : m.chochDescription.includes("BEARISH") ? "danger" : m.chochDescription !== "NONE" ? "warning" : ""}">${_escapeHtml(m.chochDescription)} ${m.chochBadge}</span>
+                        </div>
+                        <div class="ict-smc-row">
+                            <span class="ict-smc-label">Pro Setup Score</span>
+                            <span class="ict-smc-value ${instColor}">${m.institutionalBadge} ${Number(m.institutionalScore)}%</span>
+                        </div>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        function _deriveVolumeMetrics(row) {
+            // Compute volume & microstructure metrics from matrix row data
+            const tf = String(row?.timeframe || row?.applied_timeframe || row?.requested_timeframe || "--").toLowerCase();
+            const compression = row?.compression || {};
+            const observation = row?.observation || {};
+            
+            // Energy stored in compression
+            const energyStored = Number(compression?.energy_stored || 0);
+            let energyLevel = "LOW";
+            if (energyStored >= 0.7) energyLevel = "HIGH";
+            else if (energyStored >= 0.4) energyLevel = "MEDIUM";
+            
+            // Bar count in compression zone
+            const barsInComp = Number(compression?.bars_in_compression || 0);
+            let compressionIntensity = "LIGHT";
+            if (barsInComp >= 20) compressionIntensity = "INTENSE";
+            else if (barsInComp >= 10) compressionIntensity = "MODERATE";
+            
+            // Momentum proxies (in 0-1 scale, but raw values can be larger)
+            const momentum = Math.min(1.0, Math.abs(Number(observation?.physics_momentum_runtime || 0) / 10.0) || 0);
+            const acceleration = Math.min(1.0, Math.abs(Number(observation?.physics_acceleration_runtime || 0) / 10.0) || 0);
+            
+            // Participation / liquidity activity
+            const liquidity = String(observation?.liquidity_signal || "OPEN").toUpperCase();
+            let participationState = "NORMAL";
+            if (liquidity.includes("BLOCK")) participationState = "HIGH";
+            else if (liquidity.includes("SWEEP")) participationState = "ACTIVE";
+            
+            // Market microstructure state
+            let microsStructure = "BALANCED";
+            if (energyStored > 0.6 && momentum > 0.5) microsStructure = "EXPLOSIVE";
+            else if (energyStored > 0.4) microsStructure = "COMPRESSED";
+            else if (momentum < 0.2) microsStructure = "QUIET";
+            
+            // Breakout proximity
+            const breakoutProx = Boolean(compression?.breakout_near);
+            let breakoutState = breakoutProx ? "IMMINENT" : "NORMAL";
+            
+            // VOLUME IMBALANCE SCORE (derived from momentum + energy + compression bias)
+            const compressionBias = String(row?.mcl_compression_direction_bias || "NEUTRAL").toUpperCase();
+            let buyImbalance = 50; // Base neutral
+            let sellImbalance = 50;
+            if (momentum > 0.6) {
+                if (compressionBias === "BUY" || String(row?.signal || "").toUpperCase() === "BUY") {
+                    buyImbalance = Math.round(50 + momentum * 40);
+                    sellImbalance = Math.round(50 - momentum * 40);
+                } else {
+                    sellImbalance = Math.round(50 + momentum * 40);
+                    buyImbalance = Math.round(50 - momentum * 40);
+                }
+            }
+            buyImbalance = Math.max(0, Math.min(100, buyImbalance));
+            sellImbalance = Math.max(0, Math.min(100, sellImbalance));
+            
+            return {
+                tf,
+                energyLevel,
+                barsInComp,
+                compressionIntensity,
+                momentum: (momentum * 100).toFixed(0),
+                acceleration: (acceleration * 100).toFixed(0),
+                participationState,
+                microsStructure,
+                breakoutState,
+                buyImbalance,
+                sellImbalance,
+            };
+        }
+
+        function _renderVolumeMicroPanel(rows) {
+            const grid = document.getElementById("volumeMicroGrid");
+            const summaryEl = document.getElementById("volumeMicroSummary");
+            if (!grid) return;
+
+            const validRows = Array.isArray(rows)
+                ? rows.filter((row) => {
+                    if (!row) return false;
+                    const status = String(row.status || "ok").toLowerCase();
+                    return status === "ok" || status === "stale_timeout" || status === "";
+                })
+                : [];
+
+            if (validRows.length === 0) {
+                grid.innerHTML = `<div class="volume-card"><p style="font-size:11px;color:var(--muted);">Volume data pending...</p></div>`;
+                if (summaryEl) summaryEl.textContent = "Volume structure analysis pending...";
+                return;
+            }
+
+            const metrics = validRows
+                .map((row) => _deriveVolumeMetrics(row))
+                .sort((a, b) => _timeframeOrderIndex(a.tf, MATRIX_TIMEFRAMES) - _timeframeOrderIndex(b.tf, MATRIX_TIMEFRAMES));
+
+            // Single-pass summary accumulation for volume panel
+            const _volModeOf = (arr) => {
+                if (!arr.length) return { dominant: "--", pct: 0 };
+                const counts = new Map();
+                for (const v of arr) counts.set(v, (counts.get(v) || 0) + 1);
+                let best = arr[0], bestN = 0;
+                counts.forEach((n, v) => { if (n > bestN) { best = v; bestN = n; } });
+                return { dominant: best, pct: Math.round((bestN / arr.length) * 100) };
+            };
+
+            let highEnergyCount = 0, explosiveCount = 0, momentumSum = 0, biasedBuy = 0, biasedSell = 0, buyBias = 0, sellBias = 0;
+            const energyArr = [], structArr = [];
+            for (const m of metrics) {
+                if (m.energyLevel === "HIGH") highEnergyCount++;
+                if (m.microsStructure === "EXPLOSIVE") explosiveCount++;
+                momentumSum += Number(m.momentum);
+                if (Number(m.buyImbalance) > 60) buyBias++;
+                if (Number(m.sellImbalance) > 60) sellBias++;
+                if (Number(m.buyImbalance) > 55) biasedBuy++;
+                if (Number(m.sellImbalance) > 55) biasedSell++;
+                energyArr.push(m.energyLevel);
+                structArr.push(m.microsStructure);
+            }
+            const avgMomentum = metrics.length > 0 ? Math.round(momentumSum / metrics.length) : 0;
+
+            // CROSS-TF CONFIRMATION: O(n) Map-based mode finding
+            const energyMode = _volModeOf(energyArr);
+            const energyDominant = energyMode.dominant;
+            const energyConfirmation = energyMode.pct;
+            const structMode = _volModeOf(structArr);
+            const structDominant = structMode.dominant;
+            const structConfirmation = structMode.pct;
+
+            // Imbalance consensus (> 55% on either side)
+            const imbalanceDominant = biasedBuy > biasedSell ? "BUY" : (biasedSell > biasedBuy ? "SELL" : "BALANCED");
+            const imbalanceConfirmation = metrics.length > 0 ? Math.round((Math.max(biasedBuy, biasedSell, metrics.length - biasedBuy - biasedSell) / metrics.length) * 100) : 0;
+            
+            const overallConfidence = Math.round((energyConfirmation + structConfirmation + imbalanceConfirmation) / 3);
+            const confirmationBadge = overallConfidence >= 75 ? "🔒" : (overallConfidence >= 50 ? "⚠️" : "❓");
+
+            if (summaryEl) {
+                summaryEl.textContent = `${confirmationBadge} Cross-TF Confidence ${overallConfidence}% (Energy ${energyConfirmation}% ${energyDominant} | Struct ${structConfirmation}% ${structDominant} | Imbal ${imbalanceConfirmation}% ${imbalanceDominant}) | High energy: ${highEnergyCount} | Explosive: ${explosiveCount} | Momentum: ${avgMomentum}% | Buy bias: ${buyBias} TFs | Sell bias: ${sellBias} TFs`;
+            }
+
+            grid.innerHTML = metrics.map((m) => {
+                const energyClass = m.energyLevel === "HIGH" ? "high" : m.energyLevel === "MEDIUM" ? "medium" : "low";
+                const momentumClass = Number(m.momentum) >= 70 ? "high" : Number(m.momentum) >= 40 ? "medium" : "low";
+                const structClass = m.microsStructure === "EXPLOSIVE" ? "high" : m.microsStructure === "COMPRESSED" ? "medium" : "low";
+                const buyImbalClass = Number(m.buyImbalance) > 60 ? "high" : Number(m.buyImbalance) > 50 ? "medium" : "low";
+                const sellImbalClass = Number(m.sellImbalance) > 60 ? "high" : Number(m.sellImbalance) > 50 ? "medium" : "low";
+                return `
+                    <div class="volume-card">
+                        <div class="volume-card-label">⚡ ${_escapeHtml(m.tf.toUpperCase())}</div>
+                        <div class="volume-card-value ${energyClass}">${_escapeHtml(m.energyLevel)} Energy</div>
+                        <div class="volume-card-detail">Bars compressed: ${_escapeHtml(String(m.barsInComp))} (${_escapeHtml(m.compressionIntensity)})</div>
+                    </div>
+                    <div class="volume-card">
+                        <div class="volume-card-label">📈 Momentum</div>
+                        <div class="volume-card-value ${momentumClass}">${_escapeHtml(m.momentum)}%</div>
+                        <div class="volume-card-detail">Accel: ${_escapeHtml(m.acceleration)}% | ${_escapeHtml(m.participationState)}</div>
+                    </div>
+                    <div class="volume-card">
+                        <div class="volume-card-label">🏗️ Structure</div>
+                        <div class="volume-card-value ${structClass}">${_escapeHtml(m.microsStructure)}</div>
+                        <div class="volume-card-detail">Breakout: ${_escapeHtml(m.breakoutState)}</div>
+                    </div>
+                    <div class="volume-card">
+                        <div class="volume-card-label">💰 Buy Imbalance</div>
+                        <div class="volume-card-value ${buyImbalClass}">${_escapeHtml(String(Math.round(Number(m.buyImbalance))))}%</div>
+                        <div class="volume-card-detail">Absorption pressure from buyers</div>
+                    </div>
+                    <div class="volume-card">
+                        <div class="volume-card-label">📉 Sell Imbalance</div>
+                        <div class="volume-card-value ${sellImbalClass}">${_escapeHtml(String(Math.round(Number(m.sellImbalance))))}%</div>
+                        <div class="volume-card-detail">Absorption pressure from sellers</div>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        // ── ICT KILL ZONE INDICATOR ───────────────────────────────────────────
+        // ICT Kill Zones (UTC): Asia 20:00-00:00, London 07:00-10:00,
+        // NY 12:00-15:00, London-NY Overlap 12:00-16:00
+        // ICT "Kill zone" = highest probability liquidity hunt window per session
+        function _renderKillZone() {
+            const now = new Date();
+            const h = now.getUTCHours();
+            const m = now.getUTCMinutes();
+            const hm = h * 60 + m;
+
+            // Session windows (UTC minutes)
+            const sessions = {
+                asia:    { start: 20*60, end: 24*60, killStart: 20*60, killEnd: 21*60 },   // 20:00-00:00, KZ 20:00-21:00
+                london:  { start: 7*60,  end: 16*60, killStart: 7*60,  killEnd: 9*60  },   // 07:00-16:00, KZ 07:00-09:00
+                ny:      { start: 12*60, end: 21*60, killStart: 12*60, killEnd: 14*60 },   // 12:00-21:00, KZ 12:00-14:00
+                overlap: { start: 12*60, end: 16*60, killStart: 12*60, killEnd: 15*60 },   // 12:00-16:00
+            };
+
+            const inRange = (start, end) => start <= end ? (hm >= start && hm < end) : (hm >= start || hm < end);
+            const asiaOpen    = inRange(sessions.asia.start,   sessions.asia.end);
+            const londonOpen  = inRange(sessions.london.start, sessions.london.end);
+            const nyOpen      = inRange(sessions.ny.start,     sessions.ny.end);
+            const overlapOpen = londonOpen && nyOpen;
+            const asiaKZ      = inRange(sessions.asia.killStart,   sessions.asia.killEnd);
+            const londonKZ    = inRange(sessions.london.killStart, sessions.london.killEnd);
+            const nyKZ        = inRange(sessions.ny.killStart,     sessions.ny.killEnd);
+
+            const _setKZ = (id, open, inKZ, overlap) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.className = "kz-session" + (overlap ? " overlap-zone" : inKZ ? " kill-zone-active" : open ? " active-session" : "");
+            };
+            _setKZ("kzAsia",    asiaOpen,   asiaKZ,   false);
+            _setKZ("kzLondon",  londonOpen, londonKZ, false);
+            _setKZ("kzNY",      nyOpen,     nyKZ,     false);
+            _setKZ("kzOverlap", overlapOpen,false,    overlapOpen);
+
+            const statusEl = document.getElementById("kzStatus");
+            if (statusEl) {
+                const inAnyKZ = asiaKZ || londonKZ || nyKZ;
+                if (overlapOpen)  statusEl.textContent = "⚡ OVERLAP KILL ZONE — High volatility window";
+                else if (nyKZ)    statusEl.textContent = "🗽 NY KILL ZONE — Liquidity sweep window";
+                else if (londonKZ)statusEl.textContent = "🇬🇧 LONDON KILL ZONE — Institutional entry window";
+                else if (asiaKZ)  statusEl.textContent = "🌏 ASIA KILL ZONE — Asian range setting";
+                else if (londonOpen && nyOpen) statusEl.textContent = "London + NY sessions open";
+                else if (londonOpen)  statusEl.textContent = "London session open";
+                else if (nyOpen)      statusEl.textContent = "NY session open";
+                else if (asiaOpen)    statusEl.textContent = "Asia session open";
+                else                  statusEl.textContent = "Off-session hours";
+                statusEl.style.color = overlapOpen ? "#fcd34d" : inAnyKZ ? "#6ee7b7" : "var(--muted)";
+            }
+
+            const clockEl = document.getElementById("kzUtcClock");
+            if (clockEl) {
+                const hh = String(now.getUTCHours()).padStart(2, "0");
+                const mm = String(now.getUTCMinutes()).padStart(2, "0");
+                const ss = String(now.getUTCSeconds()).padStart(2, "0");
+                clockEl.textContent = `${hh}:${mm}:${ss} UTC`;
+            }
+        }
+
+        // ── HTF → LTF BIAS CASCADE PANEL ─────────────────────────────────────
+        function _renderHtfCascadePanel(rows) {
+            const container = document.getElementById("htfCascadeContainer");
+            const summaryEl = document.getElementById("htfCascadeSummary");
+            if (!container) return;
+
+            const HTF_ORDER = ["1w", "1d", "4h", "1h", "30m", "15m", "5m", "1m"];
+            const validRows = Array.isArray(rows) ? rows.filter((r) => r && String(r.status || "ok").toLowerCase() !== "error") : [];
+
+            if (validRows.length === 0) {
+                container.innerHTML = `<div style="font-size:11px;color:var(--muted);padding:8px;">No data available for cascade.</div>`;
+                return;
+            }
+
+            // Build tf→bias map
+            const rowByTf = {};
+            for (const row of validRows) {
+                const tf = String(row.timeframe || row.applied_timeframe || row.requested_timeframe || "").toLowerCase();
+                if (tf) rowByTf[tf] = row;
+            }
+
+            const _getBias = (row) => {
+                const signal = String(row?.signal || "WAIT").toUpperCase();
+                const trend  = String(row?.trend  || "UNKNOWN").toUpperCase();
+                const bias   = String(row?.bias_label || "NEUTRAL").toUpperCase();
+                if (signal === "BUY"  || trend === "UP"   || bias === "BUY")  return "BULL";
+                if (signal === "SELL" || trend === "DOWN" || bias === "SELL") return "BEAR";
+                return "WAIT";
+            };
+
+            const cascadeData = HTF_ORDER
+                .filter((tf) => rowByTf[tf])
+                .map((tf) => {
+                    const row = rowByTf[tf];
+                    const bias = _getBias(row);
+                    const signal = String(row?.signal || "WAIT").toUpperCase();
+                    const phase  = String(row?.compression?.phase || "OPEN").toUpperCase();
+                    const energy = Number(row?.compression?.energy_stored || 0);
+                    return { tf, bias, signal, phase, energy };
+                });
+
+            if (cascadeData.length === 0) {
+                container.innerHTML = `<div style="font-size:11px;color:var(--muted);padding:8px;">Insufficient timeframe data.</div>`;
+                return;
+            }
+
+            // Detect break points — where bias flips from prior row
+            let prevBias = null;
+            let bullCount = 0, bearCount = 0, breakCount = 0;
+            const rows2 = cascadeData.map((d, i) => {
+                const isBreak = prevBias !== null && prevBias !== d.bias && d.bias !== "WAIT" && prevBias !== "WAIT";
+                if (isBreak) breakCount++;
+                if (d.bias === "BULL") bullCount++;
+                if (d.bias === "BEAR") bearCount++;
+                const result = { ...d, isBreak, prevBias };
+                prevBias = d.bias;
+                return result;
+            });
+
+            const dominant = bullCount > bearCount ? "BULL" : bearCount > bullCount ? "BEAR" : "MIXED";
+            const alignment = cascadeData.length > 0 ? Math.round(Math.max(bullCount, bearCount) / cascadeData.length * 100) : 0;
+
+            if (summaryEl) {
+                const breakNote = breakCount > 0 ? ` | ⚠️ ${breakCount} cascade break${breakCount > 1 ? "s" : ""}` : " | ✅ Clean cascade";
+                summaryEl.textContent = `${dominant} biased ${alignment}% across ${cascadeData.length} timeframes${breakNote}`;
+            }
+
+            container.innerHTML = rows2.map((d, i) => {
+                const barClass = d.isBreak ? "cascade-bar break" : d.bias === "BULL" ? "cascade-bar bull" : d.bias === "BEAR" ? "cascade-bar bear" : "cascade-bar wait";
+                const biasIcon = d.bias === "BULL" ? "🟢" : d.bias === "BEAR" ? "🔴" : "🟡";
+                const detail = `${d.phase} ${d.energy > 0 ? `E:${(d.energy*100).toFixed(0)}%` : ""}`;
+                const breakNote = d.isBreak ? ` <span style="font-size:9px;color:#f87171;margin-left:4px;">⚡ CASCADE BREAK</span>` : "";
+                const arrowEl  = i < rows2.length - 1 ? `<div style="text-align:center;font-size:10px;color:var(--border);padding:1px 0;">↓</div>` : "";
+                return `
+                    <div class="cascade-row">
+                        <span class="cascade-tf">${_escapeHtml(d.tf.toUpperCase())}</span>
+                        <span class="cascade-arrow">→</span>
+                        <span class="${barClass}">${biasIcon} ${_escapeHtml(d.bias)} · ${_escapeHtml(d.signal)}${breakNote}</span>
+                        <span class="cascade-detail">${_escapeHtml(detail)}</span>
+                    </div>${arrowEl}`;
+            }).join("");
+        }
+
+        // ── TRADE DECISION SCORECARD ──────────────────────────────────────────
+        function _renderTradeScorecard(rows, ictMetricsCache) {
+            const shell   = document.getElementById("scorecardShell");
+            const summaryEl = document.getElementById("scorecardSummary");
+            if (!shell) return;
+
+            const validRows = Array.isArray(rows) ? rows.filter((r) => r && String(r.status || "ok").toLowerCase() !== "error") : [];
+            if (validRows.length === 0) {
+                shell.innerHTML = `<div style="font-size:11px;color:var(--muted);padding:8px;">Load analysis to generate scorecard.</div>`;
+                return;
+            }
+
+            // ── Derive all checks ───────────────────────────────────────────
+            const allIct = validRows.map((r) => _deriveIctSmcMetrics(r));
+            const allVol = validRows.map((r) => _deriveVolumeMetrics(r));
+
+            // 1. Signal consensus
+            const signals = validRows.map((r) => String(r.signal || "WAIT").toUpperCase());
+            const buyCount  = signals.filter((s) => s === "BUY").length;
+            const sellCount = signals.filter((s) => s === "SELL").length;
+            const signalDominant = buyCount > sellCount ? "BUY" : sellCount > buyCount ? "SELL" : "WAIT";
+            const signalPct = Math.round(Math.max(buyCount, sellCount) / validRows.length * 100);
+            const signalPass = signalPct >= 60 && signalDominant !== "WAIT";
+
+            // 2. Cross-TF bias alignment (ICT)
+            const biasArr  = allIct.map((m) => m.biasAlignment);
+            const aligned  = biasArr.filter((b) => b === "ALIGNED").length;
+            const biasPct  = Math.round(aligned / allIct.length * 100);
+            const biasPass = biasPct >= 50;
+
+            // 3. Average institutional (PRO) score
+            const avgInst = allIct.length > 0 ? Math.round(allIct.reduce((a, m) => a + Number(m.institutionalScore), 0) / allIct.length) : 0;
+            const instPass = avgInst >= 60;
+
+            // 4. Energy / momentum
+            const highEnergy = allVol.filter((v) => v.energyLevel === "HIGH").length;
+            const energyPct  = Math.round(highEnergy / allVol.length * 100);
+            const energyPass = energyPct >= 40;
+
+            // 5. Kill zone timing
+            const now = new Date();
+            const hm  = now.getUTCHours() * 60 + now.getUTCMinutes();
+            const inKZ = (hm >= 7*60 && hm < 9*60) || (hm >= 12*60 && hm < 15*60) || (hm >= 20*60 && hm < 21*60);
+            const kzPass = inKZ;
+
+            // 6. No high-manipulation traps
+            const highManip = allIct.filter((m) => m.manipulationScore >= 70).length;
+            const manipPass = highManip === 0;
+
+            // 7. BOS confirmation
+            const bosCount = allIct.filter((m) => m.bosDescription !== "NONE").length;
+            const bosPass  = bosCount >= 2;
+
+            // 8. Cascade alignment (HTF→LTF bias)
+            const HTF_ORDER_SC = ["1w","1d","4h","1h","30m","15m","5m","1m"];
+            const rowByTfSC = {};
+            for (const r of validRows) {
+                const tf = String(r.timeframe || r.applied_timeframe || r.requested_timeframe || "").toLowerCase();
+                if (tf) rowByTfSC[tf] = r;
+            }
+            const cascBiases = HTF_ORDER_SC.filter((tf) => rowByTfSC[tf]).map((tf) => {
+                const r = rowByTfSC[tf];
+                const s = String(r?.signal || "WAIT").toUpperCase();
+                return s === "BUY" ? "BULL" : s === "SELL" ? "BEAR" : "WAIT";
+            });
+            let cascBreaks = 0, prev = null;
+            for (const b of cascBiases) { if (prev && prev !== b && b !== "WAIT" && prev !== "WAIT") cascBreaks++; prev = b; }
+            const cascadePass = cascBreaks === 0 && cascBiases.length >= 3;
+
+            // ── Score & verdict ─────────────────────────────────────────────
+            const checks = [
+                { label: "Signal Consensus",    pass: signalPass,  warn: !signalPass && signalPct >= 40, val: `${signalDominant} ${signalPct}%`,   icon: "📡" },
+                { label: "Bias Alignment",      pass: biasPass,    warn: !biasPass  && biasPct  >= 30,  val: `${biasPct}% aligned`,               icon: "🧭" },
+                { label: "Pro Setup Score",     pass: instPass,    warn: !instPass  && avgInst  >= 45,  val: `avg ${avgInst}%`,                    icon: "🏛️" },
+                { label: "Energy Level",        pass: energyPass,  warn: !energyPass && energyPct >= 20, val: `${energyPct}% high-energy TFs`,      icon: "⚡" },
+                { label: "Kill Zone Timing",    pass: kzPass,      warn: false,                          val: kzPass ? "IN KILL ZONE" : "OFF-KZ",   icon: "🕐" },
+                { label: "Manipulation Clear",  pass: manipPass,   warn: !manipPass && highManip <= 2,   val: manipPass ? "CLEAR" : `${highManip} high-manip`, icon: "🎭" },
+                { label: "BOS Confirmed",       pass: bosPass,     warn: !bosPass   && bosCount >= 1,    val: `${bosCount} TFs`,                    icon: "📈" },
+                { label: "HTF Cascade Clean",   pass: cascadePass, warn: !cascadePass && cascBreaks <= 1,val: cascadePass ? "CLEAN" : `${cascBreaks} break${cascBreaks!==1?"s":""}`, icon: "🌊" },
+            ];
+            const passCount = checks.filter((c) => c.pass).length;
+            const warnCount = checks.filter((c) => c.warn && !c.pass).length;
+            const totalScore = Math.round((passCount / checks.length) * 100);
+
+            let verdict, verdictClass, verdictIcon;
+            if (passCount >= 6) { verdict = "GO";   verdictClass = "go";   verdictIcon = "✅"; }
+            else if (passCount >= 4) { verdict = "WAIT"; verdictClass = "wait"; verdictIcon = "⏳"; }
+            else { verdict = "NO-GO"; verdictClass = "nogo"; verdictIcon = "🚫"; }
+
+            if (summaryEl) {
+                summaryEl.textContent = `${verdict} — ${passCount}/${checks.length} criteria met (${totalScore}% confluence) | ${signalDominant} bias | Inst. avg ${avgInst}%`;
+            }
+
+            shell.innerHTML = `
+                <div class="scorecard-verdict ${verdictClass}">
+                    <div class="scorecard-verdict-icon">${verdictIcon}</div>
+                    <div class="scorecard-verdict-label">${verdict}</div>
+                    <div class="scorecard-verdict-score">${passCount}/${checks.length} checks<br>${totalScore}% score</div>
+                </div>
+                <div class="scorecard-checks">
+                    ${checks.map((c) => `
+                        <div class="scorecard-check ${c.pass ? "pass" : c.warn ? "warn" : "fail"}">
+                            <span class="sc-icon">${c.icon}</span>
+                            <span class="sc-label">${_escapeHtml(c.label)}</span>
+                            <span class="sc-val">${_escapeHtml(c.val)}</span>
+                        </div>
+                    `).join("")}
+                </div>
+            `;
+        }
+
+        // ── RISK MANAGEMENT CALCULATOR ────────────────────────────────────────
+        function _renderRiskMgmtPanel(rows) {
+            const grid    = document.getElementById("riskMgmtGrid");
+            const summary = document.getElementById("riskMgmtSummary");
+            if (!grid) return;
+
+            const validRows = Array.isArray(rows)
+                ? rows.filter((r) => r && String(r.status || "ok").toLowerCase() !== "error")
+                : [];
+
+            if (validRows.length === 0) {
+                grid.innerHTML = `<div style="font-size:11px;color:var(--muted);padding:8px;">No trade level data available.</div>`;
+                return;
+            }
+
+            // ACCOUNT DEFAULTS — user can override via URL params or localStorage
+            const accountSize  = Number(localStorage.getItem("mcl_account_size")  || 10000);
+            const riskPct      = Number(localStorage.getItem("mcl_risk_pct")       || 1.0);   // % per trade
+            const riskDollars  = accountSize * riskPct / 100;
+
+            const cards = [];
+
+            for (const row of validRows) {
+                const tf = String(row?.timeframe || row?.applied_timeframe || row?.requested_timeframe || "--").toLowerCase();
+                const m  = _deriveIctSmcMetrics(row);
+                const entry  = m.tlEntry;
+                const stop   = m.tlStop;
+                const target = m.tlTarget;
+                let   rr     = m.tlRR;
+
+                if (!Number.isFinite(entry) && !Number.isFinite(stop)) continue;
+
+                // Calculate R:R from levels if not directly provided
+                if (!Number.isFinite(rr) && Number.isFinite(entry) && Number.isFinite(stop) && Number.isFinite(target)) {
+                    const risk   = Math.abs(entry - stop);
+                    const reward = Math.abs(target - entry);
+                    rr = risk > 0 ? reward / risk : null;
+                }
+
+                // Position sizing: risk $ / (entry - stop) in price units
+                let positionSize = null;
+                let stopPips     = null;
+                if (Number.isFinite(entry) && Number.isFinite(stop)) {
+                    stopPips = Math.abs(entry - stop);
+                    if (stopPips > 0) positionSize = riskDollars / stopPips;
+                }
+
+                const rrClass  = rr >= 2 ? "good" : rr >= 1 ? "warn" : "bad";
+                const rrText   = Number.isFinite(rr) ? `1 : ${rr.toFixed(2)}` : "--";
+                const rrBarPct = Number.isFinite(rr) ? Math.min(100, (rr / 4) * 100) : 0;
+
+                const stopPct  = Number.isFinite(entry) && Number.isFinite(stop)
+                    ? ((Math.abs(entry - stop) / Math.max(1e-9, Math.abs(entry))) * 100).toFixed(2)
+                    : "--";
+
+                const targetPct = Number.isFinite(entry) && Number.isFinite(target)
+                    ? ((Math.abs(target - entry) / Math.max(1e-9, Math.abs(entry))) * 100).toFixed(2)
+                    : "--";
+
+                cards.push(`
+                    <div class="risk-card">
+                        <div class="risk-card-title">⚡ ${_escapeHtml(tf.toUpperCase())} Risk Parameters</div>
+                        <div class="risk-row">
+                            <span class="risk-label">Entry</span>
+                            <span class="risk-val">${Number.isFinite(entry) ? entry.toFixed(4) : "--"}</span>
+                        </div>
+                        <div class="risk-row">
+                            <span class="risk-label">Stop Loss</span>
+                            <span class="risk-val bad">${Number.isFinite(stop) ? stop.toFixed(4) : "--"}${stopPct !== "--" ? ` <span style="font-size:9px;color:var(--muted);">(${stopPct}%)</span>` : ""}</span>
+                        </div>
+                        <div class="risk-row">
+                            <span class="risk-label">Take Profit</span>
+                            <span class="risk-val good">${Number.isFinite(target) ? target.toFixed(4) : "--"}${targetPct !== "--" ? ` <span style="font-size:9px;color:var(--muted);">(${targetPct}%)</span>` : ""}</span>
+                        </div>
+                        <div class="risk-row">
+                            <span class="risk-label">R : R Ratio</span>
+                            <span class="risk-val ${rrClass}">${_escapeHtml(rrText)}</span>
+                        </div>
+                        <div class="risk-bar-wrap"><div class="risk-bar-fill ${rrClass}" style="width:${rrBarPct}%"></div></div>
+                        <div class="risk-row" style="margin-top:6px;">
+                            <span class="risk-label">Stop Distance</span>
+                            <span class="risk-val">${stopPips != null ? stopPips.toFixed(4) : "--"} pts</span>
+                        </div>
+                        <div class="risk-row">
+                            <span class="risk-label">Position Size</span>
+                            <span class="risk-val ${positionSize != null && positionSize < 0.01 ? "bad" : "warn"}">${positionSize != null ? positionSize.toFixed(3) : "--"} lots</span>
+                        </div>
+                        <div class="risk-row">
+                            <span class="risk-label">Risk Amount</span>
+                            <span class="risk-val bad">$${riskDollars.toFixed(2)} (${riskPct}%)</span>
+                        </div>
+                    </div>
+                `);
+            }
+
+            if (cards.length === 0) {
+                grid.innerHTML = `<div style="font-size:11px;color:var(--muted);padding:8px;">Trade levels not yet available — load analysis to populate.</div>`;
+                if (summary) summary.textContent = "Risk Management: awaiting trade level data.";
+                return;
+            }
+
+            // Summary stats
+            const validRR = validRows
+                .map((r) => _deriveIctSmcMetrics(r))
+                .map((m) => {
+                    if (Number.isFinite(m.tlRR)) return m.tlRR;
+                    if (Number.isFinite(m.tlEntry) && Number.isFinite(m.tlStop) && Number.isFinite(m.tlTarget)) {
+                        const risk = Math.abs(m.tlEntry - m.tlStop);
+                        return risk > 0 ? Math.abs(m.tlTarget - m.tlEntry) / risk : null;
+                    }
+                    return null;
+                })
+                .filter((v) => v !== null && Number.isFinite(v));
+
+            const avgRR = validRR.length > 0 ? (validRR.reduce((a, b) => a + b, 0) / validRR.length).toFixed(2) : "--";
+            const bestRR = validRR.length > 0 ? Math.max(...validRR).toFixed(2) : "--";
+
+            if (summary) {
+                summary.textContent = `Account: $${accountSize.toLocaleString()} | Risk/trade: ${riskPct}% ($${riskDollars.toFixed(2)}) | Avg R:R across TFs: 1:${avgRR} | Best R:R: 1:${bestRR} | ${cards.length} TFs with trade levels`;
+            }
+            grid.innerHTML = cards.join("");
         }
 
         function _renderIntradayPredictionPanel(rows) {
@@ -5808,6 +7587,12 @@
                     body.innerHTML = orderedRows.map((row) => _buildObservationRow(row.timeframe || "--", row || {})).join("");
                     _renderFutureTradeSuggestions(orderedRows);
                     _renderIntradayPredictionPanel(orderedRows);
+                    _renderMultiTimeframeStructurePanel(orderedRows);
+                    _renderIctSmcPanel(orderedRows);
+                    _renderVolumeMicroPanel(orderedRows);
+                    _renderHtfCascadePanel(orderedRows);
+                    _renderTradeScorecard(orderedRows);
+                    _renderRiskMgmtPanel(orderedRows);
 
                     // Matrix can return timeout rows for intraday TFs; fetch them individually to fill blanks.
                     const missingTfs = orderedRows
@@ -5844,6 +7629,12 @@
                         body.innerHTML = recoveredRows.map((row) => _buildObservationRow(row.timeframe || "--", row || {})).join("");
                         _renderFutureTradeSuggestions(recoveredRows);
                         _renderIntradayPredictionPanel(recoveredRows);
+                        _renderMultiTimeframeStructurePanel(recoveredRows);
+                        _renderIctSmcPanel(recoveredRows);
+                        _renderVolumeMicroPanel(recoveredRows);
+                        _renderHtfCascadePanel(recoveredRows);
+                        _renderTradeScorecard(recoveredRows);
+                        _renderRiskMgmtPanel(recoveredRows);
                     }
                     return;
                 }
@@ -5881,6 +7672,12 @@
                 body.innerHTML = rows.join("");
                 _renderFutureTradeSuggestions(suggestionRows);
                 _renderIntradayPredictionPanel(suggestionRows);
+                _renderMultiTimeframeStructurePanel(suggestionRows);
+                _renderIctSmcPanel(suggestionRows);
+                _renderVolumeMicroPanel(suggestionRows);
+                _renderHtfCascadePanel(suggestionRows);
+                _renderTradeScorecard(suggestionRows);
+                _renderRiskMgmtPanel(suggestionRows);
             };
 
             renderRows();
@@ -7879,6 +9676,7 @@
                     loadChart(symbol, timeframe),
                     loadTimeframeObservationMatrix(symbol, data, timeframe, forceRefresh),
                     loadGannQATable(symbol, qaDate),
+                    fetchAndUpdateNovelSignals(),
                 ]);
 
                 const hadErrors = outcomes.some((r) => r.status === "rejected");
@@ -7937,6 +9735,65 @@
             } finally {
                 _setDashboardLoading(false, "", false);
             }
+        }
+
+        // ── Novel AI Signals ──────────────────────────────────────────────────
+        const _NOVEL_SIG_META = {
+            ECS:  { name: "ECS",  full: "Entropy Collapse Signal",        acc: "68% @8h · 80% @20h" },
+            NVA:  { name: "NVA",  full: "Gann Rotation Velocity Anomaly", acc: "57–67% @4h" },
+            PACL: { name: "PACL", full: "Compression Structure Lock",     acc: "28–56%" },
+            RIS:  { name: "RIS",  full: "Reliability Inversion Signal",   acc: "67% @1h" },
+            CAR:  { name: "CAR",  full: "Gann-Wave Harmonic Resonance",   acc: "62–88%" },
+            CBS:  { name: "CBS",  full: "Clean BOS Signal",               acc: "56% @15m" },
+        };
+
+        async function fetchAndUpdateNovelSignals() {
+            const symbol = document.getElementById("symbolInput")?.value?.trim()?.toUpperCase() || DEFAULT_SYMBOL;
+            const timeframe = document.getElementById("timeframeSelect")?.value || "15m";
+            try {
+                const params = new URLSearchParams({ symbol, timeframe });
+                const resp = await fetch(`${API_BASE}/market_causality/novel_signals?${params.toString()}`);
+                if (!resp.ok) return;
+                const data = await resp.json();
+                _renderNovelSignals(data);
+            } catch (_) {}
+        }
+
+        function _renderNovelSignals(data) {
+            const alertEl  = document.getElementById("novelAlertBadge");
+            const actionEl = document.getElementById("novelRecommendedAction");
+            const gridEl   = document.getElementById("novelSignalsGrid");
+            const ageEl    = document.getElementById("novelSignalsAge");
+            if (!alertEl || !gridEl) return;
+
+            const alert = String(data.intraday_alert || "IDLE").toUpperCase();
+            alertEl.textContent = alert;
+            alertEl.className = "novel-alert-badge " + alert.toLowerCase().replace("_", "_");
+
+            if (actionEl) actionEl.textContent = data.intraday_recommended_action || data.recommended_action || "";
+            if (ageEl) ageEl.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+            const signals = data.signals || {};
+            gridEl.innerHTML = Object.entries(_NOVEL_SIG_META).map(([key, meta]) => {
+                const s = signals[key] || signals[key.toLowerCase()] || {};
+                const active  = Boolean(s.active);
+                const dir     = String(s.direction || "NEUTRAL").toUpperCase();
+                const strength = Number(s.strength || 0);
+                const cardClass = active ? (dir === "BUY" ? "active-buy" : dir === "SELL" ? "active-sell" : "") : "";
+                const dirClass  = dir === "BUY" ? "buy" : dir === "SELL" ? "sell" : "neutral";
+                const dirIcon   = dir === "BUY" ? "▲" : dir === "SELL" ? "▼" : "—";
+                return `
+                    <div class="novel-sig-card ${cardClass}" title="${_escapeHtml(meta.full)}">
+                        <div class="novel-sig-name">${meta.name}
+                            <span class="novel-sig-strength">${active ? (strength * 100).toFixed(0) + "%" : "off"}</span>
+                        </div>
+                        <div>
+                            <span class="novel-sig-dir ${dirClass}">${dirIcon} ${dir}</span>
+                        </div>
+                        <div class="novel-sig-acc">${meta.acc}</div>
+                    </div>
+                `;
+            }).join("");
         }
 
         function displayResults(data) {
@@ -8094,12 +9951,7 @@
             }
 
             // Market Structure
-            document.getElementById("cardPhase").textContent = data.phase || "--";
-            document.getElementById("cardTrend").textContent = data.trend || "--";
-            document.getElementById("cardBias").textContent = 
-                data.bias_label ? `${data.bias_label} (${data.bias_score})` : "--";
-            document.getElementById("cardTrap").textContent = data.trap || "--";
-            document.getElementById("cardInstitutional").textContent = data.institutional_decision || "--";
+            _renderMarketStructureModule(data);
 
             // Technical Observations
             document.getElementById("cardGann").textContent = 
@@ -10044,6 +11896,10 @@
             // ── Start live price immediately ─────────────────────────────────
             startLivePricePoll(6000);
 
+            // ── Kill zone clock — tick every second ──────────────────────────
+            _renderKillZone();
+            setInterval(_renderKillZone, 1000);
+
             // ── Full analysis in background (non-blocking) ───────────────────
             setTimeout(() => {
                 loadAnalysis(false);
@@ -10648,6 +12504,9 @@
             refreshTrainingStatus();
             refreshCalibrationStatus();
         }, 60000);
+
+        // Auto-refresh novel signals every 90s (heavier call, less frequent)
+        setInterval(fetchAndUpdateNovelSignals, 90_000);
     </script>
 
     <!-- Training Status Panel -->
