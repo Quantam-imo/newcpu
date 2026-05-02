@@ -1475,6 +1475,31 @@
         .risk-bar-fill.warn { background: #f59e0b; }
         .risk-bar-fill.bad  { background: #ef4444; }
 
+        /* ── Risk Settings Bar ───────────────────────────────────────────── */
+        .risk-settings-bar {
+            display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+            background: var(--surface-alt); border: 1px solid var(--border);
+            border-radius: 8px; padding: 10px 14px; margin-bottom: 10px;
+        }
+        .risk-setting-label {
+            display: flex; flex-direction: column; gap: 3px;
+            font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .risk-setting-input {
+            background: var(--surface); border: 1px solid var(--border-strong);
+            border-radius: 5px; color: var(--text); font-size: 12px;
+            padding: 4px 8px; width: 110px; outline: none;
+            transition: border-color 0.2s;
+        }
+        .risk-setting-input:focus { border-color: var(--accent); }
+        .risk-apply-btn {
+            background: var(--accent); color: #0f172a; border: none; border-radius: 5px;
+            font-size: 11px; font-weight: 700; padding: 6px 14px; cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        .risk-apply-btn:hover { opacity: 0.85; }
+        .risk-saved-badge { font-size: 10px; color: #10b981; font-weight: 700; }
+
         /* ── Volume & Microstructure Panel ──────────────────────────────── */
         .volume-grid {
             display: grid;
@@ -3638,6 +3663,16 @@
 
             <div class="section">
                 <div class="section-title">💰 Risk Management Calculator</div>
+                <div class="risk-settings-bar">
+                    <label class="risk-setting-label">Account Size ($)
+                        <input id="riskAccountSize" class="risk-setting-input" type="number" min="100" step="100" placeholder="10000">
+                    </label>
+                    <label class="risk-setting-label">Risk per Trade (%)
+                        <input id="riskPctInput" class="risk-setting-input" type="number" min="0.1" max="10" step="0.1" placeholder="1.0">
+                    </label>
+                    <button id="riskApplyBtn" class="risk-apply-btn">Apply ✓</button>
+                    <span id="riskSettingsSaved" class="risk-saved-badge" style="display:none;">Saved ✓</span>
+                </div>
                 <div id="riskMgmtSummary" class="reason-panel" style="margin-bottom:10px;">Entry / Stop / Target levels, R:R ratios, and position sizing from trade levels.</div>
                 <div id="riskMgmtGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-top:6px;">
                     <div style="font-size:11px;color:var(--muted);padding:8px;">Load analysis to calculate risk parameters.</div>
@@ -6924,9 +6959,11 @@
                 return;
             }
 
-            // ACCOUNT DEFAULTS — user can override via URL params or localStorage
-            const accountSize  = Number(localStorage.getItem("mcl_account_size")  || 10000);
-            const riskPct      = Number(localStorage.getItem("mcl_risk_pct")       || 1.0);   // % per trade
+            // ACCOUNT SETTINGS — read from inputs first, fall back to localStorage
+            const _accInput  = document.getElementById("riskAccountSize");
+            const _riskInput = document.getElementById("riskPctInput");
+            const accountSize  = Number((_accInput  && _accInput.value)  || localStorage.getItem("mcl_account_size")  || 10000);
+            const riskPct      = Number((_riskInput && _riskInput.value) || localStorage.getItem("mcl_risk_pct")       || 1.0);
             const riskDollars  = accountSize * riskPct / 100;
 
             const cards = [];
@@ -7593,6 +7630,7 @@
                     _renderHtfCascadePanel(orderedRows);
                     _renderTradeScorecard(orderedRows);
                     _renderRiskMgmtPanel(orderedRows);
+                    window._lastLoadedRows = orderedRows;
 
                     // Matrix can return timeout rows for intraday TFs; fetch them individually to fill blanks.
                     const missingTfs = orderedRows
@@ -7635,6 +7673,7 @@
                         _renderHtfCascadePanel(recoveredRows);
                         _renderTradeScorecard(recoveredRows);
                         _renderRiskMgmtPanel(recoveredRows);
+                        window._lastLoadedRows = recoveredRows;
                     }
                     return;
                 }
@@ -7678,6 +7717,7 @@
                 _renderHtfCascadePanel(suggestionRows);
                 _renderTradeScorecard(suggestionRows);
                 _renderRiskMgmtPanel(suggestionRows);
+                window._lastLoadedRows = suggestionRows;
             };
 
             renderRows();
@@ -11899,6 +11939,30 @@
             // ── Kill zone clock — tick every second ──────────────────────────
             _renderKillZone();
             setInterval(_renderKillZone, 1000);
+
+            // ── Risk settings — pre-populate inputs from localStorage ────────
+            (function _initRiskSettings() {
+                const accEl  = document.getElementById("riskAccountSize");
+                const pctEl  = document.getElementById("riskPctInput");
+                const btn    = document.getElementById("riskApplyBtn");
+                const badge  = document.getElementById("riskSettingsSaved");
+                if (accEl) accEl.value  = localStorage.getItem("mcl_account_size") || "10000";
+                if (pctEl) pctEl.value  = localStorage.getItem("mcl_risk_pct")     || "1.0";
+                if (btn) btn.addEventListener("click", function () {
+                    const acc = parseFloat(accEl ? accEl.value : 10000);
+                    const pct = parseFloat(pctEl ? pctEl.value : 1.0);
+                    if (!Number.isFinite(acc) || acc < 1)   { alert("Enter a valid account size (≥ 1)."); return; }
+                    if (!Number.isFinite(pct) || pct <= 0 || pct > 100) { alert("Risk % must be between 0.1 and 100."); return; }
+                    localStorage.setItem("mcl_account_size", String(acc));
+                    localStorage.setItem("mcl_risk_pct",     String(pct));
+                    // Re-render panel with new values if data already loaded
+                    const grid = document.getElementById("riskMgmtGrid");
+                    if (grid && grid.children.length && grid.querySelector(".risk-card")) {
+                        _renderRiskMgmtPanel(window._lastLoadedRows || []);
+                    }
+                    if (badge) { badge.style.display = "inline"; setTimeout(() => { badge.style.display = "none"; }, 2000); }
+                });
+            })();
 
             // ── Full analysis in background (non-blocking) ───────────────────
             setTimeout(() => {
