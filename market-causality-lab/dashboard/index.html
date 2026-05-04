@@ -11012,6 +11012,14 @@
             return DEFAULT_CHART_LIMIT;
         }
 
+        function _chartBackfillLimitForTimeframe(timeframe) {
+            const tf = String(timeframe || "1d").toLowerCase();
+            // Progressive load target: start fast, then deepen in background.
+            if (tf === "5m") return 900;
+            if (tf === "15m") return 1600;
+            return _chartLimitForTimeframe(tf);
+        }
+
         function _chartTimeoutMsForTimeframe(timeframe) {
             const tf = String(timeframe || "1d").toLowerCase();
             if (tf === "1m") return 120000;
@@ -11155,6 +11163,7 @@
         async function loadChart(symbol, timeframe) {
             await _ensureLightweightChartsLoaded();
             ensureChart();
+            const loadSeq = ++_chartLoadSeq;
             const statusEl = document.getElementById("mclChartStatus");
             const rowsEl = document.getElementById("chartMetaRows");
             const tfEl = document.getElementById("chartMetaTf");
@@ -11162,6 +11171,8 @@
             const requestedTimeframe = String(timeframe || "1d").toLowerCase();
             const effectiveTimeframe = _normalizeTimeframeForSymbol(symbol, requestedTimeframe);
             let appliedTimeframe = effectiveTimeframe;
+            const initialLimit = _chartLimitForTimeframe(effectiveTimeframe);
+            const backfillLimit = _chartBackfillLimitForTimeframe(effectiveTimeframe);
             _chartDebugState.requestedSymbol = String(symbol || DEFAULT_SYMBOL).toUpperCase();
             _chartDebugState.requestedTimeframe = requestedTimeframe;
             _chartDebugState.appliedTimeframe = effectiveTimeframe;
@@ -11187,7 +11198,7 @@
                 params.set("require_fresh_mt5", "1");
             }
             params.set("lookback_years", String(_chartLookbackYearsForTimeframe(effectiveTimeframe)));
-            params.set("limit", String(_chartLimitForTimeframe(effectiveTimeframe)));
+            params.set("limit", String(initialLimit));
             params.set("fast_mode", "1");
 
             const _fetchChartPayload = async (url, timeoutMs = _chartTimeoutMsForTimeframe(effectiveTimeframe)) => {
@@ -11403,6 +11414,92 @@
             _updateMt5StrictStaleBanner(payload, normalized);
             _updateWheelAiLearning();
             _renderLiveMatchStatus();
+
+            // Progressive backfill: fetch deeper history after first paint.
+            if (backfillLimit > initialLimit) {
+                if (statusEl) {
+                    const baseStatus = String(statusEl.textContent || "").replace(/\s*\|\s*backfill:[^|]*/g, "");
+                    statusEl.textContent = `${baseStatus} | backfill:loading`;
+                }
+                try {
+                    const backfillParams = new URLSearchParams(params.toString());
+                    backfillParams.set("limit", String(backfillLimit));
+                    backfillParams.set("fast_mode", "1");
+                    const backfillPayload = await _fetchChartPayload(
+                        `${API_BASE}/market_causality/chart?${backfillParams.toString()}`,
+                        Math.max(180000, _chartTimeoutMsForTimeframe(effectiveTimeframe))
+                    );
+
+                    // Ignore stale async response if user switched symbol/timeframe meanwhile.
+                    if (loadSeq !== _chartLoadSeq) return;
+                    if (String(backfillPayload.status || "").toLowerCase() !== "ok") {
+                        if (statusEl) {
+                            const baseStatus = String(statusEl.textContent || "").replace(/\s*\|\s*backfill:[^|]*/g, "");
+                            statusEl.textContent = `${baseStatus} | backfill:skipped`;
+                        }
+                        return;
+                    }
+
+                    const deepCandles = Array.isArray(backfillPayload.candles) ? backfillPayload.candles : [];
+                    const deepNormalized = deepCandles
+                        .map((row) => ({
+                            time: Number(row.time),
+                            open: Number(row.open),
+                            high: Number(row.high),
+                            low: Number(row.low),
+                            close: Number(row.close),
+                            volume: Number(row.volume),
+                        }))
+                        .filter((row) => Number.isFinite(row.time) && Number.isFinite(row.open) && Number.isFinite(row.high) && Number.isFinite(row.low) && Number.isFinite(row.close))
+                        .sort((a, b) => a.time - b.time)
+                        .filter((row, idx, arr) => idx === 0 || row.time !== arr[idx - 1].time);
+
+                    if (deepNormalized.length <= normalized.length) {
+                        if (statusEl) {
+                            const baseStatus = String(statusEl.textContent || "").replace(/\s*\|\s*backfill:[^|]*/g, "");
+                            statusEl.textContent = `${baseStatus.replace(/Loaded\s+\d+\s+candles/i, `Loaded ${deepNormalized.length} candles`)} | backfill:done`;
+                        }
+                        return;
+                    }
+
+                    _mclChartCandles = deepNormalized;
+                    _chartDebugState.candleCount = deepNormalized.length;
+                    const deepLast = deepNormalized[deepNormalized.length - 1];
+                    _lastChartBarState = { close: Number(deepLast.close), time: Number(deepLast.time) };
+                    _chartDebugState.lastTime = Number(deepLast.time);
+                    _chartDebugState.lastClose = Number(deepLast.close);
+                    _renderChartDebug();
+
+                    if (mclCandlesSeries) {
+                        mclCandlesSeries.setData(deepNormalized);
+                        _liveCurrentBar = null;
+                    }
+
+                    if (rowsEl) rowsEl.textContent = `Candles: ${deepNormalized.length}`;
+                    const rangeEl2 = document.getElementById("chartMetaRange");
+                    if (rangeEl2 && deepNormalized.length > 1) {
+                        const deepFirstTime = Number(deepNormalized[0].time);
+                        const deepLastTime = Number(deepNormalized[deepNormalized.length - 1].time);
+                        const deepSpanDays = Math.max(0, (deepLastTime - deepFirstTime) / 86400);
+                        let deepLabel;
+                        if (deepSpanDays >= 365) deepLabel = `${(deepSpanDays / 365).toFixed(1)}Y`;
+                        else if (deepSpanDays >= 30) deepLabel = `${(deepSpanDays / 30).toFixed(1)}M`;
+                        else deepLabel = `${deepSpanDays.toFixed(1)}D`;
+                        rangeEl2.textContent = `Range: ${deepLabel}`;
+                    }
+
+                    if (statusEl) {
+                        const baseStatus = String(statusEl.textContent || "").replace(/\s*\|\s*backfill:[^|]*/g, "");
+                        statusEl.textContent = `${baseStatus.replace(/Loaded\s+\d+\s+candles/i, `Loaded ${deepNormalized.length} candles`)} | backfill:done`;
+                    }
+                    _renderLiveMatchStatus();
+                } catch (_) {
+                    if (statusEl) {
+                        const baseStatus = String(statusEl.textContent || "").replace(/\s*\|\s*backfill:[^|]*/g, "");
+                        statusEl.textContent = `${baseStatus} | backfill:failed`;
+                    }
+                }
+            }
         }
 
         // ── Overlay System ─────────────────────────────────────────────────────
@@ -11430,6 +11527,7 @@
         let _alignmentKeyboardBound = false;
         let _overlayData       = null; // cached server response
         let _mclChartCandles   = [];   // cached normalized candles for vertical line bounds
+        let _chartLoadSeq      = 0;    // guards async chart backfill against stale responses
 
         // ── Lesson Annotation State ────────────────────────────────────────────
         let _lessonData        = null;            // cached lesson_annotations response
