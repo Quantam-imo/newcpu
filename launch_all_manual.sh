@@ -48,8 +48,26 @@ fi
 
 # Start Cloudflare tunnel (if available)
 if command -v cloudflared > /dev/null; then
-    nohup cloudflared tunnel --url http://localhost:8000 > logs/cloudflared.log 2>&1 &
-    echo "Cloudflare tunnel started."
+    nohup bash /workspaces/newcpu/start_cloudflare_tunnel.sh > logs/cloudflare_tunnel_launcher.log 2>&1 &
+    echo "Cloudflare tunnel manager started."
+
+    # Wait briefly for tunnel URL publication and send a forced link alert.
+    for i in {1..20}; do
+        if [ -s /workspaces/newcpu/data/tunnel_url.txt ] && grep -Eq 'https://.*(trycloudflare|cloudflare)' /workspaces/newcpu/data/tunnel_url.txt; then
+            break
+        fi
+        sleep 1
+    done
+
+    if [ -x /workspaces/newcpu/send_telegram_alert.sh ]; then
+        FORCE_ALERT=1 bash /workspaces/newcpu/send_telegram_alert.sh launch-all-manual || true
+    fi
+fi
+
+# Start MT5 bridge sync daemon (receives candles POSTed from Windows MT5 machine)
+if [ -x /workspaces/newcpu/start_mt5_bridge_sync.sh ]; then
+    echo "Starting MT5 bridge sync daemon..."
+    bash /workspaces/newcpu/start_mt5_bridge_sync.sh > /workspaces/newcpu/logs/mt5_bridge_sync.log 2>&1 || true
 fi
 
 echo "All AstroQuant services launched. Open http://localhost:8000 in your browser."

@@ -25,9 +25,24 @@ import requests
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIGURATION  — edit these as needed
 # ─────────────────────────────────────────────────────────────────────────────
-CODESPACE_URL = (
-    "https://humble-goggles-q7r79pgxw79q245rq-8000.app.github.dev"
-)
+# Read from env var — set AQ_BACKEND_URL to your current Cloudflare tunnel URL.
+# If not set, falls back to reading data/tunnel_url.txt in the repo root,
+# then falls back to the last-known static URL.
+def _resolve_backend_url() -> str:
+    env = os.getenv("AQ_BACKEND_URL", "").strip()
+    if env:
+        return env.rstrip("/")
+    # Try reading the tunnel_url.txt that the codespace writes on every restart
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.dirname(script_dir)  # tools/ -> repo root
+    tunnel_file = os.path.join(repo_root, "data", "tunnel_url.txt")
+    if os.path.isfile(tunnel_file):
+        url = open(tunnel_file).read().strip().rstrip("/")
+        if url.startswith("https://"):
+            return url
+    return "https://pat-med-integrated-ellis.trycloudflare.com"
+
+CODESPACE_URL = _resolve_backend_url()
 UPLOAD_ENDPOINT = "/market_causality/mt5_upload?symbol=XAUUSD&timeframe=5m"
 UPLOAD_TOKEN = os.getenv("MCL_MT5_UPLOAD_TOKEN", "").strip()
 

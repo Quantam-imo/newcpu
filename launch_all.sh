@@ -54,10 +54,16 @@ fi
 echo "Starting orchestrator..."
 nohup "$PYTHON_BIN" start_astroquant.py > "$LOG_DIR/orchestrator.log" 2>&1 &
 if command -v cloudflared >/dev/null 2>&1; then
-  echo "Starting tunnel..."
-  nohup cloudflared tunnel --url http://localhost:8000 > "$LOG_DIR/tunnel.log" 2>&1 &
+  echo "Starting tunnel manager (updates data/tunnel_url.txt + Telegram link alerts)..."
+  nohup bash "$ROOT_DIR/start_cloudflare_tunnel.sh" > "$LOG_DIR/cloudflare_tunnel_launcher.log" 2>&1 &
 else
   echo "cloudflared binary not found, skipping tunnel startup."
+fi
+
+# Start MT5 bridge sync daemon (receives candles POSTed from Windows MT5 machine)
+if [[ -x "$ROOT_DIR/start_mt5_bridge_sync.sh" ]]; then
+  echo "Starting MT5 bridge sync daemon..."
+  bash "$ROOT_DIR/start_mt5_bridge_sync.sh" > "$LOG_DIR/mt5_bridge_sync.log" 2>&1 || true
 fi
 
 # 4. Wait for backend to be ready
@@ -75,6 +81,19 @@ done
 if [[ "$backend_ready" -ne 1 ]]; then
   echo "Backend did not become ready in time. Check $LOG_DIR/backend.log"
   exit 1
+fi
+
+# Wait briefly for Cloudflare URL publication and push a Telegram link update.
+if command -v cloudflared >/dev/null 2>&1; then
+  for i in {1..20}; do
+    if [[ -s "$ROOT_DIR/data/tunnel_url.txt" ]] && grep -Eq 'https://.*(trycloudflare|cloudflare)' "$ROOT_DIR/data/tunnel_url.txt"; then
+      break
+    fi
+    sleep 1
+  done
+  if [[ -x "$ROOT_DIR/send_telegram_alert.sh" ]]; then
+    FORCE_ALERT=1 bash "$ROOT_DIR/send_telegram_alert.sh" launch-all || true
+  fi
 fi
 
 # 5. Block unattended automation unless the full bridge is ready

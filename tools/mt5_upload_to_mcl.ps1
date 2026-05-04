@@ -6,7 +6,16 @@
 #   powershell -ExecutionPolicy Bypass -File mt5_upload_to_mcl.ps1
 #
 # --- AUTO-CONFIGURED ---
-$MCL_URL = "https://humble-goggles-q7r79pgxw79q245rq-8000.app.github.dev/market_causality/mt5_upload?symbol=XAUUSD&timeframe=5m"
+# Auto-resolve backend URL: env var > tunnel_url.txt > static fallback
+$_tunnelFile = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "data\tunnel_url.txt"
+if ($env:AQ_BACKEND_URL) {
+    $_baseUrl = $env:AQ_BACKEND_URL.TrimEnd("/")
+} elseif (Test-Path $_tunnelFile) {
+    $_baseUrl = (Get-Content $_tunnelFile -Raw).Trim().TrimEnd("/")
+} else {
+    $_baseUrl = "https://pat-med-integrated-ellis.trycloudflare.com"
+}
+$MCL_URL = "$_baseUrl/market_causality/mt5_upload?symbol=XAUUSD&timeframe=5m"
 
 # Auto-detect MT5 files folder across common install locations
 $MT5_CANDIDATES = @(
