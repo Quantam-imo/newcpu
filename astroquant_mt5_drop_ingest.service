@@ -1,0 +1,15 @@
+[Unit]
+Description=AstroQuant MT5 Drop Ingest (CSV drop -> incoming bridge file)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__SERVICE_USER__
+WorkingDirectory=__WORKSPACE__
+EnvironmentFile=-__WORKSPACE__/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/bin/bash __WORKSPACE__/ingest_mt5_feed_from_drop.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=astroquant-mt5-drop-ingest

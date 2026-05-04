@@ -5,7 +5,7 @@ set -euo pipefail
 
 WORKSPACE="${AQ_WORKSPACE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 INCOMING_DIR="$WORKSPACE/market-causality-lab/data/live/mt5/incoming"
-MAX_LAG_SEC="${MT5_HEALTH_MAX_LAG_SEC:-86400}"  # Allow up to 24h (operational grace period for manual MT5 exports)
+MAX_LAG_SEC="${MT5_HEALTH_MAX_LAG_SEC:-900}"  # 24/7 bridge mode: fail fast when feed is stale
 REQUIRED_ROWS="${MT5_HEALTH_MIN_ROWS:-50}"
 WARN_LAG_SEC="${MT5_HEALTH_WARN_LAG_SEC:-3600}"  # Warn if feed older than 1 hour
 
@@ -39,7 +39,7 @@ echo "Row count: $row_count"
 echo ""
 
 if [[ $lag_sec -gt $WARN_LAG_SEC ]]; then
-  echo "⚠️  WARNING: Feed is older than 1h — ensure MetaEditor exports are running"
+  echo "⚠️  WARNING: Feed is older than ${WARN_LAG_SEC}s — ensure MetaEditor exports are running"
 fi
 
 if [[ $lag_sec -gt $MAX_LAG_SEC ]]; then

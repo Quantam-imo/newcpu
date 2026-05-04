@@ -12,6 +12,7 @@ LOCK_DIR="/tmp/astroquant_watchdog.lock"
 BOOTSTRAP="$WORKSPACE/non_systemd_autostart_bootstrap.sh"
 AI_HEALTH_CHECK="$WORKSPACE/check_ai_retrain_health.sh"
 MT5_STATUS_CHECK="$WORKSPACE/check_mt5_bridge_freshness.sh"
+MT5_INGEST_ONCE="$WORKSPACE/ingest_mt5_feed_from_drop.sh"
 MT5_START_SYNC="$WORKSPACE/start_mt5_bridge_sync.sh"
 MT5_STOP_SYNC="$WORKSPACE/stop_mt5_bridge_sync.sh"
 
@@ -23,13 +24,24 @@ log() {
 
 restart_mt5_bridge() {
   local reason="$1"
+  local used_systemd=0
   log "mt5 bridge restart requested: ${reason}"
-  if [ -x "$MT5_STOP_SYNC" ]; then
-    AQ_WORKSPACE="$WORKSPACE" /bin/bash "$MT5_STOP_SYNC" >> "$LOG_FILE" 2>&1 || true
+  if [ -x "$MT5_INGEST_ONCE" ]; then
+    AQ_WORKSPACE="$WORKSPACE" /bin/bash "$MT5_INGEST_ONCE" >> "$LOG_FILE" 2>&1 || true
   fi
-  sleep 1
-  if [ -x "$MT5_START_SYNC" ]; then
-    AQ_WORKSPACE="$WORKSPACE" /bin/bash "$MT5_START_SYNC" >> "$LOG_FILE" 2>&1 || true
+  if command -v systemctl >/dev/null 2>&1 && [ "$(ps -p 1 -o comm= 2>/dev/null)" = "systemd" ]; then
+    used_systemd=1
+    systemctl reset-failed astroquant_mt5_bridge_sync.service >/dev/null 2>&1 || true
+    systemctl restart astroquant_mt5_bridge_sync.service >/dev/null 2>&1 || true
+  fi
+  if [ "$used_systemd" -eq 0 ]; then
+    if [ -x "$MT5_STOP_SYNC" ]; then
+      AQ_WORKSPACE="$WORKSPACE" /bin/bash "$MT5_STOP_SYNC" >> "$LOG_FILE" 2>&1 || true
+    fi
+    sleep 1
+    if [ -x "$MT5_START_SYNC" ]; then
+      AQ_WORKSPACE="$WORKSPACE" /bin/bash "$MT5_START_SYNC" >> "$LOG_FILE" 2>&1 || true
+    fi
   fi
   if [ -x "$MT5_STATUS_CHECK" ]; then
     if AQ_WORKSPACE="$WORKSPACE" /bin/bash "$MT5_STATUS_CHECK" >> "$LOG_FILE" 2>&1; then
@@ -38,7 +50,12 @@ restart_mt5_bridge() {
       return 0
     fi
   fi
-  log "mt5 bridge recovery incomplete"
+  if [ -f /tmp/astroquant_mt5_bridge_health.out ]; then
+    _last_mt5_reason="$(cat /tmp/astroquant_mt5_bridge_health.out 2>/dev/null || echo unknown)"
+    log "mt5 bridge recovery incomplete: ${_last_mt5_reason}"
+  else
+    log "mt5 bridge recovery incomplete"
+  fi
   FORCE_ALERT=1 bash "$WORKSPACE/send_telegram_alert.sh" mt5-bridge-recovery-failed >> "$LOG_FILE" 2>&1 || true
   return 1
 }

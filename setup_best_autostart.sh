@@ -20,6 +20,8 @@ chmod +x "$WORKSPACE/watchdog_autorecover.sh" 2>/dev/null || true
 
 install_service_template astroquant_tradingbot.service
 install_service_template astroquant_mt5_bridge_sync.service
+install_service_template astroquant_mt5_drop_ingest.service
+install_service_template astroquant_mt5_drop_ingest.timer
 install_service_template astroquant_watchdog.service
 install_service_template astroquant_watchdog.timer
 install_service_template astroquant_ai_retrain.service
@@ -30,10 +32,11 @@ sudo systemctl daemon-reload
 # Single startup authority: only tradingbot starts the full stack.
 sudo systemctl enable astroquant_tradingbot.service
 sudo systemctl enable astroquant_mt5_bridge_sync.service
+sudo systemctl enable astroquant_mt5_drop_ingest.timer
 sudo systemctl enable astroquant_watchdog.timer
 sudo systemctl enable astroquant_ai_retrain.timer
 
 echo "AstroQuant autostart configured with single startup authority."
-echo "Enabled services: astroquant_tradingbot.service + astroquant_mt5_bridge_sync.service + astroquant_watchdog.timer + astroquant_ai_retrain.timer"
+echo "Enabled services: astroquant_tradingbot.service + astroquant_mt5_bridge_sync.service + astroquant_mt5_drop_ingest.timer + astroquant_watchdog.timer + astroquant_ai_retrain.timer"
 echo ""
 echo "NOTE: For dev containers without systemd (docker-init), use ./start_24h.sh instead."

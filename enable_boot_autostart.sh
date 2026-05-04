@@ -117,16 +117,25 @@ if [ -d /etc/systemd/system ] && command -v sudo >/dev/null 2>&1; then
   echo "Applying: offline systemd unit + enable-link provisioning"
 
   install_service_template astroquant_tradingbot.service
+  install_service_template astroquant_mt5_bridge_sync.service
+  install_service_template astroquant_mt5_drop_ingest.service
+  install_service_template astroquant_mt5_drop_ingest.timer
   install_service_template astroquant_watchdog.service
   install_service_template astroquant_watchdog.timer
 
   enable_service_link astroquant_tradingbot.service
+  enable_service_link astroquant_mt5_bridge_sync.service
+  enable_service_link astroquant_mt5_drop_ingest.timer timers.target.wants
   enable_service_link astroquant_watchdog.timer timers.target.wants
 
   echo ""
   echo "Autostart status (offline systemd files):"
   ls -l /etc/systemd/system/astroquant_tradingbot.service || true
   ls -l /etc/systemd/system/multi-user.target.wants/astroquant_tradingbot.service || true
+  ls -l /etc/systemd/system/astroquant_mt5_bridge_sync.service || true
+  ls -l /etc/systemd/system/multi-user.target.wants/astroquant_mt5_bridge_sync.service || true
+  ls -l /etc/systemd/system/astroquant_mt5_drop_ingest.timer || true
+  ls -l /etc/systemd/system/timers.target.wants/astroquant_mt5_drop_ingest.timer || true
   ls -l /etc/systemd/system/astroquant_watchdog.timer || true
   ls -l /etc/systemd/system/timers.target.wants/astroquant_watchdog.timer || true
   install_rc_local_fallback

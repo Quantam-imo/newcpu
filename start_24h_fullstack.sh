@@ -295,6 +295,10 @@ fi
 
 # Step 7: MT5 bridge sync (MetaEditor CSV -> canonical timeframe datasets)
 if [ -f "$WORKSPACE/start_mt5_bridge_sync.sh" ]; then
+  if [ -x "$WORKSPACE/ingest_mt5_feed_from_drop.sh" ]; then
+    log BLUE "Running MT5 drop ingest pre-sync..."
+    bash "$WORKSPACE/ingest_mt5_feed_from_drop.sh" >> "$LOG_DIR/mt5_bridge_sync.log" 2>&1 || true
+  fi
   log BLUE "Starting MT5 bridge sync daemon..."
   bash "$WORKSPACE/start_mt5_bridge_sync.sh" >> "$LOG_DIR/mt5_bridge_sync.log" 2>&1 || true
   sleep 2

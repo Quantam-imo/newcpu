@@ -1,0 +1,11 @@
+[Unit]
+Description=Run AstroQuant MT5 drop ingest every minute
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=1min
+AccuracySec=10s
+Unit=astroquant_mt5_drop_ingest.service
+
+[Install]
+WantedBy=timers.target
