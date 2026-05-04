@@ -15830,6 +15830,8 @@
         // ---- Live price polling ----
         let _livePriceLine = null;
         let _liveCurrentBar = null; // synthetic live candle being built from live price polls
+        let _livePollTimer = null;
+        let _livePollInFlight = false;
         let _liveQuoteState = {
             price: null,
             age: null,
@@ -15845,7 +15847,7 @@
         let _lastChartBarState = { close: null, time: null };
         const _liveUrlParams = new URLSearchParams(window.location.search || "");
         const _liveMode = {
-            preferSource: (_liveUrlParams.get("live_prefer") || "goldapi").toLowerCase(),
+            preferSource: (_liveUrlParams.get("live_prefer") || "mt5").toLowerCase(),
             brokerOnly: ["1", "true", "yes", "on"].includes(String(_liveUrlParams.get("live_broker_only") || "0").toLowerCase()),
             maxAgeSeconds: Math.max(5, Number(_liveUrlParams.get("live_max_age") || 120) || 120),
             maxDriftPct: Math.max(0.01, Number(_liveUrlParams.get("live_max_drift_pct") || 0.35) || 0.35),
@@ -16271,6 +16273,8 @@
         }
 
         async function _pollLivePrice() {
+            if (_livePollInFlight) return;
+            _livePollInFlight = true;
             const symbol = document.getElementById("symbolInput").value.trim().toUpperCase() || DEFAULT_SYMBOL;
             try {
                 const _fetchLivePayload = async (preferSource, brokerOnly) => {
@@ -16281,7 +16285,7 @@
                         max_age_seconds: String(_liveMode.maxAgeSeconds),
                     });
                     const url = `${API_BASE}/market_causality/live_price?${params.toString()}`;
-                    const res = await fetch(url, { signal: AbortSignal.timeout(45000) });
+                    const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
                     if (_isTunnelAuthResponse(res)) {
                         throw new Error(TUNNEL_AUTH_HINT);
                     }
@@ -16317,31 +16321,44 @@
                 };
                 _updateLivePriceBadge(price, data.source || "--", age, spotFlag);
             } catch (err) {
-                _liveQuoteState = {
-                    price: null,
-                    age: null,
-                    ts: null,
-                    source: null,
-                    spot: null,
-                    brokerMatched: null,
-                    brokerRef: null,
-                    brokerDiffAbs: null,
-                    brokerDiffPct: null,
-                    driftLearning: null,
-                };
-                _updateLivePriceBadge(null, null, null, null);
                 const msg = String(err?.message || err || "");
                 if (msg.toLowerCase().includes("signal timed out")) {
                     console.info("MCL live price poll timeout (non-fatal):", msg);
                 } else {
                     console.warn("MCL live price poll failed:", msg);
                 }
+                // Keep last good quote on transient failures to avoid UI flicker to UNAVAILABLE.
+                if (Number.isFinite(Number(_liveQuoteState.price)) && Number.isFinite(Number(_liveQuoteState.ts))) {
+                    const age = Math.max(0, Math.round(Date.now() / 1000 - Number(_liveQuoteState.ts)));
+                    _liveQuoteState.age = age;
+                    _updateLivePriceBadge(Number(_liveQuoteState.price), _liveQuoteState.source || "--", age, _liveQuoteState.spot);
+                } else {
+                    _liveQuoteState = {
+                        price: null,
+                        age: null,
+                        ts: null,
+                        source: null,
+                        spot: null,
+                        brokerMatched: null,
+                        brokerRef: null,
+                        brokerDiffAbs: null,
+                        brokerDiffPct: null,
+                        driftLearning: null,
+                    };
+                    _updateLivePriceBadge(null, null, null, null);
+                }
+            } finally {
+                _livePollInFlight = false;
             }
         }
 
-        function startLivePricePoll(intervalMs = 6000) {
+        function startLivePricePoll(intervalMs = 5000) {
+            if (_livePollTimer) {
+                try { clearInterval(_livePollTimer); } catch (_) {}
+            }
             _pollLivePrice();
-            return setInterval(_pollLivePrice, intervalMs);
+            _livePollTimer = setInterval(_pollLivePrice, intervalMs);
+            return _livePollTimer;
         }
 
         function _conceptCleanTitle(raw) {
@@ -16595,8 +16612,8 @@
             // Chart loads through loadAnalysis() below to avoid duplicate startup requests.
             
 
-            // ── Start live price immediately ─────────────────────────────────
-            startLivePricePoll(30000);  // goldapi latency ~25-40s; polling faster causes cascading timeouts
+            // ── Start live price immediately (low-latency mode) ─────────────
+            startLivePricePoll(5000);
 
             // ── Kill zone clock — tick every second ──────────────────────────
             _renderKillZone();

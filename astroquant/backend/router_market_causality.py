@@ -21,6 +21,33 @@ from fastapi import APIRouter, Body, File, HTTPException, Query, Request, Upload
 from astroquant.backend.mathematical_engines import LearningFeedbackEngine, MathematicalQuestionChecker
 from astroquant.backend.prediction_tracker import PredictionTracker
 
+# Drift-triggered auto-retrain dispatcher
+try:
+    from market_causality_lab.backend.ai.modeling.drift_monitor import dispatch_retrain_if_queued as _dispatch_retrain_if_queued
+    _MCL_DRIFT_DISPATCH_AVAILABLE = True
+except ImportError:
+    try:
+        import importlib, sys as _sys
+        _dm = importlib.import_module("backend.ai.modeling.drift_monitor")
+        _dispatch_retrain_if_queued = _dm.dispatch_retrain_if_queued
+        _MCL_DRIFT_DISPATCH_AVAILABLE = True
+    except Exception:
+        _MCL_DRIFT_DISPATCH_AVAILABLE = False
+
+_MCL_TF_FILE_MAP = {
+    "1m":     "data/XAU_1m_data.csv",
+    "5m":     "data/XAU_5m_data.csv",
+    "15m":    "data/XAU_15m_data.csv",
+    "30m":    "data/XAU_30m_data.csv",
+    "1h":     "data/XAU_1h_data.csv",
+    "4h":     "data/XAU_4h_data.csv",
+    "1d":     "data/XAU_1d_data.csv",
+    "1w":     "data/XAU_1w_data.csv",
+    "1month": "data/XAU_1Month_data.csv",
+}
+_last_dispatch_ts: float = 0.0
+_DISPATCH_COOLDOWN_SECONDS = 600.0  # at most once per 10 min
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/market_causality", tags=["market-causality"])
@@ -44,6 +71,16 @@ _chart_cache_lock = threading.Lock()
 _chart_cache_payloads: dict[str, dict[str, Any]] = {}
 _chart_cache_ts: dict[str, float] = {}
 _CHART_CACHE_TTL_SECONDS = 300.0
+
+_lesson_cache_lock = threading.Lock()
+_lesson_cache_payloads: dict[str, dict[str, Any]] = {}
+_lesson_cache_ts: dict[str, float] = {}
+_LESSON_CACHE_TTL_SECONDS = 300.0
+
+_overlay_cache_lock = threading.Lock()
+_overlay_cache_payloads: dict[str, dict[str, Any]] = {}
+_overlay_cache_ts: dict[str, float] = {}
+_OVERLAY_CACHE_TTL_SECONDS = 300.0
 
 _boundary_cache_lock = threading.Lock()
 _boundary_cache_payload: dict[str, Any] = {"mtime": None, "events": []}
@@ -928,6 +965,72 @@ def _maybe_send_boundary_telegram_alert(summary: dict[str, Any], symbol: str) ->
         _boundary_alert_sent_at[dedup_key] = now_ts
 
 
+# Dedup tracker for MCL high-confidence signal alerts
+_mcl_signal_alert_sent_at: dict[str, float] = {}
+
+
+def _maybe_send_mcl_signal_alert(summary: dict[str, Any], symbol: str) -> None:
+    """Send Telegram alert when MCL produces a high-confidence BUY or SELL signal."""
+    if str(os.getenv("TELEGRAM_MCL_SIGNAL_ALERT_ENABLED", "true")).strip().lower() not in {"1", "true", "yes", "on"}:
+        return
+
+    signal = str(summary.get("signal") or "").upper()
+    if "BUY" not in signal and "SELL" not in signal:
+        return
+
+    # Only fire above confidence threshold (default 70%)
+    conf = summary.get("confidence")
+    try:
+        conf_val = float(conf) if conf is not None else 0.0
+    except (TypeError, ValueError):
+        conf_val = 0.0
+
+    threshold = float(os.getenv("TELEGRAM_MCL_SIGNAL_CONFIDENCE_THRESHOLD", "70"))
+    if conf_val < threshold:
+        return
+
+    tf = str(summary.get("applied_timeframe") or summary.get("requested_timeframe") or "1d")
+    obs_id = str(summary.get("observation_id") or "")
+    cooldown = max(60, int(float(os.getenv("TELEGRAM_MCL_SIGNAL_COOLDOWN_SEC", "1800"))))
+    dedup_key = f"mcl|{symbol}|{tf}|{signal}|{obs_id[:16]}"
+    now_ts = time.time()
+    last_ts = float(_mcl_signal_alert_sent_at.get(dedup_key) or 0.0)
+    if now_ts - last_ts < cooldown:
+        return
+
+    try:
+        from astroquant.notifications.telegram_bot import send_message as _send_telegram
+    except Exception:
+        return
+
+    tl = summary.get("trade_levels") or {}
+    entry    = tl.get("entry") or tl.get("entry_price") or "--"
+    sl       = tl.get("stop_loss") or tl.get("sl") or "--"
+    tp       = tl.get("take_profit") or tl.get("tp") or "--"
+    phase    = str(summary.get("phase") or "--").upper()
+    bias     = str(summary.get("bias_label") or "--").upper()
+    regime   = str((summary.get("mcl_timescale") or {}).get("volatility_regime", {}).get("regime") or "--").upper()
+    conf_txt = f"{conf_val:.1f}%"
+    reason   = str(summary.get("rejection_reason") or "none")
+    moon     = str((summary.get("astro") or {}).get("moon", {}).get("phase_key") or "--")
+    ai_dir   = str(summary.get("ai_model_trade_direction") or "--").upper()
+
+    direction_emoji = "🟢📈" if "BUY" in signal else "🔴📉"
+    msg = (
+        f"{direction_emoji} [MCL Signal Alert]\n"
+        f"Symbol: {symbol}  |  TF: {tf}\n"
+        f"Signal: {signal}  |  Confidence: {conf_txt}\n"
+        f"Phase: {phase}  |  Bias: {bias}  |  Regime: {regime}\n"
+        f"AI Direction: {ai_dir}  |  Moon: {moon}\n"
+        f"Entry: {entry}  |  SL: {sl}  |  TP: {tp}\n"
+        f"Rejection: {reason}"
+    )
+
+    res = _send_telegram(msg)
+    if isinstance(res, dict) and res.get("ok"):
+        _mcl_signal_alert_sent_at[dedup_key] = now_ts
+
+
 def _driver_score_map(drivers: Any) -> dict[str, float]:
     out: dict[str, float] = {}
     if not isinstance(drivers, list):
@@ -1011,12 +1114,13 @@ def _build_fallback_wheel_display(summary: dict[str, Any]) -> dict[str, Any] | N
     trend_raw = str(summary.get("trend") or "UNKNOWN").upper()
     future = summary.get("future") or {}
     time_signal = summary.get("time_signal") or {}
-    astro = summary.get("astro") or {}
+    astro = summary.get("astro") or summary.get("mcl_astro") or {}
     gann = summary.get("gann") or {}
     compression = summary.get("compression") or {}
     trade_levels = summary.get("trade_levels") or {}
     observation = summary.get("observation") or {}
     confidence = summary.get("confidence")
+    news = summary.get("news") or {}
 
     current_phase = "ACCUMULATION"
     if "BULL" in trend_raw or "BUY" in signal_raw:
@@ -1061,6 +1165,39 @@ def _build_fallback_wheel_display(summary: dict[str, Any]) -> dict[str, Any] | N
     elif "SELL" in signal_raw:
         order_flow_side = "SELL"
 
+    # ── Astro fields — pull from whatever is available in the summary ─────────
+    astro_strength_raw = (
+        summary.get("mcl_astro_strength")
+        or astro.get("strength")
+        or 50
+    )
+    # strength may come as a float 0-100 or already as a string label
+    if isinstance(astro_strength_raw, (int, float)):
+        if astro_strength_raw >= 75:
+            astro_strength_label = "HIGH"
+        elif astro_strength_raw >= 45:
+            astro_strength_label = "NORMAL"
+        else:
+            astro_strength_label = "LOW"
+    else:
+        astro_strength_label = str(astro_strength_raw or "NORMAL")
+
+    nearby_event = astro.get("nearby_event") or {}
+    astro_event_impact = str(nearby_event.get("impact_level") or nearby_event.get("impact") or "NONE").upper()
+
+    # ── News data ─────────────────────────────────────────────────────────────
+    news_high_impact = bool(
+        news.get("high_impact_active")
+        or news.get("news_high_impact")
+        or summary.get("news_high_impact")
+    )
+    news_event_count = int(
+        news.get("event_count")
+        or news.get("news_event_count")
+        or summary.get("news_event_count")
+        or 0
+    )
+
     return {
         "status": "WATCH" if signal_raw == "WAIT" else "ACTIONABLE",
         "phase_ring": {
@@ -1072,10 +1209,24 @@ def _build_fallback_wheel_display(summary: dict[str, Any]) -> dict[str, Any] | N
         },
         "market_conditions": {
             "regime": trend_raw,
+            "regime_weight": 1.0,
             "atr_z": compression.get("score"),
             "order_flow_side": order_flow_side,
             "order_flow_imbalance": confidence,
+            "flow_regime": order_flow_side if order_flow_side != "NEUTRAL" else "NEUTRAL",
+            "iceberg_detected": False,
             "iceberg_side": "NONE",
+            "iceberg_absorption_score": 0.0,
+            "iceberg_absorption_type": "NONE",
+            "liquidity_gate": "",
+            "wheel_context_used": "unconditional",
+            "wheel_context_runtime": "none",
+            "news_high_impact": news_high_impact,
+            "news_event_count": news_event_count,
+            "astro_strength": astro_strength_label,
+            "astro_event_impact": astro_event_impact,
+            "gann_major_turn_window": False,
+            "gann_sqrt_rotation_deg": 0.0,
         },
         "signal_state": {
             "display_signal": signal_raw,
@@ -1086,8 +1237,8 @@ def _build_fallback_wheel_display(summary: dict[str, Any]) -> dict[str, Any] | N
             "actionable_now": signal_raw != "WAIT",
         },
         "setup_state": {
-            "amd_phase": "UNKNOWN",
-            "amd_signal": "UNKNOWN",
+            "amd_phase": "NONE",
+            "amd_signal": "NONE",
             "amd_bull_entry": False,
             "amd_bear_entry": False,
             "amd_rr_ratio": None,
@@ -3419,6 +3570,11 @@ def _auto_record_and_resolve(summary: dict[str, Any], symbol: str) -> None:
     except Exception as exc:
         logging.debug("_maybe_send_boundary_telegram_alert error: %s", exc)
 
+    try:
+        _maybe_send_mcl_signal_alert(summary, symbol)
+    except Exception as exc:
+        logging.debug("_maybe_send_mcl_signal_alert error: %s", exc)
+
 
 def _auto_record_prediction(summary: dict[str, Any]) -> None:
     """
@@ -4298,9 +4454,10 @@ def _compute_chart(
     limit: int = 12000,
     strict_mt5: bool = False,
     require_fresh_mt5: bool = False,
+    fast_mode: bool = False,
 ) -> dict[str, Any]:
     # ── Cache check ──────────────────────────────────────────────────────────
-    _cache_key = f"{symbol}|{timeframe}|{source_mode}|{lookback_years}|{limit}|{int(strict_mt5)}|{int(require_fresh_mt5)}"
+    _cache_key = f"{symbol}|{timeframe}|{source_mode}|{lookback_years}|{limit}|{int(strict_mt5)}|{int(require_fresh_mt5)}|{int(bool(fast_mode))}"
     with _chart_cache_lock:
         _cached_ts = _chart_cache_ts.get(_cache_key, 0.0)
         if time.time() - _cached_ts < _CHART_CACHE_TTL_SECONDS:
@@ -4316,6 +4473,7 @@ def _compute_chart(
         limit=limit,
         strict_mt5=strict_mt5,
         require_fresh_mt5=require_fresh_mt5,
+        fast_mode=fast_mode,
     )
     with _chart_cache_lock:
         _chart_cache_payloads[_cache_key] = _result
@@ -4331,6 +4489,7 @@ def _compute_chart_uncached(
     limit: int = 12000,
     strict_mt5: bool = False,
     require_fresh_mt5: bool = False,
+    fast_mode: bool = False,
 ) -> dict[str, Any]:
     symbol = _normalize_symbol(symbol)
     requested_timeframe = _normalize_timeframe(timeframe)
@@ -4340,6 +4499,7 @@ def _compute_chart_uncached(
     limit = max(1, min(int(limit), 50000))
     strict_mt5 = bool(strict_mt5)
     require_fresh_mt5 = bool(require_fresh_mt5)
+    fast_mode = bool(fast_mode)
     if strict_mt5:
         # Force live-only behavior when user explicitly requests strict MT5 charting.
         source_mode = "live_only"
@@ -4709,11 +4869,15 @@ def _compute_chart_uncached(
             if not callable(resolve_timeframe_file) or not callable(load_data) or not callable(apply_lookback):
                 raise RuntimeError("market-causality-lab historical chart helpers are unavailable")
 
+        _fast_intraday_tfs = {"5m", "15m", "30m", "1h", "4h"}
+        if fast_mode and (not strict_mt5) and str(timeframe).lower().strip() in _fast_intraday_tfs:
+            source_mode = "live_only"
+
         _mode_live_only = source_mode == "live_only"
         _mode_hist_only = source_mode in {"historical_only"}
         _mode_live_prefer = source_mode == "live_first"
         _mode_merge = source_mode in {"combined", "hybrid"}
-        _allow_live_tail_patch = (not _mode_hist_only) and (not strict_mt5)
+        _allow_live_tail_patch = (not _mode_hist_only) and (not strict_mt5) and (not fast_mode)
 
         _live_intraday_tfs = {"5m", "15m", "30m", "1h", "4h", "1d"}
         _live_df = None
@@ -5274,7 +5438,7 @@ def _compute_chart_uncached(
             # fabricating thousands of synthetic candles across long seams.
             try:
                 _fallback_reason_txt = str((fallback_meta or {}).get("fallback_reason") or "")
-                _skip_gap_bridge = "chart_live_dataset_preferred_large_seam_" in _fallback_reason_txt
+                _skip_gap_bridge = bool(fast_mode) or ("chart_live_dataset_preferred_large_seam_" in _fallback_reason_txt)
                 _bucket_bridge = max(60, _timeframe_seconds(applied_timeframe))
                 _gap_bridge_threshold = _bucket_bridge * 6
                 _default_gap_bridge_days = int(max(1, float(os.getenv("MCL_CHART_GAP_BRIDGE_MAX_DAYS", "7"))))
@@ -5388,7 +5552,7 @@ def _compute_chart_uncached(
             # after the initial bridge pass. Run a compact second pass to smooth it.
             try:
                 _fallback_reason_txt2 = str((fallback_meta or {}).get("fallback_reason") or "")
-                _skip_gap_bridge2 = "chart_live_dataset_preferred_large_seam_" in _fallback_reason_txt2
+                _skip_gap_bridge2 = bool(fast_mode) or ("chart_live_dataset_preferred_large_seam_" in _fallback_reason_txt2)
                 if not _skip_gap_bridge2 and rows and len(rows) >= 2:
                     _bucket_bridge2 = max(60, _timeframe_seconds(applied_timeframe))
                     _gap_bridge_threshold2 = _bucket_bridge2 * 6
@@ -5608,6 +5772,7 @@ def _compute_chart_uncached(
             "source_mode": source_mode,
             "strict_mt5": strict_mt5,
             "require_fresh_mt5": require_fresh_mt5,
+            "fast_mode": fast_mode,
             "requested_timeframe": requested_timeframe,
             "applied_timeframe": str(applied_timeframe),
             "lookback_years": effective_lookback_years,
@@ -5642,6 +5807,7 @@ def _compute_chart_uncached(
             "source_mode": source_mode,
             "strict_mt5": strict_mt5,
             "require_fresh_mt5": require_fresh_mt5,
+            "fast_mode": fast_mode,
             "requested_timeframe": requested_timeframe,
             "lookback_years": effective_lookback_years,
             "candles": [],
@@ -5659,13 +5825,28 @@ def market_causality_summary(
     source_mode: str = Query(default="combined"),
 ) -> dict[str, Any]:
     """Unified bridge endpoint for market-causality-lab summary data."""
-    return _compute_summary(
-        refresh=bool(refresh),
-        symbol=symbol,
-        timeframe=timeframe,
-        lookback_years=lookback_years,
-        source_mode=source_mode,
-    )
+    try:
+        return _compute_summary(
+            refresh=bool(refresh),
+            symbol=symbol,
+            timeframe=timeframe,
+            lookback_years=lookback_years,
+            source_mode=source_mode,
+        )
+    except Exception as exc:  # pragma: no cover - defensive API guardrail
+        logging.exception("market-causality /summary uncaught failure")
+        return {
+            "status": "error",
+            "error": str(exc),
+            "symbol": _normalize_symbol(symbol),
+            "requested_timeframe": _normalize_timeframe(timeframe),
+            "applied_timeframe": _normalize_timeframe(timeframe),
+            "lookback_years": _normalize_lookback_years(lookback_years),
+            "source_mode": _normalize_source_mode(source_mode),
+            "elapsed_ms": 0.0,
+            "updated_at": int(time.time()),
+            "cache_fallback_used": False,
+        }
 
 
 @router.post("/math_check")
@@ -5749,12 +5930,29 @@ def market_causality_record_outcome(payload: dict[str, Any]) -> dict[str, Any]:
     if result.get("status") == "error":
         return {"status": "error", "error": result.get("message")}
 
+    # Online-update the wheel transition model with the resolved phase sequence
+    wheel_update: dict[str, Any] = {}
+    try:
+        from market_causality_lab.backend.ai.decision_engine import adapt_wheel_transition_online, build_wheel_context_inputs
+        prev_phase = int(payload.get("prev_phase") or payload.get("previous_phase") or 0)
+        curr_phase = int(payload.get("curr_phase") or payload.get("current_phase") or 0)
+        if 0 <= prev_phase <= 3 and 0 <= curr_phase <= 3:
+            ctx_key = str(payload.get("context_key") or "").strip() or None
+            wheel_update = adapt_wheel_transition_online(
+                previous_phase=prev_phase,
+                current_phase=curr_phase,
+                context_key=ctx_key,
+            )
+    except Exception as _wexc:
+        wheel_update = {"error": str(_wexc)}
+
     return {
         "status": "ok",
         "prediction_id": prediction_id,
         "accuracy_score": result.get("accuracy_score"),
         "was_correct": result.get("was_correct"),
         "learning_update": result.get("learning_update"),
+        "wheel_update": wheel_update if wheel_update else None,
     }
 
 
@@ -5923,6 +6121,7 @@ def market_causality_chart(
     limit: int = Query(default=12000, ge=1, le=50000),
     strict_mt5: bool = Query(default=False),
     require_fresh_mt5: bool = Query(default=False),
+    fast_mode: bool = Query(default=False),
 ) -> dict[str, Any]:
     """Historical candlestick data for the MCL dashboard chart."""
     return _compute_chart(
@@ -5933,7 +6132,14 @@ def market_causality_chart(
         limit=limit,
         strict_mt5=strict_mt5,
         require_fresh_mt5=require_fresh_mt5,
+        fast_mode=fast_mode,
     )
+
+
+
+# Server-side TTL cache for live price to avoid cascading slow external API calls
+_live_price_cache: dict[str, Any] = {}
+_LIVE_PRICE_CACHE_TTL_SECONDS = max(1, int(float(os.getenv("MCL_LIVE_PRICE_CACHE_TTL_SECONDS", "5"))))
 
 
 @router.get("/live_price")
@@ -5960,12 +6166,25 @@ def market_causality_live_price(
 
     symbol = _normalize_symbol(symbol)
     started_at = time.time()
+
     # Unwrap FastAPI Query objects when the endpoint is called directly (e.g., in tests)
     prefer_source = str(getattr(prefer_source, "default", prefer_source) or "mt5").strip().lower()
     _broker_only_raw = getattr(broker_only, "default", broker_only)
     broker_only = bool(_broker_only_raw)
     _max_age_raw = getattr(max_age_seconds, "default", max_age_seconds)
     max_age_seconds = int(max(1, int(_max_age_raw)))
+
+    # Shorter cache windows for real-time feeds while avoiding external-call storms.
+    cache_ttl = _LIVE_PRICE_CACHE_TTL_SECONDS
+    if prefer_source in {"mt5", "mcl", "local", "bridge", "broker"} or broker_only:
+        cache_ttl = min(cache_ttl, 5)
+
+    # Serve from cache if fresh enough (avoids multiple concurrent slow external calls)
+    _cache_key = f"{symbol}:{prefer_source}:{int(broker_only)}:{max_age_seconds}"
+    _cached = _live_price_cache.get(_cache_key)
+    if _cached and (time.time() - _cached.get("_cached_at", 0)) < cache_ttl:
+        return {**_cached, "elapsed_ms": round((time.time() - started_at) * 1000, 1)}
+    _stale_cached = _cached if isinstance(_cached, dict) else None
 
     def _fetch_broker_quote() -> dict[str, Any] | None:
         try:
@@ -5999,7 +6218,7 @@ def market_causality_live_price(
                     f"https://stooq.com/q/l/?s={_sym}&f=sd2t2ohlcv&h&e=csv",
                     headers={"User-Agent": "Mozilla/5.0"},
                 )
-                with _urllib_req.urlopen(_req, timeout=8) as _r:
+                with _urllib_req.urlopen(_req, timeout=4) as _r:
                     _lines = _r.read().decode(errors="replace").strip().replace("\r\n", "\n").split("\n")
                 if len(_lines) < 2:
                     continue
@@ -6096,7 +6315,7 @@ def market_causality_live_price(
                 "https://api.gold-api.com/price/XAU",
                 headers={"User-Agent": "Mozilla/5.0"},
             )
-            with _urllib_req.urlopen(_req, timeout=8) as _resp:
+            with _urllib_req.urlopen(_req, timeout=4) as _resp:
                 _data = _json_lp.loads(_resp.read().decode())
             _price = float(_data.get("price") or 0.0)
             if _price <= 0:
@@ -6126,7 +6345,7 @@ def market_causality_live_price(
                 "https://query1.finance.yahoo.com/v8/finance/chart/GC%3DF?interval=1m&range=1d",
                 headers={"User-Agent": "Mozilla/5.0"},
             )
-            with _urllib_req.urlopen(_req, timeout=10) as _resp:
+            with _urllib_req.urlopen(_req, timeout=5) as _resp:
                 _data = _json_lp.loads(_resp.read().decode())
             _meta = _data["chart"]["result"][0]["meta"]
             _price = float(_meta.get("regularMarketPrice") or 0.0)
@@ -6187,6 +6406,15 @@ def market_causality_live_price(
         return databento_quote
 
     if broker_only and broker_quote is None:
+        if _stale_cached and _stale_cached.get("price") is not None:
+            return {
+                **_stale_cached,
+                "cache_stale": True,
+                "requested_prefer_source": prefer_source,
+                "requested_broker_only": broker_only,
+                "requested_max_age_seconds": max_age_seconds,
+                "elapsed_ms": round((time.time() - started_at) * 1000.0, 2),
+            }
         return {
             "status": "unavailable",
             "symbol": symbol,
@@ -6206,7 +6434,8 @@ def market_causality_live_price(
     if broker_only:
         selected_quote = broker_quote
     elif prefer_source in {"mt5", "mcl", "local", "bridge"}:
-        selected_quote = mt5_quote or broker_quote or _get_stooq_quote() or _get_goldapi_quote() or _get_yahoo_quote() or _get_databento_quote()
+        # Latency-first path for dashboard: MT5/local or broker, then one public spot fallback.
+        selected_quote = mt5_quote or broker_quote or _get_stooq_quote()
     elif prefer_source in {"stooq", "spot", "public_spot"}:
         selected_quote = _get_stooq_quote() or _get_goldapi_quote() or mt5_quote or broker_quote or _get_yahoo_quote() or _get_databento_quote()
     elif prefer_source in {"databento", "futures", "proxy"}:
@@ -6215,6 +6444,15 @@ def market_causality_live_price(
         selected_quote = mt5_quote or broker_quote or _get_stooq_quote() or _get_goldapi_quote() or _get_yahoo_quote() or _get_databento_quote()
 
     if selected_quote is None:
+        if _stale_cached and _stale_cached.get("price") is not None:
+            return {
+                **_stale_cached,
+                "cache_stale": True,
+                "requested_prefer_source": prefer_source,
+                "requested_broker_only": broker_only,
+                "requested_max_age_seconds": max_age_seconds,
+                "elapsed_ms": round((time.time() - started_at) * 1000.0, 2),
+            }
         return {
             "status": "unavailable",
             "symbol": symbol,
@@ -6262,6 +6500,8 @@ def market_causality_live_price(
     }
     if selected_quote.get("fallback"):
         out["fallback"] = True
+    # Store in TTL cache (exclude elapsed_ms so cached value stays accurate)
+    _live_price_cache[_cache_key] = {**out, "_cached_at": time.time()}
     return out
 
 
@@ -8072,8 +8312,8 @@ def chart_overlays(
     timeframe: str = Query(default="1d"),
     source_mode: str = Query(default="historical_first"),
     turtle_profile: str = Query(default="auto"),
-    lookback_years: int = Query(default=25, ge=1, le=100),
-    limit: int = Query(default=12000, ge=1, le=50000),
+    lookback_years: int = Query(default=2, ge=1, le=25),
+    limit: int = Query(default=2200, ge=1, le=20000),
 ) -> dict[str, Any]:
     """
     Returns overlay data for the MCL chart:
@@ -8086,28 +8326,47 @@ def chart_overlays(
     """
     import math as _math
 
+    _cache_key = "|".join([
+        _normalize_symbol(symbol),
+        _normalize_timeframe(timeframe),
+        str(source_mode or ""),
+        str(turtle_profile or ""),
+        str(int(lookback_years)),
+        str(int(limit)),
+    ])
+    with _overlay_cache_lock:
+        _cached_ts = _overlay_cache_ts.get(_cache_key, 0.0)
+        if time.time() - _cached_ts < _OVERLAY_CACHE_TTL_SECONDS:
+            _cached = _overlay_cache_payloads.get(_cache_key)
+            if _cached is not None:
+                return _cached
+
     # ── 1. Pull candle data ────────────────────────────────────────────────
     chart = _compute_chart(symbol=symbol, timeframe=timeframe, source_mode=source_mode,
-                            lookback_years=lookback_years, limit=limit)
+                            lookback_years=lookback_years, limit=limit, fast_mode=True)
     candles = chart.get("candles", [])
     requested_turtle_profile = _normalize_turtle_profile(turtle_profile)
     applied_turtle_profile = _resolve_turtle_profile_for_timeframe(timeframe, requested_turtle_profile)
     if not candles:
-        return {"status": "ok", "gann_cycles": [], "lunar_events": [],
-                "auto_patterns": [], "turtle_soup": [], "turtle_soup_learning": {
-                    "current_timeframe": str(timeframe or ""),
-                    "turtle_profile_requested": requested_turtle_profile,
-                    "turtle_profile_applied": applied_turtle_profile,
-                },
-                "latest_turtle_soup": None, "prediction_zone": [], "gann_angles": [],
-                "turtle_profile_requested": requested_turtle_profile,
-                "turtle_profile_applied": applied_turtle_profile,
-                "meta": {"swing_highs_found": 0, "swing_lows_found": 0,
-                         "lunar_events_found": 0, "bos_count": 0,
-                         "turtle_soup_count": 0, "turtle_soup_ai_accuracy": 0.0,
-                         "turtle_soup_learning_samples": 0, "turtle_soup_avg_liquidity_score": 0.0,
-                         "turtle_profile_requested": requested_turtle_profile,
-                         "turtle_profile_applied": applied_turtle_profile}}
+        _empty = {"status": "ok", "gann_cycles": [], "lunar_events": [],
+                  "auto_patterns": [], "turtle_soup": [], "turtle_soup_learning": {
+                      "current_timeframe": str(timeframe or ""),
+                      "turtle_profile_requested": requested_turtle_profile,
+                      "turtle_profile_applied": applied_turtle_profile,
+                  },
+                  "latest_turtle_soup": None, "prediction_zone": [], "gann_angles": [],
+                  "turtle_profile_requested": requested_turtle_profile,
+                  "turtle_profile_applied": applied_turtle_profile,
+                  "meta": {"swing_highs_found": 0, "swing_lows_found": 0,
+                           "lunar_events_found": 0, "bos_count": 0,
+                           "turtle_soup_count": 0, "turtle_soup_ai_accuracy": 0.0,
+                           "turtle_soup_learning_samples": 0, "turtle_soup_avg_liquidity_score": 0.0,
+                           "turtle_profile_requested": requested_turtle_profile,
+                           "turtle_profile_applied": applied_turtle_profile}}
+        with _overlay_cache_lock:
+            _overlay_cache_payloads[_cache_key] = _empty
+            _overlay_cache_ts[_cache_key] = time.time()
+        return _empty
 
     # Sort by time
     candles = sorted(candles, key=lambda c: c["time"])
@@ -9277,7 +9536,7 @@ def chart_overlays(
         bar_units_hint=float(_bar_secs_raw),
     )
 
-    return {
+    _result = {
         "status": "ok",
         "symbol": symbol,
         "timeframe": timeframe,
@@ -9340,6 +9599,10 @@ def chart_overlays(
             "astro_gann_display_accuracy": round(float((lunar_accuracy + gann_angle_accuracy + float(alignment.get("meta", {}).get("adjacent_node_quality_score", 1.0))) / 3.0), 4),
         },
     }
+    with _overlay_cache_lock:
+        _overlay_cache_payloads[_cache_key] = _result
+        _overlay_cache_ts[_cache_key] = time.time()
+    return _result
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -9350,8 +9613,8 @@ def chart_overlays(
 def chart_lesson_annotations(
     symbol: str = Query(default="XAUUSD"),
     timeframe: str = Query(default="1d"),
-    lookback_years: int = Query(default=5, ge=1, le=25),
-    limit: int = Query(default=5000, ge=1, le=20000),
+    lookback_years: int = Query(default=2, ge=1, le=25),
+    limit: int = Query(default=2200, ge=1, le=20000),
 ) -> dict[str, Any]:
     """
     Automatic identification of Gann cycle nodes, bar/day counts and lesson signals
@@ -9367,9 +9630,17 @@ def chart_lesson_annotations(
     import math as _math
     import bisect as _bisect
 
+    _cache_key = f"{_normalize_symbol(symbol)}|{_normalize_timeframe(timeframe)}|{int(lookback_years)}|{int(limit)}"
+    with _lesson_cache_lock:
+        _cached_ts = _lesson_cache_ts.get(_cache_key, 0.0)
+        if time.time() - _cached_ts < _LESSON_CACHE_TTL_SECONDS:
+            _cached = _lesson_cache_payloads.get(_cache_key)
+            if _cached is not None:
+                return _cached
+
     # ── 1. Load candles ───────────────────────────────────────────────────────
     chart = _compute_chart(symbol=symbol, timeframe=timeframe,
-                           lookback_years=lookback_years, limit=limit)
+                           lookback_years=lookback_years, limit=limit, fast_mode=True)
     candles = chart.get("candles", [])
     if not candles:
         return {"status": "ok", "lesson1_lunar": [], "lesson2_nodes": [],
@@ -9787,7 +10058,7 @@ def chart_lesson_annotations(
     _required_outcomes = max(30, min(400, int(round(60.0 / max(_bar_days, 1e-6)))))
     _training_ready = _outcomes >= _required_outcomes
 
-    return {
+    _result = {
         "status":           "ok",
         "symbol":           symbol,
         "timeframe":        timeframe,
@@ -9834,6 +10105,11 @@ def chart_lesson_annotations(
             },
         },
     }
+
+    with _lesson_cache_lock:
+        _lesson_cache_payloads[_cache_key] = _result
+        _lesson_cache_ts[_cache_key] = time.time()
+    return _result
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -10104,8 +10380,25 @@ def get_training_status() -> dict[str, Any]:
 
     Returns training progress (ALL_READY / PARTIAL_READY / REPAIRING / INCOMPLETE),
     per-timeframe model versions, missing pointers, and active repair jobs.
+    Also fires background retrains for any drift-queued scopes (cooldown 10 min).
     """
-    return _get_training_status()
+    global _last_dispatch_ts
+    result = _get_training_status()
+
+    # Fire background retrains for drift-queued scopes (non-blocking, cooldown-guarded)
+    if _MCL_DRIFT_DISPATCH_AVAILABLE:
+        now = time.monotonic()
+        if now - _last_dispatch_ts >= _DISPATCH_COOLDOWN_SECONDS:
+            try:
+                dispatched = _dispatch_retrain_if_queued(_MCL_TF_FILE_MAP)
+                if dispatched:
+                    _last_dispatch_ts = now
+                    logger.info("drift retrain dispatched for scopes: %s", dispatched)
+                    result["drift_retrains_dispatched"] = dispatched
+            except Exception as _exc:
+                logger.warning("dispatch_retrain_if_queued failed: %s", _exc)
+
+    return result
 
 
 @router.get("/system/model-calibration")
