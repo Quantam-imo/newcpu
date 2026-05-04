@@ -387,6 +387,57 @@ def get_chart_data(symbol: str = "GC.FUT", timeframe: str = "1", limit: int = 80
 
 	meta = {"source": "redis", "count": len(candles)} if candles else {}
 
+	# MT5 bridge file fallback — use fresh data from the Windows MT5 bridge upload
+	# if Redis is empty/stale. The bridge files are updated every 60 s by the uploader.
+	_MT5_BRIDGE_STALE_SECONDS = 900  # 15 minutes
+	if not candles:
+		try:
+			_tf_clean = str(timeframe or "5m").strip().lower()
+			if not _tf_clean.endswith("m"):
+				_tf_clean = _tf_clean + "m"
+			_mt5_path = os.path.normpath(os.path.join(
+				os.path.dirname(__file__),
+				"..", "..", "market-causality-lab", "data", "live", "mt5",
+				f"XAUUSD_live_{_tf_clean}_intraday.csv",
+			))
+			if os.path.exists(_mt5_path):
+				_mt5_age = time.time() - os.path.getmtime(_mt5_path)
+				if _mt5_age < _MT5_BRIDGE_STALE_SECONDS:
+					import csv as _csv
+					_mt5_candles: list[dict] = []
+					with open(_mt5_path, newline="", encoding="utf-8") as _f:
+						_sample = _f.read(512); _f.seek(0)
+						_delim = ";" if ";" in _sample else ","
+						_reader = _csv.DictReader(_f, delimiter=_delim)
+						for _row in _reader:
+							try:
+								_dt_str = (_row.get("Date") or _row.get("date") or "").strip()
+								if not _dt_str:
+									continue
+								from datetime import datetime as _dt_cls
+								_fmt = "%Y.%m.%d %H:%M:%S" if _dt_str.count(":") == 2 else "%Y.%m.%d %H:%M"
+								_dt = _dt_cls.strptime(_dt_str, _fmt).replace(tzinfo=timezone.utc)
+								_mt5_candles.append({
+									"time": int(_dt.timestamp()),
+									"open": float(_row.get("Open") or _row.get("open") or 0),
+									"high": float(_row.get("High") or _row.get("high") or 0),
+									"low": float(_row.get("Low") or _row.get("low") or 0),
+									"close": float(_row.get("Close") or _row.get("close") or 0),
+									"volume": float(_row.get("TickVolume") or _row.get("volume") or 0),
+								})
+							except Exception:
+								continue
+					if _mt5_candles:
+						_mt5_candles.sort(key=lambda r: r["time"])
+						candles = _mt5_candles[-max(1, int(limit or 80)):]
+						meta = {
+							"source": "mt5_bridge",
+							"count": len(candles),
+							"bridge_age_seconds": int(_mt5_age),
+						}
+		except Exception as _exc:
+			error_msgs.append(f"MT5 bridge read error: {_exc}")
+
 	# Fast-path: serve disk cache only while it is still within the same threshold the UI
 	# considers non-degraded. Older cache can be shown as fallback, but should trigger a
 	# live refresh attempt instead of being treated as fresh chart data.
