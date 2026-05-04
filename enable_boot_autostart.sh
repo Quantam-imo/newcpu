@@ -118,6 +118,7 @@ if [ -d /etc/systemd/system ] && command -v sudo >/dev/null 2>&1; then
 
   install_service_template astroquant_tradingbot.service
   install_service_template astroquant_mt5_bridge_sync.service
+  install_service_template astroquant_mt5_stooq_fallback.service
   install_service_template astroquant_mt5_drop_ingest.service
   install_service_template astroquant_mt5_drop_ingest.timer
   install_service_template astroquant_watchdog.service
@@ -125,6 +126,7 @@ if [ -d /etc/systemd/system ] && command -v sudo >/dev/null 2>&1; then
 
   enable_service_link astroquant_tradingbot.service
   enable_service_link astroquant_mt5_bridge_sync.service
+  enable_service_link astroquant_mt5_stooq_fallback.service
   enable_service_link astroquant_mt5_drop_ingest.timer timers.target.wants
   enable_service_link astroquant_watchdog.timer timers.target.wants
 

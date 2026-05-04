@@ -316,6 +316,21 @@ else
   log YELLOW "⚠ start_mt5_bridge_sync.sh not found — MT5 bridge sync skipped"
 fi
 
+# Step 7b: MT5 stooq fallback feeder (keeps feed alive when Windows MT5 is offline)
+if pgrep -f "mt5_stooq_fallback_feeder" > /dev/null 2>&1; then
+  log GREEN "✓ MT5 stooq fallback feeder already running"
+else
+  log BLUE "Starting MT5 stooq fallback feeder (24/7 auto-synthesise)..."
+  nohup "$WORKSPACE/.venv/bin/python3" "$WORKSPACE/tools/mt5_stooq_fallback_feeder.py" \
+    >> "$LOG_DIR/mt5_stooq_fallback.log" 2>&1 &
+  sleep 1
+  if pgrep -f "mt5_stooq_fallback_feeder" > /dev/null 2>&1; then
+    log GREEN "✓ MT5 stooq fallback feeder started (PID: $(pgrep -f mt5_stooq_fallback_feeder))"
+  else
+    log YELLOW "⚠ MT5 stooq fallback feeder failed to start — check $LOG_DIR/mt5_stooq_fallback.log"
+  fi
+fi
+
 # Step 8: CF Auto-Unblock
 log BLUE "Starting Cloudflare challenge auto-unblock..."
 nohup python cloudflare_unblock.py > "$LOG_DIR/cf_unblock.log" 2>&1 &

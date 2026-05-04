@@ -1,0 +1,24 @@
+[Unit]
+Description=AstroQuant MT5 Stooq Fallback Feeder (synthesises candles when MT5 is offline)
+After=network-online.target astroquant_mt5_bridge_sync.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__SERVICE_USER__
+WorkingDirectory=__WORKSPACE__
+EnvironmentFile=-__WORKSPACE__/.env
+Environment=PYTHONPATH=__WORKSPACE__/tools
+Environment=PYTHONUNBUFFERED=1
+Environment=AQ_WORKSPACE=__WORKSPACE__
+ExecStart=__WORKSPACE__/.venv/bin/python3 __WORKSPACE__/tools/mt5_stooq_fallback_feeder.py
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=120
+StartLimitBurst=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=astroquant-mt5-fallback
+
+[Install]
+WantedBy=multi-user.target
