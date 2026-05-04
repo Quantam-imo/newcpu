@@ -11001,8 +11001,8 @@
             const tf = String(timeframe || "1d").toLowerCase();
             // Keep chart payloads lighter so all timeframes render reliably.
             if (tf === "1m") return 1200;
-            if (tf === "5m") return 900;
-            if (tf === "15m") return 1600;
+            if (tf === "5m") return 600;
+            if (tf === "15m") return 1200;
             if (tf === "30m") return 2400;
             if (tf === "1h") return 5200;
             if (tf === "4h") return 6200;
