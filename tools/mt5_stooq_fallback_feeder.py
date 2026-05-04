@@ -46,8 +46,12 @@ INCOMING_DIR    = Path(_env("MT5_INCOMING_DIR",
 INCOMING_FILE   = INCOMING_DIR / "XAUUSD_feed_latest.csv"
 
 # How stale the file must be before we start synthesising (seconds)
-STALE_SEC       = int(_env("MT5_FALLBACK_STALE_SEC", "900"))
+# How old the LAST BAR must be before we synthesise new bars.
+# Default: 1.5× bar interval (450s) — triggers as soon as a new completed bucket exists.
+# Set MT5_FALLBACK_STALE_SEC=900 to restore old file-mtime behaviour.
+STALE_SEC       = int(_env("MT5_FALLBACK_STALE_SEC", "450"))
 
+# Age (seconds) below which we assume a *real* MT5 export just wrote the file.
 # How often (in seconds) we run the freshness check + synthesise loop
 POLL_SEC        = int(_env("MT5_FALLBACK_POLL_SEC", "60"))
 
@@ -263,17 +267,29 @@ def _synthesise(spot_price: float) -> bool:
 # ─── Main loop ────────────────────────────────────────────────────────────────
 
 def run() -> None:
-    _log(f"Started. stale_threshold={STALE_SEC}s  poll={POLL_SEC}s  incoming={INCOMING_FILE}")
+    _log(f"Started. bar_stale_threshold={STALE_SEC}s  poll={POLL_SEC}s  incoming={INCOMING_FILE}")
     consecutive_failures = 0
 
     while True:
         try:
-            age = _file_age_seconds()
-            if age < STALE_SEC:
-                _log(f"Feed fresh ({age:.0f}s old) — MT5 is active, sleeping.")
+            # Always check: how many completed 5m bars are missing since last bar?
+            last_row = _read_last_bar()
+            last_ts = None
+            if last_row is not None:
+                last_ts = _parse_bar_ts(last_row.get("Date", ""))
+
+            now_ts = int(time.time())
+            current_bucket = (now_ts // BAR_INTERVAL) * BAR_INTERVAL
+            # Number of completed buckets not yet in the file
+            bars_needed = max(0, (current_bucket - BAR_INTERVAL - (last_ts or current_bucket)) // BAR_INTERVAL)
+
+            if bars_needed <= 0:
+                bar_age = (now_ts - last_ts) if last_ts else 0
+                _log(f"Feed current (last_bar_age={bar_age:.0f}s) — sleeping.")
                 consecutive_failures = 0
             else:
-                _log(f"Feed stale ({age:.0f}s old > {STALE_SEC}s) — fetching stooq price …")
+                bar_age = (now_ts - last_ts) if last_ts else 0
+                _log(f"Last bar age={bar_age:.0f}s, {bars_needed} bar(s) missing — fetching stooq …")
                 spot = _fetch_stooq_price()
                 if spot is None:
                     consecutive_failures += 1
