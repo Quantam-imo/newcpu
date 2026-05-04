@@ -127,13 +127,16 @@ $bat += $PythonCommand + " " + $scriptFile + " >> " + $logDir + "\mt5_uploader_r
 Write-Host "[2/3] Launcher written"
 
 # ---------- Register Task Scheduler --------------------------------------------
-schtasks /Query /TN $TaskName 2>&1 | Out-Null
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = "SilentlyContinue"
+$null = schtasks /Query /TN $TaskName 2>&1
 if ($LASTEXITCODE -eq 0) {
-    schtasks /Delete /TN $TaskName /F | Out-Null
+    $null = schtasks /Delete /TN $TaskName /F 2>&1
     Write-Host "      (removed existing task)"
 }
+$ErrorActionPreference = $prevEAP
 
-schtasks /Create /F /TN $TaskName /SC ONLOGON /RL HIGHEST /TR ('cmd.exe /c "' + $launcherBat + '"') | Out-Null
+$null = schtasks /Create /F /TN $TaskName /SC ONLOGON /RL HIGHEST /TR ('cmd.exe /c "' + $launcherBat + '"') 2>&1
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "[3/3] Task registered"
