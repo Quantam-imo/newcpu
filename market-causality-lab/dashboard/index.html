@@ -11207,10 +11207,28 @@
                 }
             };
 
+            const _isAbortLikeError = (err) => {
+                const name = String(err && err.name || "").toLowerCase();
+                const msg = String(err && err.message || "").toLowerCase();
+                return name.includes("abort") || msg.includes("abort");
+            };
+
             let payload;
             try {
                 payload = await _fetchChartPayload(`${API_BASE}/market_causality/chart?${params.toString()}`);
             } catch (err) {
+                if (_isAbortLikeError(err)) {
+                    if (statusEl) {
+                        statusEl.className = "chart-status status-warning";
+                        statusEl.textContent = "Chart request timed out, retrying...";
+                    }
+                    // One automatic retry with a larger timeout to avoid sticky "Chart error"
+                    // when backend is briefly busy on cold/warm starts.
+                    payload = await _fetchChartPayload(
+                        `${API_BASE}/market_causality/chart?${params.toString()}`,
+                        Math.max(180000, _chartTimeoutMsForTimeframe(effectiveTimeframe))
+                    );
+                } else {
                 const tfLower = String(effectiveTimeframe || "").toLowerCase();
                 if (tfLower === "1m") {
                     const retryParams = new URLSearchParams();
@@ -11234,6 +11252,7 @@
                     }
                 } else {
                     throw err;
+                }
                 }
             }
             if (String(payload.status || "").toLowerCase() !== "ok") {
@@ -15852,12 +15871,12 @@
                 : "n/a";
 
             let base = String(statusEl.textContent || "")
-                .replace(/\s\|\slive-src:[^|]*/g, "")
-                .replace(/\s\|\sage\(live\/chart\):[^|]*/g, "")
-                .replace(/\s\|\sdrift:[^|]*/g, "")
-                .replace(/\s\|\sbrokerΔ:[^|]*/g, "")
-                .replace(/\s\|\slearnedΔ:[^|]*/g, "")
-                .replace(/\s\|\stradable:[^|]*/g, "");
+                .replace(/\s*\|\s*live-src:[^|]*/g, "")
+                .replace(/\s*\|\s*age\(live\/chart\):[^|]*/g, "")
+                .replace(/\s*\|\s*drift:[^|]*/g, "")
+                .replace(/\s*\|\s*brokerΔ:[^|]*/g, "")
+                .replace(/\s*\|\s*learnedΔ:[^|]*/g, "")
+                .replace(/\s*\|\s*tradable:[^|]*/g, "");
             if (_mclChartCandles.length > 0 && /^Chart error:/i.test(base)) {
                 base = `Loaded ${_mclChartCandles.length} candles`;
             }
@@ -16125,6 +16144,7 @@
                                 close: price,
                             };
                             mclCandlesSeries.update(_liveCurrentBar);
+                            _lastChartBarState = { close: Number(price), time: Number(_bucketTs) };
                             // Scroll to show the new live candle (new bucket started).
                             try { mclChart.timeScale().scrollToRealTime(); } catch (_scErr) {}
                         } else {
@@ -16137,6 +16157,7 @@
                                 close: price,
                             };
                             mclCandlesSeries.update(_liveCurrentBar);
+                            _lastChartBarState = { close: Number(price), time: Number(_liveCurrentBar.time) };
                         }
                     }
                 } catch (_liveBarErr) {
