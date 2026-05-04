@@ -11,6 +11,60 @@ from datetime import datetime, timezone
 router = APIRouter()
 _log = logging.getLogger(__name__)
 
+
+def _read_mt5_bridge_candles(symbol: str, timeframe: str = "5m", limit: int = 80, max_age_seconds: int = 900) -> tuple[list[dict], dict]:
+	canonical = str(symbol or "").strip().upper()
+	if canonical != "XAUUSD":
+		return [], {}
+
+	tf_clean = str(timeframe or "5m").strip().lower()
+	if not tf_clean.endswith("m"):
+		tf_clean = tf_clean + "m"
+
+	path = os.path.normpath(os.path.join(
+		os.path.dirname(__file__),
+		"..", "..", "market-causality-lab", "data", "live", "mt5",
+		f"XAUUSD_live_{tf_clean}_intraday.csv",
+	))
+	if not os.path.exists(path):
+		return [], {"path": path, "reason": "missing"}
+
+	age_seconds = time.time() - os.path.getmtime(path)
+	if age_seconds >= max_age_seconds:
+		return [], {"path": path, "age_seconds": int(age_seconds), "reason": "stale"}
+
+	import csv as _csv
+	rows: list[dict] = []
+	with open(path, newline="", encoding="utf-8") as handle:
+		sample = handle.read(512)
+		handle.seek(0)
+		delimiter = ";" if ";" in sample else ","
+		reader = _csv.DictReader(handle, delimiter=delimiter)
+		for row in reader:
+			try:
+				dt_str = (row.get("Date") or row.get("date") or "").strip()
+				if not dt_str:
+					continue
+				fmt = "%Y.%m.%d %H:%M:%S" if dt_str.count(":") == 2 else "%Y.%m.%d %H:%M"
+				dt = datetime.strptime(dt_str, fmt).replace(tzinfo=timezone.utc)
+				rows.append({
+					"time": int(dt.timestamp()),
+					"open": float(row.get("Open") or row.get("open") or 0),
+					"high": float(row.get("High") or row.get("high") or 0),
+					"low": float(row.get("Low") or row.get("low") or 0),
+					"close": float(row.get("Close") or row.get("close") or 0),
+					"volume": float(row.get("TickVolume") or row.get("Volume") or row.get("volume") or 0),
+				})
+			except Exception:
+				continue
+
+	rows.sort(key=lambda item: item["time"])
+	return rows[-max(1, int(limit or 80)):], {
+		"path": path,
+		"age_seconds": int(age_seconds),
+		"source": "mt5_bridge",
+	}
+
 # Last-known-good chart data endpoint for institutional reliability
 @router.get("/chart/last_known")
 def get_last_known_chart(symbol: str = "GC.FUT", timeframe: str = "1", limit: int = 80) -> Any:
@@ -340,6 +394,7 @@ def get_chart_data(symbol: str = "GC.FUT", timeframe: str = "1", limit: int = 80
 		except Exception:
 			return None
 
+	raw_symbol = str(symbol or "").strip().upper()
 	symbol = _normalize_trading_symbol(symbol)
 	timeframe = str(timeframe or "1").strip()
 	if symbol not in set(TRADING_FUTURES_SYMBOLS):
@@ -392,49 +447,14 @@ def get_chart_data(symbol: str = "GC.FUT", timeframe: str = "1", limit: int = 80
 	_MT5_BRIDGE_STALE_SECONDS = 900  # 15 minutes
 	if not candles:
 		try:
-			_tf_clean = str(timeframe or "5m").strip().lower()
-			if not _tf_clean.endswith("m"):
-				_tf_clean = _tf_clean + "m"
-			_mt5_path = os.path.normpath(os.path.join(
-				os.path.dirname(__file__),
-				"..", "..", "market-causality-lab", "data", "live", "mt5",
-				f"XAUUSD_live_{_tf_clean}_intraday.csv",
-			))
-			if os.path.exists(_mt5_path):
-				_mt5_age = time.time() - os.path.getmtime(_mt5_path)
-				if _mt5_age < _MT5_BRIDGE_STALE_SECONDS:
-					import csv as _csv
-					_mt5_candles: list[dict] = []
-					with open(_mt5_path, newline="", encoding="utf-8") as _f:
-						_sample = _f.read(512); _f.seek(0)
-						_delim = ";" if ";" in _sample else ","
-						_reader = _csv.DictReader(_f, delimiter=_delim)
-						for _row in _reader:
-							try:
-								_dt_str = (_row.get("Date") or _row.get("date") or "").strip()
-								if not _dt_str:
-									continue
-								from datetime import datetime as _dt_cls
-								_fmt = "%Y.%m.%d %H:%M:%S" if _dt_str.count(":") == 2 else "%Y.%m.%d %H:%M"
-								_dt = _dt_cls.strptime(_dt_str, _fmt).replace(tzinfo=timezone.utc)
-								_mt5_candles.append({
-									"time": int(_dt.timestamp()),
-									"open": float(_row.get("Open") or _row.get("open") or 0),
-									"high": float(_row.get("High") or _row.get("high") or 0),
-									"low": float(_row.get("Low") or _row.get("low") or 0),
-									"close": float(_row.get("Close") or _row.get("close") or 0),
-									"volume": float(_row.get("TickVolume") or _row.get("volume") or 0),
-								})
-							except Exception:
-								continue
-					if _mt5_candles:
-						_mt5_candles.sort(key=lambda r: r["time"])
-						candles = _mt5_candles[-max(1, int(limit or 80)):]
-						meta = {
-							"source": "mt5_bridge",
-							"count": len(candles),
-							"bridge_age_seconds": int(_mt5_age),
-						}
+			mt5_candles, mt5_meta = _read_mt5_bridge_candles(raw_symbol, timeframe, limit, _MT5_BRIDGE_STALE_SECONDS)
+			if mt5_candles:
+				candles = mt5_candles
+				meta = {
+					"source": "mt5_bridge",
+					"count": len(candles),
+					"bridge_age_seconds": int(mt5_meta.get("age_seconds") or 0),
+				}
 		except Exception as _exc:
 			error_msgs.append(f"MT5 bridge read error: {_exc}")
 
@@ -1272,6 +1292,15 @@ def get_multi_symbol_dashboard() -> Any:
 			market_data, mode = ({}, "fast_fallback")
 
 		candles = list(market_data.get("candles") or [])
+		if not candles:
+			try:
+				candles, mt5_meta = _read_mt5_bridge_candles(canonical, "5m", 80, 900)
+				if candles:
+					market_data = dict(market_data or {})
+					market_data["candles"] = candles
+					market_data["futures_source"] = mt5_meta.get("source")
+			except Exception:
+				pass
 		futures_price = None
 		if candles:
 			try:
