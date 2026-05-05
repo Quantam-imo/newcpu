@@ -63,6 +63,7 @@ STOOQ_URLS = [
     "https://stooq.com/q/l/?s=xauusd&f=sd2t2ohlcv&h&e=csv",
     "https://stooq.com/q/l/?s=gc.f&f=sd2t2ohlcv&h&e=csv",
 ]
+BACKEND_LIVE_URL = _env("MCL_LIVE_PRICE_URL", "http://127.0.0.1:8000/market_causality/live_price")
 
 LOG_PREFIX = "[mt5-fallback-feeder]"
 
@@ -74,11 +75,37 @@ def _log(msg: str) -> None:
 
 # ─── Stooq live price fetch ───────────────────────────────────────────────────
 
+def _fetch_backend_spot_price() -> Optional[float]:
+    """Return spot price from local backend live_price endpoint, or None."""
+    try:
+        url = (
+            f"{BACKEND_LIVE_URL}?symbol=XAUUSD"
+            f"&prefer_source=stooq&broker_only=0&max_age_seconds=300"
+        )
+        resp = requests.get(url, timeout=6, headers={"User-Agent": "Mozilla/5.0"})
+        if resp.status_code != 200:
+            return None
+        data = resp.json() if resp.text else {}
+        if str(data.get("status", "")).lower() != "ok":
+            return None
+        price = float(data.get("price") or 0)
+        if price > 0:
+            src = str(data.get("source") or "backend")
+            _log(f"backend spot OK: {price:.3f} from {src}")
+            return price
+    except Exception as exc:
+        _log(f"backend spot fetch error: {exc}")
+    return None
+
 def _fetch_stooq_price() -> Optional[float]:
-    """Return latest XAUUSD price from stooq, or None on failure."""
+    """Return latest XAUUSD spot price via backend endpoint, then direct stooq."""
+    backend_price = _fetch_backend_spot_price()
+    if backend_price is not None:
+        return backend_price
+
     for url in STOOQ_URLS:
         try:
-            resp = requests.get(url, timeout=10, headers={"User-Agent": "astroquant-feeder/1.0"})
+            resp = requests.get(url, timeout=6, headers={"User-Agent": "Mozilla/5.0"})
             if resp.status_code != 200:
                 continue
             text = resp.text.strip()

@@ -6140,6 +6140,7 @@ def market_causality_chart(
 # Server-side TTL cache for live price to avoid cascading slow external API calls
 _live_price_cache: dict[str, Any] = {}
 _LIVE_PRICE_CACHE_TTL_SECONDS = max(1, int(float(os.getenv("MCL_LIVE_PRICE_CACHE_TTL_SECONDS", "5"))))
+_live_price_last_good: dict[str, dict[str, Any]] = {}
 
 
 @router.get("/live_price")
@@ -6406,6 +6407,17 @@ def market_causality_live_price(
         return databento_quote
 
     if broker_only and broker_quote is None:
+        _last_good = _live_price_last_good.get(symbol)
+        if _last_good and _last_good.get("price") is not None:
+            return {
+                **_last_good,
+                "cache_stale": True,
+                "fallback_from": "last_good_quote",
+                "requested_prefer_source": prefer_source,
+                "requested_broker_only": broker_only,
+                "requested_max_age_seconds": max_age_seconds,
+                "elapsed_ms": round((time.time() - started_at) * 1000.0, 2),
+            }
         if _stale_cached and _stale_cached.get("price") is not None:
             return {
                 **_stale_cached,
@@ -6434,8 +6446,9 @@ def market_causality_live_price(
     if broker_only:
         selected_quote = broker_quote
     elif prefer_source in {"mt5", "mcl", "local", "bridge"}:
-        # Latency-first path for dashboard: MT5/local or broker, then one public spot fallback.
-        selected_quote = mt5_quote or broker_quote or _get_stooq_quote()
+        # Latency-first path for dashboard: MT5/local or broker first,
+        # then public spot/futures fallbacks for resilience.
+        selected_quote = mt5_quote or broker_quote or _get_stooq_quote() or _get_goldapi_quote() or _get_yahoo_quote() or _get_databento_quote()
     elif prefer_source in {"stooq", "spot", "public_spot"}:
         selected_quote = _get_stooq_quote() or _get_goldapi_quote() or mt5_quote or broker_quote or _get_yahoo_quote() or _get_databento_quote()
     elif prefer_source in {"databento", "futures", "proxy"}:
@@ -6444,6 +6457,17 @@ def market_causality_live_price(
         selected_quote = mt5_quote or broker_quote or _get_stooq_quote() or _get_goldapi_quote() or _get_yahoo_quote() or _get_databento_quote()
 
     if selected_quote is None:
+        _last_good = _live_price_last_good.get(symbol)
+        if _last_good and _last_good.get("price") is not None:
+            return {
+                **_last_good,
+                "cache_stale": True,
+                "fallback_from": "last_good_quote",
+                "requested_prefer_source": prefer_source,
+                "requested_broker_only": broker_only,
+                "requested_max_age_seconds": max_age_seconds,
+                "elapsed_ms": round((time.time() - started_at) * 1000.0, 2),
+            }
         if _stale_cached and _stale_cached.get("price") is not None:
             return {
                 **_stale_cached,
@@ -6500,6 +6524,7 @@ def market_causality_live_price(
     }
     if selected_quote.get("fallback"):
         out["fallback"] = True
+    _live_price_last_good[symbol] = dict(out)
     # Store in TTL cache (exclude elapsed_ms so cached value stays accurate)
     _live_price_cache[_cache_key] = {**out, "_cached_at": time.time()}
     return out

@@ -12109,6 +12109,9 @@
             const c = document.createElement("canvas");
             c.className = "vp-chart-hist-layer";
             c.setAttribute("aria-hidden", "true");
+            c.style.width = "100%";
+            c.style.height = "100%";
+            c.style.display = "block";
             container.appendChild(c);
             _vpChartHistCanvas = c;
             return c;
@@ -16328,7 +16331,7 @@
                     console.warn("MCL live price poll failed:", msg);
                 }
                 // Keep last good quote on transient failures to avoid UI flicker to UNAVAILABLE.
-                if (Number.isFinite(Number(_liveQuoteState.price)) && Number.isFinite(Number(_liveQuoteState.ts))) {
+                if (Number.isFinite(Number(_liveQuoteState.price)) && Number(_liveQuoteState.price) > 0 && Number.isFinite(Number(_liveQuoteState.ts)) && Number(_liveQuoteState.ts) > 0) {
                     const age = Math.max(0, Math.round(Date.now() / 1000 - Number(_liveQuoteState.ts)));
                     _liveQuoteState.age = age;
                     _updateLivePriceBadge(Number(_liveQuoteState.price), _liveQuoteState.source || "--", age, _liveQuoteState.spot);
