@@ -407,7 +407,9 @@ log GREEN "Chrome CDP: 127.0.0.1:9222"
 [ "$NO_NOVPN" != true ] && log GREEN "noVNC Cloudflare: $(cat $DATA_DIR/novnc_tunnel_url.txt 2>/dev/null || echo 'PENDING')"
 
 # Telegram daemon (chat commands + reports + signal/news alerts)
-if [ "${TELEGRAM_ALERT_ENABLED:-false}" = "true" ] && [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+_TG_CMD_TOKEN="${TELEGRAM_COMMAND_BOT_TOKEN:-${TELEGRAM_UPDATES_BOT_TOKEN:-${TELEGRAM_BOT_TOKEN:-}}}"
+_TG_CMD_CHAT="${TELEGRAM_COMMAND_CHAT_ID:-${TELEGRAM_CHAT_ID:-}}"
+if [ "${TELEGRAM_ALERT_ENABLED:-false}" = "true" ] && [ -n "$_TG_CMD_TOKEN" ] && [ -n "$_TG_CMD_CHAT" ]; then
   log BLUE "Starting Telegram daemon..."
   pkill -f "$WORKSPACE/telegram_bot_daemon.py" 2>/dev/null || true
   sleep 1
@@ -419,7 +421,7 @@ if [ "${TELEGRAM_ALERT_ENABLED:-false}" = "true" ] && [ -n "${TELEGRAM_BOT_TOKEN
     log YELLOW "⚠ Telegram daemon failed to start"
   fi
 else
-  log YELLOW "⚠ Telegram daemon skipped (set TELEGRAM_ALERT_ENABLED=true + token/chat_id)"
+  log YELLOW "⚠ Telegram daemon skipped (set TELEGRAM_ALERT_ENABLED=true + command token/chat_id)"
 fi
 
 log GREEN "========================================="
@@ -602,7 +604,7 @@ while true; do
   fi
 
   # Check Telegram daemon only when enabled/configured.
-  if [ "${TELEGRAM_ALERT_ENABLED:-false}" = "true" ] && [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
+  if [ "${TELEGRAM_ALERT_ENABLED:-false}" = "true" ] && [ -n "$_TG_CMD_TOKEN" ] && [ -n "$_TG_CMD_CHAT" ]; then
     TELEGRAM_PIDS="$(pgrep -f "$WORKSPACE/telegram_bot_daemon.py" || true)"
     TELEGRAM_COUNT="$(printf "%s\n" "$TELEGRAM_PIDS" | sed '/^$/d' | wc -l)"
 

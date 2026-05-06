@@ -9,8 +9,12 @@ Features:
 
 Env (.env):
 - TELEGRAM_ALERT_ENABLED=true
-- TELEGRAM_BOT_TOKEN=<token>
-- TELEGRAM_CHAT_ID=<chat_id>          # primary / fallback for all channels
+- TELEGRAM_BOT_TOKEN=<token>          # legacy/default token fallback
+- TELEGRAM_UPDATES_BOT_TOKEN=<token>  # optional: MCL/news/signal channel bot token
+- TELEGRAM_HEALTH_BOT_TOKEN=<token>   # optional: health/system channel bot token
+- TELEGRAM_COMMAND_BOT_TOKEN=<token>  # optional: command polling bot token
+- TELEGRAM_CHAT_ID=<chat_id>          # legacy/default chat fallback
+- TELEGRAM_COMMAND_CHAT_ID=<chat_id>  # optional: command chat
 - TELEGRAM_SIGNALS_CHAT_ID=<chat_id>  # optional: signals+trades only (falls back to CHAT_ID)
 - TELEGRAM_HEALTH_CHAT_ID=<chat_id>   # optional: reports+health only  (falls back to CHAT_ID)
 - TELEGRAM_REPORT_INTERVAL_SEC=1800
@@ -91,13 +95,29 @@ def _api_base() -> str:
     return "http://127.0.0.1:8000"
 
 
-def _token() -> str:
+def _default_token() -> str:
     return os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+
+
+def _updates_token() -> str:
+    return os.getenv("TELEGRAM_UPDATES_BOT_TOKEN", "").strip() or _default_token()
+
+
+def _health_token() -> str:
+    return os.getenv("TELEGRAM_HEALTH_BOT_TOKEN", "").strip() or _default_token() or _updates_token()
+
+
+def _command_token() -> str:
+    return os.getenv("TELEGRAM_COMMAND_BOT_TOKEN", "").strip() or _updates_token() or _default_token()
 
 
 def _chat_id() -> str:
     """Primary chat ID — used for command polling and as fallback for all channels."""
     return os.getenv("TELEGRAM_CHAT_ID", "").strip()
+
+
+def _command_chat_id() -> str:
+    return os.getenv("TELEGRAM_COMMAND_CHAT_ID", "").strip() or _chat_id()
 
 
 def _signals_chat_id() -> str:
@@ -235,17 +255,17 @@ def _startup_online_cooldown_sec() -> int:
 _TG_MAX_CHARS = 4000
 
 
-def _send_to(chat_id: str, text: str) -> bool:
+def _send_to(chat_id: str, text: str, *, token: str | None = None) -> bool:
     """Core sender — routes to a specific chat_id."""
-    token = _token()
-    if not token or not chat_id:
-        _log("send skipped: missing TELEGRAM_BOT_TOKEN or chat_id")
+    _token_value = str(token or "").strip()
+    if not _token_value or not chat_id:
+        _log("send skipped: missing Telegram token or chat_id")
         return False
     body = str(text or "")
     if len(body) > _TG_MAX_CHARS:
         body = body[:_TG_MAX_CHARS - 14] + "\n[...truncated]"
     try:
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        url = f"https://api.telegram.org/bot{_token_value}/sendMessage"
         r = requests.post(url, json={"chat_id": chat_id, "text": body}, timeout=12)
         ok = r.status_code == 200
         if not ok:
@@ -258,12 +278,17 @@ def _send_to(chat_id: str, text: str) -> bool:
 
 def _send_message(text: str) -> bool:
     """Send a signal/trade/news alert to the signals channel."""
-    return _send_to(_signals_chat_id(), text)
+    return _send_to(_signals_chat_id(), text, token=_updates_token())
 
 
 def _send_health(text: str) -> bool:
     """Send a periodic report or daemon health message to the health channel."""
-    return _send_to(_health_chat_id(), text)
+    return _send_to(_health_chat_id(), text, token=_health_token())
+
+
+def _send_command(text: str) -> bool:
+    """Send bot command replies to the command channel."""
+    return _send_to(_command_chat_id(), text, token=_command_token())
 
 
 def _market_hours_block(symbol: str = "XAUUSD") -> str:
@@ -289,7 +314,7 @@ def _market_hours_block(symbol: str = "XAUUSD") -> str:
 
 
 def _prepare_polling() -> None:
-    token = _token()
+    token = _command_token()
     if not token:
         return
     try:
@@ -301,7 +326,7 @@ def _prepare_polling() -> None:
 
 
 def _token_lock_path() -> Optional[Path]:
-    token = _token()
+    token = _command_token()
     if not token:
         return None
     digest = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
@@ -1518,7 +1543,7 @@ def _handle_command(text: str) -> Optional[str]:
 
 def _answer_callback_query(callback_query_id: str) -> None:
     """Acknowledge a Telegram inline keyboard callback so the spinner goes away."""
-    token = _token()
+    token = _command_token()
     if not token:
         return
     try:
@@ -1532,8 +1557,8 @@ def _answer_callback_query(callback_query_id: str) -> None:
 
 
 def _poll_updates(state: Dict[str, Any]) -> Dict[str, Any]:
-    token = _token()
-    chat_id = _chat_id()
+    token = _command_token()
+    chat_id = _command_chat_id()
     if not token or not chat_id:
         return state
 
@@ -1575,7 +1600,7 @@ def _poll_updates(state: Dict[str, Any]) -> Dict[str, Any]:
         if msg_chat == str(chat_id) and text:
             reply = _handle_command(text)
             if reply:
-                _send_message(reply)
+                _send_command(reply)
 
         # --- Handle inline keyboard callback_query (e.g. approve/reject buttons) ---
         cbq = upd.get("callback_query", {})
@@ -1587,7 +1612,7 @@ def _poll_updates(state: Dict[str, Any]) -> Dict[str, Any]:
             if cbq_chat == str(chat_id) and cbq_data:
                 reply = _handle_command(cbq_data)
                 if reply:
-                    _send_message(reply)
+                    _send_command(reply)
 
     return state
 
@@ -2010,8 +2035,8 @@ def main() -> int:
         _log("Telegram daemon disabled")
         return 0
 
-    if not _token() or not _chat_id():
-        _log("Telegram daemon missing token/chat_id")
+    if not _command_token() or not _command_chat_id():
+        _log("Telegram daemon missing command token/chat_id")
         return 0
 
     _prepare_polling()
@@ -2024,7 +2049,7 @@ def main() -> int:
         # Send startup notice to both channels so the user knows the daemon is alive.
         msg = "AstroQuant daemon online. Send /help for commands."
         if _signals_chat_id() != _health_chat_id():
-            _send_to(_signals_chat_id(), msg)
+            _send_to(_signals_chat_id(), msg, token=_updates_token())
         if _send_health(msg):
             state["last_online_alert_ts"] = now
             _save_state(state)

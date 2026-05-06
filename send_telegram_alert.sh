@@ -2,8 +2,10 @@
 # Send AstroQuant remote-access alert to Telegram bot chat.
 # Configure in .env:
 #   TELEGRAM_ALERT_ENABLED=true
-#   TELEGRAM_BOT_TOKEN=123456:ABCDEF...
-#   TELEGRAM_CHAT_ID=123456789
+#   TELEGRAM_HEALTH_BOT_TOKEN=123456:ABCDEF...   # preferred for system health alerts
+#   TELEGRAM_HEALTH_CHAT_ID=123456789            # preferred for system health alerts
+#   TELEGRAM_BOT_TOKEN=123456:ABCDEF...          # legacy fallback
+#   TELEGRAM_CHAT_ID=123456789                   # legacy fallback
 
 set -e
 
@@ -29,10 +31,10 @@ if [ "${TELEGRAM_ALERT_ENABLED:-false}" != "true" ]; then
   exit 0
 fi
 
-BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
-CHAT_ID="${TELEGRAM_CHAT_ID:-}"
+BOT_TOKEN="${TELEGRAM_HEALTH_BOT_TOKEN:-${TELEGRAM_BOT_TOKEN:-}}"
+CHAT_ID="${TELEGRAM_HEALTH_CHAT_ID:-${TELEGRAM_CHAT_ID:-}}"
 if [ -z "$BOT_TOKEN" ] || [ -z "$CHAT_ID" ]; then
-  echo "[$(date)] Telegram alert skipped: missing TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID" >> "$LOG_FILE"
+  echo "[$(date)] Telegram alert skipped: missing health Telegram token/chat_id" >> "$LOG_FILE"
   exit 0
 fi
 
@@ -42,11 +44,20 @@ HOSTNAME_VALUE=$(hostname 2>/dev/null || echo "cpu")
 EVENT_NAME="${1:-startup}"
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S %Z')
 
+FRONTEND_URL="PENDING"
+API_HEALTH_URL="PENDING"
+if [[ "$APP_URL" == http* ]]; then
+  FRONTEND_URL="${APP_URL%/}/market_causality_dashboard"
+  API_HEALTH_URL="${APP_URL%/}/health"
+fi
+
 MESSAGE=$(cat <<EOF
 AstroQuant ${EVENT_NAME} alert
 Host: ${HOSTNAME_VALUE}
 Time: ${TIMESTAMP}
 App: ${APP_URL}
+Frontend: ${FRONTEND_URL}
+API health: ${API_HEALTH_URL}
 Remote desktop: ${NOVNC_URL}
 EOF
 )
@@ -57,6 +68,8 @@ DEDUP_BASIS=$(cat <<EOF
 AstroQuant ${EVENT_NAME} alert
 Host: ${HOSTNAME_VALUE}
 App: ${APP_URL}
+Frontend: ${FRONTEND_URL}
+API health: ${API_HEALTH_URL}
 Remote desktop: ${NOVNC_URL}
 EOF
 )

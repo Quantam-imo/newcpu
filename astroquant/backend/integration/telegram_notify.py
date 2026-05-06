@@ -22,8 +22,14 @@ DB_PATH = "ai_trade_journal.db"
 
 
 def _telegram_credentials():
-    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-    chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    token = (
+        os.getenv("TELEGRAM_HEALTH_BOT_TOKEN", "").strip()
+        or os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    )
+    chat_id = (
+        os.getenv("TELEGRAM_HEALTH_CHAT_ID", "").strip()
+        or os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    )
     return token, chat_id
 
 

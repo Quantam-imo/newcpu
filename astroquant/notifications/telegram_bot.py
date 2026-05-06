@@ -3,8 +3,14 @@ import requests
 
 
 def _credentials():
-    token = str(os.getenv("TELEGRAM_BOT_TOKEN", "")).strip()
-    chat_id = str(os.getenv("TELEGRAM_CHAT_ID", "")).strip()
+    token = str(
+        os.getenv("TELEGRAM_UPDATES_BOT_TOKEN", "")
+        or os.getenv("TELEGRAM_BOT_TOKEN", "")
+    ).strip()
+    chat_id = str(
+        os.getenv("TELEGRAM_SIGNALS_CHAT_ID", "")
+        or os.getenv("TELEGRAM_CHAT_ID", "")
+    ).strip()
     return token, chat_id
 
 
