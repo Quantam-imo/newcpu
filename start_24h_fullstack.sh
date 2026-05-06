@@ -24,6 +24,8 @@ STARTUP_TIMEOUT=60
 NO_CHROME=false
 NO_TUNNEL=false
 NO_NOVPN=false
+_AQ_CELERY_RESTART_COOLDOWN_SECONDS="${AQ_CELERY_RESTART_COOLDOWN_SECONDS:-180}"
+_AQ_CHROME_RESTART_COOLDOWN_SECONDS="${AQ_CHROME_RESTART_COOLDOWN_SECONDS:-180}"
 # AQ_ENABLE_VNC=false in .env disables VNC/noVPN stack (required for WSL2/headless)
 [ "${AQ_ENABLE_VNC:-true}" = "false" ] && NO_NOVPN=true
 
@@ -441,6 +443,26 @@ bash "$WORKSPACE/send_telegram_alert.sh" reboot-startup >> "$LOG_DIR/fullstack.l
 log BLUE "Starting health monitoring (interval: ${HEALTHCHECK_INTERVAL}s)..."
 echo ""
 
+_AQ_LAST_CELERY_ATTEMPT=0
+_AQ_LAST_CHROME_ATTEMPT=0
+_AQ_CELERY_BIN_WARNED=0
+
+_aq_should_attempt() {
+  local key="$1"
+  local cooldown="$2"
+  local now
+  local last
+  local var
+  now="$(date +%s)"
+  var="_AQ_LAST_${key}_ATTEMPT"
+  last="${!var:-0}"
+  if [ $((now - last)) -lt "$cooldown" ]; then
+    return 1
+  fi
+  printf -v "$var" '%s' "$now"
+  return 0
+}
+
 while true; do
   sleep "$HEALTHCHECK_INTERVAL"
   
@@ -451,17 +473,24 @@ while true; do
   fi
   
   # Check Celery
-  if ! pgrep -f "celery.*worker" > /dev/null; then
-    log RED "✗ Celery down! Restarting..."
-    cd "$WORKSPACE"
-    _AQ_CELERY_CONCUR="${CELERY_CONCURRENCY:-$(python3 -c "import os; print(min(8, max(4, (os.cpu_count() or 4) * 2)))" 2>/dev/null || echo 4)}"
-    nohup celery -A astroquant.backend.tasks.celery_worker:celery_app worker \
-      --loglevel=info \
-      --logfile="$LOG_DIR/celery.log" \
-      --pidfile="$LOG_DIR/celery.pid" \
-      --pool=threads \
-      --concurrency="$_AQ_CELERY_CONCUR" \
-      > "$LOG_DIR/celery.log" 2>&1 &
+  if ! command -v celery > /dev/null 2>&1; then
+    if [ "$_AQ_CELERY_BIN_WARNED" -eq 0 ]; then
+      log YELLOW "⚠ Celery command not found in PATH — skipping celery restart attempts"
+      _AQ_CELERY_BIN_WARNED=1
+    fi
+  elif ! pgrep -f "celery.*worker" > /dev/null; then
+    if _aq_should_attempt "CELERY" "$_AQ_CELERY_RESTART_COOLDOWN_SECONDS"; then
+      log RED "✗ Celery down! Restarting..."
+      cd "$WORKSPACE"
+      _AQ_CELERY_CONCUR="${CELERY_CONCURRENCY:-$(python3 -c "import os; print(min(8, max(4, (os.cpu_count() or 4) * 2)))" 2>/dev/null || echo 4)}"
+      nohup celery -A astroquant.backend.tasks.celery_worker:celery_app worker \
+        --loglevel=info \
+        --logfile="$LOG_DIR/celery.log" \
+        --pidfile="$LOG_DIR/celery.pid" \
+        --pool=threads \
+        --concurrency="$_AQ_CELERY_CONCUR" \
+        > "$LOG_DIR/celery.log" 2>&1 &
+    fi
   fi
 
   # Check Live Sync Engine (Databento candle feed)
@@ -520,16 +549,18 @@ while true; do
   # Check Chrome (optional)
   if [ "$NO_CHROME" != true ]; then
     if ! curl -s http://127.0.0.1:9222/json/version > /dev/null 2>&1; then
-      log YELLOW "⚠ Chrome not responding — restarting..."
-      pkill -f "chrome.*remote-debugging-port=9222" 2>/dev/null || true
-      sleep 1
-      DISPLAY="${DISPLAY:-${AQ_XVFB_DISPLAY:-:99}}" \
-      AQ_WORKSPACE="$WORKSPACE" \
-      AQ_API_BASE="http://127.0.0.1:8000" \
-      AQ_CHROME_PROFILE_DIR="$DATA_DIR/browser_session/chrome-profile" \
-      AQ_XVFB_DISPLAY="${AQ_XVFB_DISPLAY:-:99}" \
-      AQ_USE_XVFB="${AQ_USE_XVFB:-true}" \
-      nohup bash "$WORKSPACE/start_chrome_remote_debug.sh" >> "$LOG_DIR/chrome.log" 2>&1 &
+      if _aq_should_attempt "CHROME" "$_AQ_CHROME_RESTART_COOLDOWN_SECONDS"; then
+        log YELLOW "⚠ Chrome not responding — restarting..."
+        pkill -f "chrome.*remote-debugging-port=9222" 2>/dev/null || true
+        sleep 1
+        DISPLAY="${DISPLAY:-${AQ_XVFB_DISPLAY:-:99}}" \
+        AQ_WORKSPACE="$WORKSPACE" \
+        AQ_API_BASE="http://127.0.0.1:8000" \
+        AQ_CHROME_PROFILE_DIR="$DATA_DIR/browser_session/chrome-profile" \
+        AQ_XVFB_DISPLAY="${AQ_XVFB_DISPLAY:-:99}" \
+        AQ_USE_XVFB="${AQ_USE_XVFB:-true}" \
+        nohup bash "$WORKSPACE/start_chrome_remote_debug.sh" >> "$LOG_DIR/chrome.log" 2>&1 &
+      fi
     fi
   fi
 
