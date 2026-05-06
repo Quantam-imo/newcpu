@@ -177,6 +177,16 @@ sleep 1
 # Override with FASTAPI_WORKERS only if you explicitly need multi-worker mode.
 _AQ_WORKERS="${FASTAPI_WORKERS:-1}"
 _AQ_LOG_LEVEL="${FASTAPI_LOG_LEVEL:-warning}"
+
+# Chart engine tuning for real-time trading responsiveness.
+export MCL_CHART_PROCESS_POOL_ENABLED="${MCL_CHART_PROCESS_POOL_ENABLED:-1}"
+export MCL_CHART_PROCESS_POOL_MAX_WORKERS="${MCL_CHART_PROCESS_POOL_MAX_WORKERS:-2}"
+export MCL_CHART_PROCESS_POOL_TIMEOUT_SECONDS="${MCL_CHART_PROCESS_POOL_TIMEOUT_SECONDS:-40}"
+export MCL_CHART_PROCESS_POOL_START_METHOD="${MCL_CHART_PROCESS_POOL_START_METHOD:-spawn}"
+export MCL_CHART_PREWARM_ENABLED="${MCL_CHART_PREWARM_ENABLED:-1}"
+export MCL_CHART_PREWARM_DELAY_SECONDS="${MCL_CHART_PREWARM_DELAY_SECONDS:-3}"
+export MCL_CHART_PREWARM_SPECS="${MCL_CHART_PREWARM_SPECS:-XAUUSD:5m:realtime:1800:1,XAUUSD:15m:balanced:2200:2,XAUUSD:1h:balanced:3200:3,XAUUSD:4h:balanced:4200:5,XAUUSD:1d:deep:12000:15}"
+
 nohup python -m uvicorn astroquant.backend.main:app \
   --host 0.0.0.0 \
   --port 8000 \
@@ -485,15 +495,23 @@ while true; do
   if ! curl -fsS http://127.0.0.1:8000/health > /dev/null 2>&1 \
        && ! curl -fsS http://127.0.0.1:8000/status/feed > /dev/null 2>&1; then
     log RED "✗ Backend down! Restarting..."
-    pkill -9 -f "uvicorn.*main:app" 2>/dev/null || true
+    pkill -f "uvicorn.*main:app" 2>/dev/null || true
     sleep 2
     cd "$WORKSPACE"
     _AQ_WORKERS="${FASTAPI_WORKERS:-1}"
+    _AQ_LOG_LEVEL="${FASTAPI_LOG_LEVEL:-warning}"
+    export MCL_CHART_PROCESS_POOL_ENABLED="${MCL_CHART_PROCESS_POOL_ENABLED:-1}"
+    export MCL_CHART_PROCESS_POOL_MAX_WORKERS="${MCL_CHART_PROCESS_POOL_MAX_WORKERS:-2}"
+    export MCL_CHART_PROCESS_POOL_TIMEOUT_SECONDS="${MCL_CHART_PROCESS_POOL_TIMEOUT_SECONDS:-40}"
+    export MCL_CHART_PROCESS_POOL_START_METHOD="${MCL_CHART_PROCESS_POOL_START_METHOD:-spawn}"
+    export MCL_CHART_PREWARM_ENABLED="${MCL_CHART_PREWARM_ENABLED:-1}"
+    export MCL_CHART_PREWARM_DELAY_SECONDS="${MCL_CHART_PREWARM_DELAY_SECONDS:-3}"
+    export MCL_CHART_PREWARM_SPECS="${MCL_CHART_PREWARM_SPECS:-XAUUSD:5m:realtime:1800:1,XAUUSD:15m:balanced:2200:2,XAUUSD:1h:balanced:3200:3,XAUUSD:4h:balanced:4200:5,XAUUSD:1d:deep:12000:15}"
     nohup python -m uvicorn astroquant.backend.main:app \
       --host 0.0.0.0 \
       --port 8000 \
       --workers "$_AQ_WORKERS" \
-      --log-level "${FASTAPI_LOG_LEVEL:-warning}" \
+      --log-level "$_AQ_LOG_LEVEL" \
       > "$LOG_DIR/backend.log" 2>&1 &
     echo $! > "$LOG_DIR/backend.pid"
     sleep 3

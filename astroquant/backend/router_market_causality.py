@@ -72,6 +72,47 @@ _chart_cache_payloads: dict[str, dict[str, Any]] = {}
 _chart_cache_ts: dict[str, float] = {}
 _CHART_CACHE_TTL_SECONDS = 300.0
 
+# ── VP Histogram + ICT Levels dedicated result caches ───────────────────────
+# Separate short-lived cache so repeated panel opens return instantly without
+# re-fetching candle data or recomputing bins/structure.
+_vp_result_cache: dict[str, Any] = {}
+_vp_result_cache_ts: dict[str, float] = {}
+_ict_result_cache: dict[str, Any] = {}
+_ict_result_cache_ts: dict[str, float] = {}
+# TTL by timeframe (seconds): shorter for intraday so levels stay fresh
+_VP_ICT_RESULT_TTL: dict[str, float] = {
+    "1m": 30.0, "3m": 30.0, "5m": 60.0, "15m": 90.0,
+    "30m": 120.0, "1h": 180.0, "4h": 300.0, "1d": 600.0,
+}
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = str(os.getenv(name, "1" if default else "0") or "0").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+_chart_process_pool_lock = threading.Lock()
+_chart_process_pool: concurrent.futures.ProcessPoolExecutor | None = None
+_CHART_PROCESS_POOL_ENABLED = _env_flag("MCL_CHART_PROCESS_POOL_ENABLED", default=True)
+_CHART_PROCESS_POOL_MAX_WORKERS = max(1, int(os.getenv("MCL_CHART_PROCESS_POOL_MAX_WORKERS", "2")))
+_CHART_PROCESS_POOL_TIMEOUT_SECONDS = max(5.0, float(os.getenv("MCL_CHART_PROCESS_POOL_TIMEOUT_SECONDS", "45")))
+_CHART_PROCESS_POOL_START_METHOD = str(
+    os.getenv(
+        "MCL_CHART_PROCESS_POOL_START_METHOD",
+        "fork" if os.name != "nt" else "spawn",
+    )
+    or ("fork" if os.name != "nt" else "spawn")
+).strip().lower()
+_CHART_PREWARM_ENABLED = _env_flag("MCL_CHART_PREWARM_ENABLED", default=True)
+_CHART_PREWARM_DELAY_SECONDS = max(0.0, float(os.getenv("MCL_CHART_PREWARM_DELAY_SECONDS", "3")))
+_CHART_PREWARM_SPECS = str(
+    os.getenv(
+        "MCL_CHART_PREWARM_SPECS",
+        "XAUUSD:5m:realtime:1800,XAUUSD:15m:balanced:2200,XAUUSD:1h:balanced:3000",
+    )
+    or ""
+).strip()
+
 _lesson_cache_lock = threading.Lock()
 _lesson_cache_payloads: dict[str, dict[str, Any]] = {}
 _lesson_cache_ts: dict[str, float] = {}
@@ -87,6 +128,26 @@ _boundary_cache_payload: dict[str, Any] = {"mtime": None, "events": []}
 _boundary_alert_sent_at: dict[str, float] = {}
 _astro_cycle_cache_lock = threading.Lock()
 _astro_cycle_cache_payload: dict[str, Any] = {"mtime": None, "rows": []}
+
+
+def _get_chart_process_pool() -> concurrent.futures.ProcessPoolExecutor | None:
+    if not _CHART_PROCESS_POOL_ENABLED:
+        return None
+    global _chart_process_pool
+    with _chart_process_pool_lock:
+        if _chart_process_pool is not None:
+            return _chart_process_pool
+        try:
+            ctx = mp.get_context(_CHART_PROCESS_POOL_START_METHOD)
+            _chart_process_pool = concurrent.futures.ProcessPoolExecutor(
+                max_workers=_CHART_PROCESS_POOL_MAX_WORKERS,
+                mp_context=ctx,
+            )
+        except Exception:
+            _chart_process_pool = concurrent.futures.ProcessPoolExecutor(
+                max_workers=_CHART_PROCESS_POOL_MAX_WORKERS,
+            )
+        return _chart_process_pool
 
 
 def _to_json_safe(obj: Any) -> Any:
@@ -1478,6 +1539,12 @@ def _normalize_timeframe(timeframe: str | None) -> str:
     return value or "1m"
 
 
+def _normalize_chart_engine_mode(engine_mode: str | None) -> str:
+    value = str(engine_mode or "balanced").strip().lower()
+    allowed = {"realtime", "balanced", "deep"}
+    return value if value in allowed else "balanced"
+
+
 def _mcl_default_source_mode() -> str:
     value = str(os.getenv("MCL_DEFAULT_SOURCE_MODE", "combined") or "combined").strip().lower()
     allowed = {"historical_first", "historical_only", "live_first", "live_only", "hybrid", "combined"}
@@ -1518,6 +1585,85 @@ def _resolve_turtle_profile_for_timeframe(timeframe: str, turtle_profile: str) -
 def _normalize_lookback_years(lookback_years: int | None) -> int:
     years = int(lookback_years) if lookback_years is not None else 25
     return max(1, min(100, years))
+
+
+def _resolve_chart_engine_profile(
+    timeframe: str,
+    source_mode: str,
+    lookback_years: int,
+    limit: int,
+    fast_mode: bool,
+    engine_mode: str,
+) -> tuple[str, int, int, bool, str]:
+    tf = _normalize_timeframe(timeframe)
+    mode = _normalize_chart_engine_mode(engine_mode)
+    src = _normalize_source_mode(source_mode)
+    years = _normalize_lookback_years(lookback_years)
+    rows = max(1, min(int(limit), 50000))
+    is_fast = bool(fast_mode)
+
+    if mode == "realtime":
+        src = "live_first"
+        is_fast = True
+        if tf in {"1m", "5m", "15m", "30m", "1h"}:
+            years = min(years, 1)
+            rows = min(rows, 1800)
+        else:
+            years = min(years, 2)
+            rows = min(rows, 2200)
+    elif mode == "deep":
+        is_fast = False
+        if tf in {"1d", "1w", "1month"}:
+            years = max(years, 10)
+            rows = max(rows, 12000)
+        elif tf in {"4h", "1h"}:
+            years = max(years, 5)
+            rows = max(rows, 8000)
+
+    profile = f"{mode}:{src}:{tf}:y{years}:n{rows}:fast{int(is_fast)}"
+    return src, years, rows, is_fast, profile
+
+
+def _should_offload_chart_compute(
+    engine_mode: str,
+    timeframe: str,
+    lookback_years: int,
+    limit: int,
+    fast_mode: bool,
+) -> bool:
+    if not _CHART_PROCESS_POOL_ENABLED:
+        return False
+    mode = _normalize_chart_engine_mode(engine_mode)
+    tf = _normalize_timeframe(timeframe)
+    if mode == "realtime":
+        return False
+    if mode == "deep":
+        return True
+    if int(limit) >= 6000 or int(lookback_years) >= 4:
+        return True
+    if tf in {"4h", "1d", "1w", "1month"} and not bool(fast_mode):
+        return True
+    return False
+
+
+def _parse_chart_prewarm_specs(spec: str) -> list[tuple[str, str, str, int, int, str, bool, bool]]:
+    jobs: list[tuple[str, str, str, int, int, str, bool, bool]] = []
+    if not spec:
+        return jobs
+    for raw in spec.split(","):
+        token = raw.strip()
+        if not token:
+            continue
+        parts = [p.strip() for p in token.split(":") if p.strip()]
+        if len(parts) < 2:
+            continue
+        symbol = _normalize_symbol(parts[0])
+        tf = _normalize_timeframe(parts[1])
+        mode = _normalize_chart_engine_mode(parts[2] if len(parts) >= 3 else "balanced")
+        lim = max(200, min(int(parts[3]), 50000)) if len(parts) >= 4 else 2000
+        years = max(1, min(int(parts[4]), 100)) if len(parts) >= 5 else 2
+        jobs.append((symbol, tf, mode, lim, years, "combined", False, False))
+    return jobs
 
 
 def _is_intraday_snapshot_timeframe(timeframe: str) -> bool:
@@ -1794,8 +1940,13 @@ def _read_live_csv_ohlc(path: Path) -> Any | None:
         return None
 
     out["open"] = out["open"].fillna(out["close"])
-    out["high"] = out["high"].fillna(out["close"])
-    out["low"] = out["low"].fillna(out["close"])
+    # Apply tiny spread for missing high/low to avoid flat bars on chart.
+    _c_ref = out["close"]
+    _tiny_sp = (_c_ref * 0.001).clip(lower=0.01)
+    _oc_high = out["open"].combine(out["close"], max)
+    _oc_low = out["open"].combine(out["close"], min)
+    out["high"] = out["high"].where(out["high"].notna() & (out["high"] > 0), _oc_high + _tiny_sp)
+    out["low"] = out["low"].where(out["low"].notna() & (out["low"] > 0), _oc_low - _tiny_sp)
     out["volume"] = out["volume"].fillna(0.0)
     out = out[["time", "open", "high", "low", "close", "volume"]].sort_values("time")
     return out
@@ -4455,9 +4606,32 @@ def _compute_chart(
     strict_mt5: bool = False,
     require_fresh_mt5: bool = False,
     fast_mode: bool = False,
+    engine_mode: str = "balanced",
 ) -> dict[str, Any]:
+    symbol = _normalize_symbol(symbol)
+    timeframe = _normalize_timeframe(timeframe)
+    source_mode = _normalize_source_mode(source_mode)
+    lookback_years = _normalize_lookback_years(lookback_years)
+    limit = max(1, min(int(limit), 50000))
+    strict_mt5 = bool(strict_mt5)
+    require_fresh_mt5 = bool(require_fresh_mt5)
+    fast_mode = bool(fast_mode)
+    engine_mode = _normalize_chart_engine_mode(engine_mode)
+
+    source_mode, lookback_years, limit, fast_mode, engine_profile = _resolve_chart_engine_profile(
+        timeframe=timeframe,
+        source_mode=source_mode,
+        lookback_years=lookback_years,
+        limit=limit,
+        fast_mode=fast_mode,
+        engine_mode=engine_mode,
+    )
+
     # ── Cache check ──────────────────────────────────────────────────────────
-    _cache_key = f"{symbol}|{timeframe}|{source_mode}|{lookback_years}|{limit}|{int(strict_mt5)}|{int(require_fresh_mt5)}|{int(bool(fast_mode))}"
+    _cache_key = (
+        f"{symbol}|{timeframe}|{source_mode}|{lookback_years}|{limit}|"
+        f"{int(strict_mt5)}|{int(require_fresh_mt5)}|{int(bool(fast_mode))}|{engine_profile}"
+    )
     with _chart_cache_lock:
         _cached_ts = _chart_cache_ts.get(_cache_key, 0.0)
         if time.time() - _cached_ts < _CHART_CACHE_TTL_SECONDS:
@@ -4465,16 +4639,45 @@ def _compute_chart(
             if _cached is not None:
                 return _cached
     # ── Compute ───────────────────────────────────────────────────────────────
-    _result = _compute_chart_uncached(
-        symbol=symbol,
+    _compute_kwargs = {
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "source_mode": source_mode,
+        "lookback_years": lookback_years,
+        "limit": limit,
+        "strict_mt5": strict_mt5,
+        "require_fresh_mt5": require_fresh_mt5,
+        "fast_mode": fast_mode,
+    }
+    _offload_requested = _should_offload_chart_compute(
+        engine_mode=engine_mode,
         timeframe=timeframe,
-        source_mode=source_mode,
         lookback_years=lookback_years,
         limit=limit,
-        strict_mt5=strict_mt5,
-        require_fresh_mt5=require_fresh_mt5,
         fast_mode=fast_mode,
     )
+    _offload_executed = False
+
+    if _offload_requested:
+        _pool = _get_chart_process_pool()
+        if _pool is not None:
+            try:
+                _future = _pool.submit(_compute_chart_uncached, **_compute_kwargs)
+                _result = _future.result(timeout=_CHART_PROCESS_POOL_TIMEOUT_SECONDS)
+                _offload_executed = True
+            except Exception:
+                _result = _compute_chart_uncached(**_compute_kwargs)
+        else:
+            _result = _compute_chart_uncached(**_compute_kwargs)
+    else:
+        _result = _compute_chart_uncached(**_compute_kwargs)
+
+    if isinstance(_result, dict):
+        _result.setdefault("chart_engine_mode", engine_mode)
+        _result.setdefault("chart_engine_profile", engine_profile)
+        _result.setdefault("chart_compute_offload_requested", bool(_offload_requested))
+        _result.setdefault("chart_compute_offloaded", bool(_offload_executed))
+
     with _chart_cache_lock:
         _chart_cache_payloads[_cache_key] = _result
         _chart_cache_ts[_cache_key] = time.time()
@@ -4500,6 +4703,12 @@ def _compute_chart_uncached(
     strict_mt5 = bool(strict_mt5)
     require_fresh_mt5 = bool(require_fresh_mt5)
     fast_mode = bool(fast_mode)
+    _display_tz = str(os.getenv("MCL_DISPLAY_TIMEZONE", "Asia/Kolkata")).strip() or "Asia/Kolkata"
+    _time_metadata = {
+        "timestamp_timezone": "UTC",
+        "timestamp_unit": "epoch_seconds",
+        "display_timezone": _display_tz,
+    }
     if strict_mt5:
         # Force live-only behavior when user explicitly requests strict MT5 charting.
         source_mode = "live_only"
@@ -4785,10 +4994,15 @@ def _compute_chart_uncached(
             return []
 
     def _latest_stooq_spot_quote(max_age_seconds: int = 6 * 3600) -> tuple[float | None, int | None]:
-        """Fetch latest public XAUUSD spot quote from stooq for stale-chart tail fallback."""
+        """Fetch latest public XAUUSD spot quote from stooq for stale-chart tail fallback.
+
+        Only uses XAUUSD spot (not GC futures) to avoid price discrepancies between
+        futures (~$10-20 below spot) and spot price shown in MCL chart.
+        """
+        # Only XAUUSD spot — gc.f (GC futures) is excluded because it trades at a
+        # discount to spot and would create an outlier candle at the chart tail.
         _STOOQ_URLS = [
             "https://stooq.com/q/l/?s=xauusd&f=sd2t2ohlcv&h&e=csv",
-            "https://stooq.com/q/l/?s=gc.f&f=sd2t2ohlcv&h&e=csv",  # GC futures fallback
         ]
         try:
             import urllib.request as _urllib_req
@@ -4998,6 +5212,7 @@ def _compute_chart_uncached(
                 elif _mode_merge:
                     if _hist_ready:
                         _tf_norm_merge = str(timeframe).lower().strip()
+                        _hist_tf_norm = str(_hist_applied_tf).lower().strip()
                         _seam_live_only_seconds = {
                             "5m": 2 * 24 * 3600,
                             "15m": 3 * 24 * 3600,
@@ -5022,7 +5237,14 @@ def _compute_chart_uncached(
                             and _seam_gap > int(_seam_live_only_seconds[_tf_norm_merge])
                         )
 
-                        if _prefer_live_only:
+                        # If requested TF is 1h/4h but historical resolver downgraded
+                        # (e.g. to 1d), prefer exact live TF rows to preserve chart cadence.
+                        _prefer_live_exact_tf = (
+                            _tf_norm_merge in {"1h", "4h"}
+                            and _hist_tf_norm != _tf_norm_merge
+                        )
+
+                        if _prefer_live_only or _prefer_live_exact_tf:
                             df = _live_df
                             applied_timeframe = str(timeframe)
                             fallback_meta = {
@@ -5030,7 +5252,11 @@ def _compute_chart_uncached(
                                 "requested_timeframe": requested_timeframe,
                                 "applied_timeframe": str(timeframe),
                                 "fallback_applied": True,
-                                "fallback_reason": f"chart_live_dataset_preferred_large_seam_{_tf_norm_merge}",
+                                "fallback_reason": (
+                                    f"chart_live_dataset_preferred_large_seam_{_tf_norm_merge}"
+                                    if _prefer_live_only
+                                    else f"chart_live_dataset_preferred_exact_tf_{_tf_norm_merge}"
+                                ),
                             }
                         else:
                             _merged = _pd.concat([_hist_df, _live_df], ignore_index=True)
@@ -5081,7 +5307,7 @@ def _compute_chart_uncached(
 
         # In default historical_first mode, prefer a reasonably fresh intraday live
         # dataset when it exists so 5m/15m/30m charts keep their requested timeframe.
-        _intraday_live_pref_tfs = {"1m", "5m", "15m", "30m"}
+        _intraday_live_pref_tfs = {"1m", "5m", "15m", "30m", "1h", "4h"}
         _is_hist_first = not (_mode_live_only or _mode_hist_only or _mode_live_prefer or _mode_merge)
         if _is_hist_first and _live_df is not None and not _live_df.empty:
             _req_tf_norm = str(timeframe).strip().lower()
@@ -5273,22 +5499,28 @@ def _compute_chart_uncached(
                         if not _yf_rows:
                             raise RuntimeError("yahoo_finance_gap_fill_unavailable")
                         _yf_added = 0
+                        _yf_last_aligned = None
+                        _bucket = max(60, int(tf_seconds))
+                        _existing_times = {int(_r.get("time", 0)) for _r in rows}
                         for _gr in _yf_rows:
-                            _t = int(_gr["time"])
+                            _t_raw = int(_gr["time"])
+                            _t = int((_t_raw // _bucket) * _bucket)
                             _c = float(_gr.get("close") or 0.0)
                             _o = float(_gr.get("open") or _c)
                             _h = float(_gr.get("high") or max(_o, _c))
                             _l = float(_gr.get("low") or min(_o, _c))
                             _v = float(_gr.get("volume") or 0.0)
-                            if _c > 0.0 and _t > historical_last_epoch:
+                            if _c > 0.0 and _t > historical_last_epoch and _t not in _existing_times:
                                 rows.append({
                                     "time": _t, "open": _o, "high": _h,
                                     "low": _l, "close": _c,
                                     "volume": max(0.0, _v),
                                 })
+                                _existing_times.add(_t)
                                 _yf_added += 1
+                                _yf_last_aligned = _t
                         if _yf_added > 0:
-                            live_last_epoch = int(_yf_rows[-1]["time"])
+                            live_last_epoch = int(_yf_last_aligned or historical_last_epoch)
                             live_gap_seconds = int(max(0, live_last_epoch - historical_last_epoch))
                             live_gap_fill_applied = True
                             live_gap_reason = f"yahoo_finance_gc_fill_{_yf_added}_candles"
@@ -5684,7 +5916,12 @@ def _compute_chart_uncached(
                     # Try stooq first
                     _stooq_price, _stooq_ts = _latest_stooq_spot_quote(max_age_seconds=_stooq_max_age)
                     if _stooq_price is not None and _stooq_price > 0.0 and _stooq_ts is not None:
-                        _spot_price, _spot_ts, _spot_src = _stooq_price, _stooq_ts, "stooq_tail"
+                        # Validate stooq price against last MT5 bar to catch GC-futures drift.
+                        # Reject if deviation exceeds 3% (futures vs spot gap is typically <1%).
+                        _ref_close = float(rows[-1].get("close") or 0.0) if rows else 0.0
+                        _drift_pct = abs(_stooq_price - _ref_close) / _ref_close if _ref_close > 0 else 0.0
+                        if _drift_pct <= 0.03:
+                            _spot_price, _spot_ts, _spot_src = _stooq_price, _stooq_ts, "stooq_tail"
                     else:
                         # Fallback: gold-api.com (free, no API key, real-time)
                         _ga_price, _ga_ts = _latest_goldapi_spot_quote()
@@ -5717,6 +5954,70 @@ def _compute_chart_uncached(
                                 live_gap_reason = str(_spot_src)
             except Exception:
                 pass
+
+        # ── Post-process: fix flat bars (h==l==o==c) using ATR spread from neighbours ──
+        # These arise when historical CSV rows have missing H/L filled with Close.
+        # A flat bar shows as a doji pin with no wick on the chart, which looks wrong.
+        try:
+            if rows:
+                _tf_spread_pct = {
+                    "1m": 0.0002, "5m": 0.0004, "15m": 0.0006,
+                    "30m": 0.0008, "1h": 0.0012, "4h": 0.0020, "1d": 0.0035,
+                }.get(str(applied_timeframe).lower().strip(), 0.0010)
+                _patched = 0
+                for _fi in range(len(rows)):
+                    _r = rows[_fi]
+                    _o, _h, _l, _c = _r["open"], _r["high"], _r["low"], _r["close"]
+                    if _h == _l:  # flat bar — high == low
+                        # Try to estimate spread from neighbours
+                        _spread = None
+                        _look = min(5, len(rows) - 1)
+                        for _delta in range(1, _look + 1):
+                            for _nb_i in [_fi - _delta, _fi + _delta]:
+                                if 0 <= _nb_i < len(rows):
+                                    _nb = rows[_nb_i]
+                                    _nb_hl = _nb["high"] - _nb["low"]
+                                    if _nb_hl > 0.01:
+                                        _spread = _nb_hl * 0.5
+                                        break
+                            if _spread is not None:
+                                break
+                        if _spread is None:
+                            _spread = max(0.01, _c * _tf_spread_pct)
+                        _half = _spread * 0.5
+                        _new_h = round(max(_o, _c) + _half, 5)
+                        _new_l = round(min(_o, _c) - _half, 5)
+                        rows[_fi] = {**_r, "high": _new_h, "low": _new_l}
+                        _patched += 1
+        except Exception:
+            pass
+
+        # If merged/live rows clearly follow requested candle spacing, prefer that
+        # timeframe label in metadata so UI/debug output matches rendered candles.
+        try:
+            if rows and len(rows) >= 6:
+                _req_tf = str(requested_timeframe).strip().lower()
+                _req_sec = int(max(60, _timeframe_seconds(_req_tf)))
+                _counts: dict[int, int] = {}
+                _prev_t = None
+                for _r in rows:
+                    _t = int(_r.get("time", 0))
+                    if _prev_t is not None and _t > _prev_t:
+                        _d = int(_t - _prev_t)
+                        if _d >= 60 and _d <= 7 * 24 * 3600:
+                            _counts[_d] = int(_counts.get(_d, 0)) + 1
+                    _prev_t = _t
+                if _counts:
+                    _mode_delta = max(_counts.items(), key=lambda kv: kv[1])[0]
+                    if _mode_delta == _req_sec and str(applied_timeframe).strip().lower() != _req_tf:
+                        applied_timeframe = requested_timeframe
+                        fallback_meta = {
+                            **(dict(fallback_meta or {})),
+                            "requested_timeframe": requested_timeframe,
+                            "applied_timeframe": str(requested_timeframe),
+                        }
+        except Exception:
+            pass
 
         latest_candle_time = int(rows[-1].get("time", 0)) if rows else None
         stale_seconds = None
@@ -5797,6 +6098,7 @@ def _compute_chart_uncached(
             "stale_seconds": stale_seconds,
             "stale_threshold_seconds": stale_threshold_seconds,
             "data_stale": data_stale,
+            **_time_metadata,
             "elapsed_ms": round((time.time() - started_at) * 1000.0, 2),
         }
     except Exception as exc:
@@ -5812,8 +6114,542 @@ def _compute_chart_uncached(
             "lookback_years": effective_lookback_years,
             "candles": [],
             "rows": 0,
+            **_time_metadata,
             "elapsed_ms": round((time.time() - started_at) * 1000.0, 2),
         }
+
+
+_chart_prewarm_started = False
+_chart_prewarm_lock = threading.Lock()
+
+
+def _run_chart_prewarm_once() -> None:
+    if not _CHART_PREWARM_ENABLED:
+        return
+    jobs = _parse_chart_prewarm_specs(_CHART_PREWARM_SPECS)
+    if not jobs:
+        return
+    if _CHART_PREWARM_DELAY_SECONDS > 0:
+        time.sleep(_CHART_PREWARM_DELAY_SECONDS)
+    for (symbol, timeframe, engine_mode, limit, lookback_years, source_mode, strict_mt5, require_fresh_mt5) in jobs:
+        try:
+            _compute_chart(
+                symbol=symbol,
+                timeframe=timeframe,
+                source_mode=source_mode,
+                lookback_years=lookback_years,
+                limit=limit,
+                strict_mt5=strict_mt5,
+                require_fresh_mt5=require_fresh_mt5,
+                fast_mode=(engine_mode == "realtime"),
+                engine_mode=engine_mode,
+            )
+        except Exception as exc:
+            logger.warning(
+                "chart prewarm failed for %s %s (%s): %s",
+                symbol,
+                timeframe,
+                engine_mode,
+                exc,
+            )
+
+
+def _ensure_chart_prewarm_thread() -> None:
+    global _chart_prewarm_started
+    if _chart_prewarm_started:
+        return
+    with _chart_prewarm_lock:
+        if _chart_prewarm_started:
+            return
+        thread = threading.Thread(
+            target=_run_chart_prewarm_once,
+            daemon=True,
+            name="mcl-chart-prewarm",
+        )
+        thread.start()
+        _chart_prewarm_started = True
+
+
+_ensure_chart_prewarm_thread()
+
+
+def _chart_cache_metrics() -> dict[str, Any]:
+    now = time.time()
+    with _chart_cache_lock:
+        keys = list(_chart_cache_ts.keys())
+        total = len(keys)
+        live = 0
+        oldest_age_s = None
+        newest_age_s = None
+        for key in keys:
+            ts = float(_chart_cache_ts.get(key, 0.0) or 0.0)
+            age = max(0.0, now - ts)
+            if age < _CHART_CACHE_TTL_SECONDS:
+                live += 1
+            if oldest_age_s is None or age > oldest_age_s:
+                oldest_age_s = age
+            if newest_age_s is None or age < newest_age_s:
+                newest_age_s = age
+    return {
+        "entries": total,
+        "live_entries": live,
+        "oldest_age_seconds": round(float(oldest_age_s or 0.0), 3),
+        "newest_age_seconds": round(float(newest_age_s or 0.0), 3),
+        "ttl_seconds": float(_CHART_CACHE_TTL_SECONDS),
+    }
+
+
+@router.get("/chart/engine_status")
+def market_causality_chart_engine_status() -> dict[str, Any]:
+    pool_running = bool(_chart_process_pool is not None)
+    status: dict[str, Any] = {
+        "status": "ok",
+        "chart_engine": {
+            "process_pool_enabled": bool(_CHART_PROCESS_POOL_ENABLED),
+            "process_pool_running": pool_running,
+            "process_pool_max_workers": int(_CHART_PROCESS_POOL_MAX_WORKERS),
+            "process_pool_timeout_seconds": float(_CHART_PROCESS_POOL_TIMEOUT_SECONDS),
+            "process_pool_start_method": str(_CHART_PROCESS_POOL_START_METHOD),
+            "prewarm_enabled": bool(_CHART_PREWARM_ENABLED),
+            "prewarm_started": bool(_chart_prewarm_started),
+            "prewarm_delay_seconds": float(_CHART_PREWARM_DELAY_SECONDS),
+            "prewarm_specs": str(_CHART_PREWARM_SPECS),
+            "cache": _chart_cache_metrics(),
+        },
+        "updated_at": int(time.time()),
+    }
+    return status
+
+
+@router.post("/chart/engine_prewarm")
+def market_causality_chart_engine_prewarm() -> dict[str, Any]:
+    """Trigger a best-effort chart prewarm pass in a background thread."""
+    if not _CHART_PREWARM_ENABLED:
+        return {
+            "status": "disabled",
+            "message": "Chart prewarm is disabled via MCL_CHART_PREWARM_ENABLED",
+            "updated_at": int(time.time()),
+        }
+
+    thread = threading.Thread(
+        target=_run_chart_prewarm_once,
+        daemon=True,
+        name="mcl-chart-prewarm-manual",
+    )
+    thread.start()
+    return {
+        "status": "ok",
+        "message": "Chart prewarm started",
+        "updated_at": int(time.time()),
+    }
+
+
+@router.post("/chart/prefetch")
+def market_causality_chart_prefetch(
+    symbol: str = Query(default="XAUUSD"),
+    timeframe: str = Query(default="1h"),
+    limit: int = Query(default=500, ge=10, le=5000),
+    engine_mode: str = Query(default="balanced"),
+) -> dict[str, Any]:
+    """Warm candles + VP histogram + ICT levels caches for a symbol/timeframe combo."""
+    import concurrent.futures as _cf  # noqa: PLC0415
+    t0 = time.time()
+    sym = _normalize_symbol(symbol)
+    tf  = _normalize_timeframe(timeframe)
+    results: dict[str, Any] = {}
+
+    def _warm_candles():
+        try:
+            c = _compute_chart(symbol=sym, timeframe=tf, limit=limit,
+                               lookback_years=None, fast_mode=(engine_mode == "realtime"),
+                               strict_mt5=False, require_fresh_mt5=False, engine_mode=engine_mode)
+            return ("candles", len(c.get("candles") or []))
+        except Exception as exc:
+            return ("candles_err", str(exc))
+
+    def _warm_vp():
+        try:
+            r = market_causality_vp_histogram(symbol=sym, timeframe=tf, limit=limit,
+                                              num_bins=60, va_pct=0.70, engine_mode=engine_mode)
+            return ("vp", r.get("status"))
+        except Exception as exc:
+            return ("vp_err", str(exc))
+
+    def _warm_ict():
+        try:
+            r = market_causality_ict_levels(symbol=sym, timeframe=tf, limit=min(limit, 500),
+                                            engine_mode=engine_mode)
+            return ("ict", r.get("status"))
+        except Exception as exc:
+            return ("ict_err", str(exc))
+
+    with _cf.ThreadPoolExecutor(max_workers=3, thread_name_prefix="mcl-prefetch") as ex:
+        futs = [ex.submit(_warm_candles), ex.submit(_warm_vp), ex.submit(_warm_ict)]
+        for fut in _cf.as_completed(futs, timeout=60):
+            try:
+                k, v = fut.result()
+                results[k] = v
+            except Exception as exc:
+                results[f"err_{len(results)}"] = str(exc)
+
+    return {
+        "status": "ok",
+        "symbol": sym,
+        "timeframe": tf,
+        "results": results,
+        "elapsed_ms": round((time.time() - t0) * 1000, 2),
+        "updated_at": int(time.time()),
+    }
+
+
+@router.post("/chart/cache_flush")
+def market_causality_cache_flush(
+    symbol: str = Query(default=""),
+    timeframe: str = Query(default=""),
+) -> dict[str, Any]:
+    """Flush VP+ICT result caches (optionally scoped to symbol/tf)."""
+    removed = 0
+    prefix = ""
+    if symbol:
+        prefix = _normalize_symbol(symbol)
+        if timeframe:
+            prefix += f"|{_normalize_timeframe(timeframe)}"
+    with _chart_cache_lock:
+        for cache_d, ts_d in [(_vp_result_cache, _vp_result_cache_ts),
+                               (_ict_result_cache, _ict_result_cache_ts)]:
+            keys_to_del = [k for k in list(cache_d.keys()) if not prefix or k.startswith(prefix)]
+            for k in keys_to_del:
+                cache_d.pop(k, None); ts_d.pop(k, None); removed += 1
+    return {"status": "ok", "flushed": removed, "prefix": prefix or "*", "updated_at": int(time.time())}
+
+
+@router.get("/chart/vp_histogram")
+def market_causality_vp_histogram(
+    symbol: str = Query(default="XAUUSD"),
+    timeframe: str = Query(default="1d"),
+    limit: int = Query(default=300, ge=10, le=10000),
+    num_bins: int = Query(default=60, ge=10, le=300),
+    va_pct: float = Query(default=0.70, ge=0.50, le=0.99),
+    engine_mode: str = Query(default="balanced"),
+) -> dict[str, Any]:
+    """Compute Volume Profile histogram (POC / VAH / VAL / HVN / LVN) server-side."""
+    t0 = time.time()
+    try:
+        import numpy as np  # noqa: PLC0415
+        _tf_norm = _normalize_timeframe(timeframe)
+        _sym_norm = _normalize_symbol(symbol)
+        _vp_key = f"{_sym_norm}|{_tf_norm}|{limit}|{num_bins}|{va_pct}|{engine_mode}"
+        _vp_ttl = _VP_ICT_RESULT_TTL.get(_tf_norm, 120.0)
+        with _chart_cache_lock:
+            if time.time() - _vp_result_cache_ts.get(_vp_key, 0.0) < _vp_ttl:
+                _cv = _vp_result_cache.get(_vp_key)
+                if _cv is not None:
+                    return _cv
+
+        chart = _compute_chart(
+            symbol=symbol,
+            timeframe=timeframe,
+            limit=limit,
+            lookback_years=None,
+            fast_mode=(engine_mode == "realtime"),
+            strict_mt5=False,
+            require_fresh_mt5=False,
+            engine_mode=engine_mode,
+        )
+        candles = chart.get("candles") or []
+        if len(candles) < 2:
+            return {"status": "insufficient_data", "symbol": symbol, "timeframe": timeframe, "rows": len(candles), "updated_at": int(time.time())}
+
+        lo = min(float(c["low"]) for c in candles)
+        hi = max(float(c["high"]) for c in candles)
+        if hi <= lo:
+            return {"status": "flat_range", "symbol": symbol, "timeframe": timeframe, "updated_at": int(time.time())}
+
+        nb = int(num_bins)
+        bin_sz = (hi - lo) / nb
+        bins = np.zeros(nb, dtype=np.float64)
+
+        for c in candles:
+            cl, ch, cv = float(c["low"]), float(c["high"]), max(float(c.get("volume") or 0), 1.0)
+            rng = ch - cl
+            if rng < 1e-10:
+                idx = min(nb - 1, max(0, int((float(c["close"]) - lo) / bin_sz)))
+                bins[idx] += cv
+                continue
+            for j in range(nb):
+                blo = lo + j * bin_sz
+                bhi = blo + bin_sz
+                overlap = min(ch, bhi) - max(cl, blo)
+                if overlap > 0:
+                    bins[j] += cv * (overlap / rng)
+
+        poc_idx = int(np.argmax(bins))
+        total_vol = float(bins.sum())
+        avg_vol = total_vol / nb if nb > 0 else 1.0
+
+        # Value Area: expand from POC until va_pct% of total volume is covered
+        va_lo = poc_idx
+        va_hi = poc_idx
+        va_vol = float(bins[poc_idx])
+        target = total_vol * float(va_pct)
+        while va_vol < target and (va_lo > 0 or va_hi < nb - 1):
+            up = float(bins[va_hi + 1]) if va_hi < nb - 1 else 0.0
+            dn = float(bins[va_lo - 1]) if va_lo > 0 else 0.0
+            if up >= dn:
+                va_hi += 1; va_vol += up
+            else:
+                va_lo -= 1; va_vol += dn
+
+        bin_prices = [lo + (i + 0.5) * bin_sz for i in range(nb)]
+        hvn_thresh = avg_vol * 1.6
+        lvn_thresh = avg_vol * 0.35
+        node_types = ["HVN" if bins[i] > hvn_thresh else "LVN" if bins[i] < lvn_thresh else "NORMAL" for i in range(nb)]
+
+        _vp_result = {
+            "status": "ok",
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "candles": len(candles),
+            "num_bins": nb,
+            "bin_size": round(bin_sz, 5),
+            "range_lo": round(lo, 5),
+            "range_hi": round(hi, 5),
+            "poc_price": round(bin_prices[poc_idx], 5),
+            "vah_price": round(bin_prices[va_hi], 5),
+            "val_price": round(bin_prices[va_lo], 5),
+            "poc_idx": poc_idx,
+            "vah_idx": va_hi,
+            "val_idx": va_lo,
+            "total_volume": round(total_vol, 2),
+            "value_area_pct": float(va_pct),
+            "bins": [round(float(b), 2) for b in bins],
+            "bin_prices": [round(p, 5) for p in bin_prices],
+            "node_types": node_types,
+            "elapsed_ms": round((time.time() - t0) * 1000, 2),
+            "updated_at": int(time.time()),
+        }
+        with _chart_cache_lock:
+            _vp_result_cache[_vp_key] = _vp_result
+            _vp_result_cache_ts[_vp_key] = time.time()
+        return _vp_result
+    except Exception as exc:
+        logging.exception("vp_histogram uncaught")
+        return {"status": "error", "error": str(exc), "symbol": symbol, "timeframe": timeframe, "updated_at": int(time.time())}
+
+
+def _detect_fvgs(candles: list[dict], max_items: int = 50) -> list[dict[str, Any]]:
+    """Detect Fair Value Gaps (3-candle inefficiencies) in candle data."""
+    fvgs: list[dict[str, Any]] = []
+    for i in range(1, len(candles) - 1):
+        prev = candles[i - 1]
+        cur  = candles[i]
+        nxt  = candles[i + 1]
+        ph, pl = float(prev["high"]), float(prev["low"])
+        nh, nl = float(nxt["high"]),  float(nxt["low"])
+        ts = int(cur.get("time") or 0)
+        # Bullish FVG: gap between prev low and next high (price moves up fast)
+        if nl > ph:
+            fvgs.append({"type": "BULL_FVG", "top": round(nl, 5), "bottom": round(ph, 5), "mid": round((nl + ph) / 2, 5), "time": ts, "filled": False})
+        # Bearish FVG: gap between prev high and next low (price moves down fast)
+        elif nh < pl:
+            fvgs.append({"type": "BEAR_FVG", "top": round(pl, 5), "bottom": round(nh, 5), "mid": round((pl + nh) / 2, 5), "time": ts, "filled": False})
+    # Keep most recent, deduplicate by mid price proximity
+    fvgs = fvgs[-max_items:]
+    return fvgs
+
+
+def _detect_order_blocks(candles: list[dict], max_items: int = 20) -> list[dict[str, Any]]:
+    """Detect ICT Order Blocks — last bearish candle before bullish impulse and vice versa."""
+    obs: list[dict[str, Any]] = []
+    for i in range(1, len(candles) - 2):
+        c0 = candles[i]
+        c1 = candles[i + 1]
+        c2 = candles[i + 2] if i + 2 < len(candles) else None
+        o0, h0, l0, cl0 = float(c0["open"]), float(c0["high"]), float(c0["low"]), float(c0["close"])
+        o1, h1 = float(c1["open"]), float(c1["high"])
+        is_bearish = cl0 < o0
+        is_bullish = cl0 > o0
+        # Bullish OB: last bearish candle before strong bullish impulse
+        if is_bearish and float(c1["close"]) > h0:
+            obs.append({"type": "BULL_OB", "top": round(h0, 5), "bottom": round(l0, 5), "mid": round((h0 + l0) / 2, 5), "time": int(c0.get("time") or 0)})
+        # Bearish OB: last bullish candle before strong bearish impulse
+        if is_bullish and float(c1["close"]) < l0:
+            obs.append({"type": "BEAR_OB", "top": round(h0, 5), "bottom": round(l0, 5), "mid": round((h0 + l0) / 2, 5), "time": int(c0.get("time") or 0)})
+    return obs[-max_items:]
+
+
+def _detect_bos_choch(candles: list[dict], swing_lookback: int = 5) -> list[dict[str, Any]]:
+    """Detect Break of Structure (BOS) and Change of Character (CHoCH)."""
+    events: list[dict[str, Any]] = []
+    n = len(candles)
+    for i in range(swing_lookback * 2, n):
+        window = candles[max(0, i - swing_lookback * 2): i]
+        if len(window) < swing_lookback:
+            continue
+        recent_hi = max(float(c["high"]) for c in window[-swing_lookback:])
+        prior_hi  = max(float(c["high"]) for c in window[:swing_lookback])
+        recent_lo = min(float(c["low"])  for c in window[-swing_lookback:])
+        prior_lo  = min(float(c["low"])  for c in window[:swing_lookback])
+        ts = int(candles[i].get("time") or 0)
+        cl = float(candles[i]["close"])
+        if cl > prior_hi and recent_hi > prior_hi:
+            events.append({"type": "BOS_BULL", "price": round(prior_hi, 5), "time": ts})
+        elif cl < prior_lo and recent_lo < prior_lo:
+            events.append({"type": "BOS_BEAR", "price": round(prior_lo, 5), "time": ts})
+    return events[-30:]
+
+
+def _detect_equal_levels(candles: list[dict], tol_pct: float = 0.002) -> list[dict[str, Any]]:
+    """Detect Equal Highs (EQH) and Equal Lows (EQL) — liquidity pool targets."""
+    levels: list[dict[str, Any]] = []
+    highs = [(float(c["high"]), int(c.get("time") or 0)) for c in candles]
+    lows  = [(float(c["low"]),  int(c.get("time") or 0)) for c in candles]
+    for arr, label in [(highs, "EQH"), (lows, "EQL")]:
+        seen: list[tuple[float, int]] = []
+        for price, ts in arr:
+            matched = False
+            for idx, (sp, _) in enumerate(seen):
+                if abs(price - sp) / max(sp, 1e-9) <= tol_pct:
+                    levels.append({"type": label, "price": round((price + sp) / 2, 5), "time": ts})
+                    seen[idx] = (price, ts)
+                    matched = True
+                    break
+            if not matched:
+                seen.append((price, ts))
+    return sorted(levels, key=lambda x: x["time"])[-40:]
+
+
+@router.get("/chart/ict_levels")
+def market_causality_ict_levels(
+    symbol: str = Query(default="XAUUSD"),
+    timeframe: str = Query(default="1h"),
+    limit: int = Query(default=200, ge=20, le=2000),
+    engine_mode: str = Query(default="balanced"),
+) -> dict[str, Any]:
+    """Compute ICT market structure levels: FVGs, Order Blocks, BOS/CHoCH, EQH/EQL, kill zone status."""
+    t0 = time.time()
+    try:
+        from datetime import timezone as _tz  # noqa: PLC0415
+        _ict_tf = _normalize_timeframe(timeframe)
+        _ict_sym = _normalize_symbol(symbol)
+        _ict_key = f"{_ict_sym}|{_ict_tf}|{limit}|{engine_mode}"
+        _ict_ttl = _VP_ICT_RESULT_TTL.get(_ict_tf, 120.0)
+        with _chart_cache_lock:
+            if time.time() - _ict_result_cache_ts.get(_ict_key, 0.0) < _ict_ttl:
+                _civ = _ict_result_cache.get(_ict_key)
+                if _civ is not None:
+                    return _civ
+
+        chart = _compute_chart(
+            symbol=symbol,
+            timeframe=timeframe,
+            limit=limit,
+            lookback_years=None,
+            fast_mode=(engine_mode == "realtime"),
+            strict_mt5=False,
+            require_fresh_mt5=False,
+            engine_mode=engine_mode,
+        )
+
+        chart = _compute_chart(
+            symbol=symbol,
+            timeframe=timeframe,
+            limit=limit,
+            lookback_years=None,
+            fast_mode=(engine_mode == "realtime"),
+            strict_mt5=False,
+            require_fresh_mt5=False,
+            engine_mode=engine_mode,
+        )
+        candles = chart.get("candles") or []
+        if len(candles) < 20:
+            return {"status": "insufficient_data", "symbol": symbol, "timeframe": timeframe, "rows": len(candles), "updated_at": int(time.time())}
+
+        # IST kill zone status
+        now_utc = int(time.time())
+        ist_offset_sec = 5 * 3600 + 30 * 60  # UTC+5:30
+        ist_epoch = now_utc + ist_offset_sec
+        ist_hm = ((ist_epoch % 86400) // 60)  # minutes since midnight IST
+        kz_asia_active    = 90  <= ist_hm < 150    # 01:30–02:30 IST
+        kz_london_active  = 750 <= ist_hm < 870    # 12:30–14:30 IST
+        kz_ny_active      = 1050 <= ist_hm < 1230  # 17:30–20:30 IST
+        kz_overlap_active = 1050 <= ist_hm < 1290  # 17:30–21:30 IST (London+NY)
+        in_any_kz = kz_asia_active or kz_london_active or kz_ny_active
+        ist_h, ist_m = divmod(ist_hm, 60)
+        ist_time_str = f"{ist_h:02d}:{ist_m:02d} IST"
+
+        fvgs   = _detect_fvgs(candles)
+        obs    = _detect_order_blocks(candles)
+        bos    = _detect_bos_choch(candles)
+        eqlevs = _detect_equal_levels(candles)
+
+        # Last known price
+        last_close = float(candles[-1]["close"]) if candles else 0.0
+
+        # Classify FVGs as filled or unfilled vs last close
+        for fvg in fvgs:
+            top, bot = fvg["top"], fvg["bottom"]
+            if fvg["type"] == "BULL_FVG":
+                fvg["filled"] = last_close >= top
+                fvg["testing"] = not fvg["filled"] and last_close >= bot
+            else:
+                fvg["filled"] = last_close <= bot
+                fvg["testing"] = not fvg["filled"] and last_close <= top
+
+        bull_fvgs = [f for f in fvgs if f["type"] == "BULL_FVG" and not f["filled"]]
+        bear_fvgs = [f for f in fvgs if f["type"] == "BEAR_FVG" and not f["filled"]]
+        bull_obs  = [o for o in obs if o["type"] == "BULL_OB"]
+        bear_obs  = [o for o in obs if o["type"] == "BEAR_OB"]
+
+        eqh_items = [e for e in eqlevs if e["type"] == "EQH"]
+        eql_items = [e for e in eqlevs if e["type"] == "EQL"]
+        _ict_result = {
+            "status": "ok",
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "candles": len(candles),
+            "last_close": round(last_close, 5),
+            "ist_time": ist_time_str,
+            "kill_zones": {
+                "asia_active":    kz_asia_active,
+                "london_active":  kz_london_active,
+                "ny_active":      kz_ny_active,
+                "overlap_active": kz_overlap_active,
+                "in_any_kz":      in_any_kz,
+                "ist_hm":         ist_hm,
+            },
+            "fvgs": {
+                "total": len(fvgs),
+                "bull_unfilled": len(bull_fvgs),
+                "bear_unfilled": len(bear_fvgs),
+                "items": fvgs[-20:],
+            },
+            "order_blocks": {
+                "total": len(obs),
+                "bull_count": len(bull_obs),
+                "bear_count": len(bear_obs),
+                "items": obs[-20:],
+            },
+            "bos_choch": {
+                "total": len(bos),
+                "items": bos[-20:],
+            },
+            "equal_levels": {
+                "total": len(eqlevs),
+                "eqh_count": len(eqh_items),
+                "eql_count": len(eql_items),
+                "items": eqlevs[-20:],
+            },
+            "elapsed_ms": round((time.time() - t0) * 1000, 2),
+            "updated_at": int(time.time()),
+        }
+        with _chart_cache_lock:
+            _ict_result_cache[_ict_key] = _ict_result
+            _ict_result_cache_ts[_ict_key] = time.time()
+        return _ict_result
+    except Exception as exc:
+        logging.exception("ict_levels uncaught")
+        return {"status": "error", "error": str(exc), "symbol": symbol, "timeframe": timeframe, "updated_at": int(time.time())}
 
 
 @router.get("/summary")
@@ -6122,6 +6958,7 @@ def market_causality_chart(
     strict_mt5: bool = Query(default=False),
     require_fresh_mt5: bool = Query(default=False),
     fast_mode: bool = Query(default=False),
+    engine_mode: str = Query(default="balanced"),
 ) -> dict[str, Any]:
     """Historical candlestick data for the MCL dashboard chart."""
     return _compute_chart(
@@ -6133,6 +6970,7 @@ def market_causality_chart(
         strict_mt5=strict_mt5,
         require_fresh_mt5=require_fresh_mt5,
         fast_mode=fast_mode,
+        engine_mode=engine_mode,
     )
 
 

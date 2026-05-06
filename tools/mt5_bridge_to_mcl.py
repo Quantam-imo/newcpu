@@ -74,8 +74,12 @@ def _load_any_ohlc(path: Path) -> pd.DataFrame:
 
     out = out.dropna(subset=["time", "close"]).copy()
     out["open"] = out["open"].fillna(out["close"])
-    out["high"] = out["high"].fillna(out["close"])
-    out["low"] = out["low"].fillna(out["close"])
+    # For high/low: if missing (NaN) or zero while close is valid, apply a tiny
+    # synthetic spread (0.1%) instead of setting h=l=close which creates flat bars.
+    _c = out["close"]
+    _tiny = (_c * 0.001).clip(lower=0.01)
+    out["high"] = out["high"].where(out["high"].notna() & (out["high"] > 0), out["open"].combine(out["close"], max) + _tiny)
+    out["low"] = out["low"].where(out["low"].notna() & (out["low"] > 0), out["open"].combine(out["close"], min) - _tiny)
     out["volume"] = out["volume"].fillna(0.0)
     return out.sort_values("time").drop_duplicates(subset=["time"], keep="last")
 
@@ -91,8 +95,11 @@ def _bridge_to_ohlc(df: pd.DataFrame) -> pd.DataFrame:
     out["volume"] = pd.to_numeric(incoming["Volume"], errors="coerce").fillna(0.0)
     out = out.dropna(subset=["time", "close"]).copy()
     out["open"] = out["open"].fillna(out["close"])
-    out["high"] = out["high"].fillna(out["close"])
-    out["low"] = out["low"].fillna(out["close"])
+    # Apply tiny spread for missing high/low to avoid flat bars in persisted history.
+    _c2 = out["close"]
+    _tiny2 = (_c2 * 0.001).clip(lower=0.01)
+    out["high"] = out["high"].where(out["high"].notna() & (out["high"] > 0), out["open"].combine(out["close"], max) + _tiny2)
+    out["low"] = out["low"].where(out["low"].notna() & (out["low"] > 0), out["open"].combine(out["close"], min) - _tiny2)
     return out.sort_values("time").drop_duplicates(subset=["time"], keep="last")
 
 
