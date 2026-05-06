@@ -301,6 +301,7 @@ def _market_reaction_snapshot(symbols: Optional[list] = None) -> str:
     result_lines: list = []
     watch = symbols or [_signal_symbol()]
     for sym in watch[:3]:
+        pct_move: Optional[float] = None
         try:
             # 1. Latest price + direction from 5m chart (last 6 candles)
             chart = _get_json("/market_causality/chart", params={"symbol": sym, "timeframe": "5m", "limit": 6})
@@ -312,6 +313,7 @@ def _market_reaction_snapshot(symbols: Optional[list] = None) -> str:
                 close = float(cur["close"])
                 ref_open = float(ref["open"])
                 pct = (close - ref_open) / ref_open * 100 if ref_open else 0.0
+                pct_move = pct
                 rng = float(cur["high"]) - float(cur["low"])
                 arrow = "▲" if close >= float(cur["open"]) else "▼"
                 price_line = f"{arrow} {close:.2f} ({pct:+.2f}%) | Range: {rng:.2f}"
@@ -330,7 +332,22 @@ def _market_reaction_snapshot(symbols: Optional[list] = None) -> str:
                 "BEARISH reaction" if trend_val.lower() in ("bearish", "bear") else
                 "NEUTRAL/mixed"
             )
-            bias_line = f"{reaction_sentiment} | Bias: {trend_val.upper()} | Signal: {signal_val} ({conf_str})"
+            # Explicit trend state for fast readability in Telegram.
+            trend_state = "SIDEWAYS"
+            if trend_val.lower() in ("bullish", "bull", "uptrend", "up"):
+                trend_state = "UPTREND"
+            elif trend_val.lower() in ("bearish", "bear", "downtrend", "down"):
+                trend_state = "DOWNTREND"
+            elif pct_move is not None:
+                if pct_move >= 0.10:
+                    trend_state = "UPTREND"
+                elif pct_move <= -0.10:
+                    trend_state = "DOWNTREND"
+
+            bias_line = (
+                f"{reaction_sentiment} | Trend: {trend_state} | "
+                f"Bias: {trend_val.upper()} | Signal: {signal_val} ({conf_str})"
+            )
         except Exception:
             bias_line = ""
 
