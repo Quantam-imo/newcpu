@@ -291,6 +291,60 @@ def _send_command(text: str) -> bool:
     return _send_to(_command_chat_id(), text, token=_command_token())
 
 
+def _market_reaction_snapshot(symbols: Optional[list] = None) -> str:
+    """Return a compact market-reaction block for news event messages.
+
+    Fetches live price from the 5m MCL chart and MCL bias/signal from the
+    summary endpoint. Returns a multi-line string ready to append to any
+    news alert message.
+    """
+    result_lines: list = []
+    watch = symbols or [_signal_symbol()]
+    for sym in watch[:3]:
+        try:
+            # 1. Latest price + direction from 5m chart (last 6 candles)
+            chart = _get_json("/market_causality/chart", params={"symbol": sym, "timeframe": "5m", "limit": 6})
+            candles = chart.get("candles") or []
+            price_line = ""
+            if len(candles) >= 2:
+                cur = candles[-1]
+                ref = candles[-3] if len(candles) >= 3 else candles[0]
+                close = float(cur["close"])
+                ref_open = float(ref["open"])
+                pct = (close - ref_open) / ref_open * 100 if ref_open else 0.0
+                rng = float(cur["high"]) - float(cur["low"])
+                arrow = "▲" if close >= float(cur["open"]) else "▼"
+                price_line = f"{arrow} {close:.2f} ({pct:+.2f}%) | Range: {rng:.2f}"
+        except Exception:
+            price_line = ""
+
+        try:
+            # 2. MCL bias / signal from summary endpoint
+            summ = _get_json("/market_causality/summary", params={"symbol": sym, "timeframe": "15m"})
+            signal_val = str(summ.get("signal") or "N/A")
+            trend_val = str(summ.get("trend") or "N/A")
+            conf_raw = summ.get("confidence")
+            conf_str = f"{float(conf_raw) * 100:.0f}%" if conf_raw is not None else "N/A"
+            reaction_sentiment = (
+                "BULLISH reaction" if trend_val.lower() in ("bullish", "bull") else
+                "BEARISH reaction" if trend_val.lower() in ("bearish", "bear") else
+                "NEUTRAL/mixed"
+            )
+            bias_line = f"{reaction_sentiment} | Bias: {trend_val.upper()} | Signal: {signal_val} ({conf_str})"
+        except Exception:
+            bias_line = ""
+
+        lines: list = [f"  [{sym}]"]
+        if price_line:
+            lines.append(f"    Price : {price_line}")
+        if bias_line:
+            lines.append(f"    MCL   : {bias_line}")
+        if len(lines) > 1:
+            result_lines.extend(lines)
+
+    return "\n".join(result_lines) if result_lines else "  Market data unavailable"
+
+
 def _market_hours_block(symbol: str = "XAUUSD") -> str:
     """Return a compact market-hours line for status reports.
     Example:  'Market: CLOSED (Weekend) — opens Today 22:00 UTC'
@@ -1465,13 +1519,28 @@ def _handle_command(text: str) -> Optional[str]:
                 if isinstance(item, dict):
                     mins = item.get('minutes_to_event')
                     timing = f"T-{int(mins)}min" if mins is not None else item.get('time_utc', '')
-                    news_lines.append(f"  {item.get('currency','?')} {item.get('title','?')} ({timing}) [{item.get('impact','?')}]")
+                    impact = item.get('impact', '?')
+                    forecast = item.get('forecast', '')
+                    previous = item.get('previous', '')
+                    actual = item.get('actual', '')
+                    detail = ''
+                    if actual:
+                        detail = f" | Actual: {actual}"
+                    elif forecast:
+                        detail = f" | Fcst: {forecast}" + (f" Prev: {previous}" if previous else "")
+                    news_lines.append(f"  [{impact}] {item.get('currency','?')} — {item.get('title','?')} ({timing}){detail}")
                 else:
                     news_lines.append(f"  {item}")
             next_news_text = "\n".join(news_lines)
         else:
             next_news_text = "  None scheduled"
-        return f"News [{_fmt_ist()}]\nHalt  : {halt_line}\nUpcoming:\n{next_news_text}"
+        reaction_text = _market_reaction_snapshot(list(_signal_symbols()))
+        return (
+            f"News [{_fmt_ist()}]\n"
+            f"Halt  : {halt_line}\n"
+            f"Upcoming:\n{next_news_text}\n"
+            f"Market Reaction:\n{reaction_text}"
+        )
     if text.startswith("/matrix"):
         return _handle_matrix_command(raw)
     if text.startswith("/orderflow"):
@@ -1728,16 +1797,30 @@ def _event_alerts(state: Dict[str, Any]) -> Dict[str, Any]:
                     if isinstance(item, dict):
                         mins = item.get('minutes_to_event')
                         timing = f"T-{int(mins)}min" if mins is not None else item.get('time_utc', '')
-                        upcoming_lines.append(f"  {item.get('currency','?')} {item.get('title','?')} ({timing})")
+                        impact = item.get('impact', '?')
+                        forecast = item.get('forecast', '')
+                        previous = item.get('previous', '')
+                        actual = item.get('actual', '')
+                        detail = ''
+                        if actual:
+                            detail = f" | Actual: {actual}"
+                        elif forecast:
+                            detail = f" | Fcst: {forecast}" + (f" Prev: {previous}" if previous else "")
+                        upcoming_lines.append(
+                            f"  [{impact}] {item.get('currency','?')} — {item.get('title','?')} ({timing}){detail}"
+                        )
                     else:
                         upcoming_lines.append(f"  {item}")
                 upcoming_text = "\n".join(upcoming_lines)
             else:
                 upcoming_text = "  None"
+            # Fetch live market reaction snapshot
+            reaction_text = _market_reaction_snapshot(list(_signal_symbols()))
             _send_message(
                 f"News Update [{_fmt_ist()}]\n"
                 f"Halt     : {'YES' if news_halt_bool else 'no'}\n"
-                f"Upcoming :\n{upcoming_text}"
+                f"Events   :\n{upcoming_text}\n"
+                f"Market Reaction:\n{reaction_text}"
             )
 
     state["last_news_halt"] = news_halt
