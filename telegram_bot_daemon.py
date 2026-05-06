@@ -1218,6 +1218,10 @@ def _build_mcl_present_message(symbol: str, summary: dict) -> str:
             except Exception:
                 lines.append(f"  R:R    : {rr}")
 
+    # Add live reaction context so Gann/signal alerts show how market is moving now.
+    reaction_text = _market_reaction_snapshot([symbol])
+    lines += ["", "MARKET REACTION", reaction_text]
+
     return "\n".join(lines)
 
 
@@ -1745,12 +1749,14 @@ def _event_alerts(state: Dict[str, Any]) -> Dict[str, Any]:
             if prev_bias not in (None, bias) or prev_signal not in (None, signal):
                 # Only alert when the NEW signal is an actionable direction.
                 if str(signal).upper() in _ACTIONABLE_SIGNALS:
+                    reaction_text = _market_reaction_snapshot([symbol])
                     _send_message(
                         f"Signal Change: {symbol}\n"
                         f"HTF   : {prev_bias} -> {bias}\n"
                         f"Signal: {prev_signal} -> {signal}\n"
                         f"Vol   : {str(sig.get('volatility', 'N/A'))} | News: {str(sig.get('news_state', 'N/A'))}\n"
-                        f"Time  : {_fmt_ist()}"
+                        f"Time  : {_fmt_ist()}\n"
+                        f"Market Reaction:\n{reaction_text}"
                     )
 
             if prev_astro_sig not in (None, "", astro_sig):
@@ -1758,13 +1764,15 @@ def _event_alerts(state: Dict[str, Any]) -> Dict[str, Any]:
                 if str(astro.get("signal", "")).upper() in _ACTIONABLE_SIGNALS:
                     _aw = astro.get('harmonic_window', False)
                     _aw_str = "ACTIVE" if bool(_aw) and str(_aw).upper() not in ('FALSE', 'NONE', 'N/A', '') else "inactive"
+                    reaction_text = _market_reaction_snapshot([symbol])
                     _send_message(
                         f"Astro Update: {symbol} [{_fmt_ist()}]\n"
                         f"Window : {_aw_str}\n"
                         f"Marker : {astro.get('astro_marker', 'N/A')}\n"
                         f"Bias   : {astro.get('astro_bias', '--')}\n"
                         f"Signal : {astro.get('signal', 'N/A')}\n"
-                        f"Reason : {astro.get('reason', 'N/A')}"
+                        f"Reason : {astro.get('reason', 'N/A')}\n"
+                        f"Market Reaction:\n{reaction_text}"
                     )
 
             last_bias_map[symbol] = bias
