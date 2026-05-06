@@ -485,6 +485,7 @@ def _load_state() -> Dict[str, Any]:
         "last_daily_summary_date": "",
         "last_holiday_eve_alert_date": "",
         "last_mcl_daily_date": "",
+        "signal_outcomes": {},
     }
     if not STATE_FILE.exists():
         return default_state
@@ -569,6 +570,130 @@ def _extract_signal_context(mentor_payload: Dict[str, Any]) -> Dict[str, Any]:
         "news_state": news_state,
         "astro": astro,
     }
+
+
+def _signal_direction(signal_text: str) -> str:
+    s = str(signal_text or "").upper()
+    if "BUY" in s:
+        return "BUY"
+    if "SELL" in s:
+        return "SELL"
+    return "WAIT"
+
+
+def _latest_close_price(symbol: str, timeframe: str = "5m") -> Optional[float]:
+    chart = _get_json("/market_causality/chart", params={"symbol": symbol, "timeframe": timeframe, "limit": 3})
+    candles = chart.get("candles") or []
+    if not candles:
+        return None
+    try:
+        return float(candles[-1].get("close"))
+    except Exception:
+        return None
+
+
+def _register_signal_outcome(state: Dict[str, Any], symbol: str, signal_text: str, source: str) -> None:
+    direction = _signal_direction(signal_text)
+    if direction not in ("BUY", "SELL"):
+        return
+    entry = _latest_close_price(symbol)
+    if entry is None:
+        return
+
+    outcomes = dict(state.get("signal_outcomes", {}) or {})
+    key = f"{symbol}:{source}"
+    outcomes[key] = {
+        "symbol": symbol,
+        "source": source,
+        "signal": str(signal_text),
+        "direction": direction,
+        "entry_price": entry,
+        "entry_ts": int(time.time()),
+        "sent": [],
+    }
+    state["signal_outcomes"] = outcomes
+
+
+def _signal_outcome_followups(state: Dict[str, Any]) -> Dict[str, Any]:
+    outcomes = dict(state.get("signal_outcomes", {}) or {})
+    if not outcomes:
+        return state
+
+    now_ts = int(time.time())
+    checkpoints = (
+        ("5m", 5 * 60),
+        ("15m", 15 * 60),
+        ("1h", 60 * 60),
+    )
+
+    # Cleanup stale trackers older than 2h.
+    drop_before = now_ts - (2 * 60 * 60)
+
+    for key, rec in list(outcomes.items()):
+        try:
+            entry_ts = int(rec.get("entry_ts", 0) or 0)
+            if entry_ts <= 0:
+                outcomes.pop(key, None)
+                continue
+            if entry_ts < drop_before:
+                outcomes.pop(key, None)
+                continue
+
+            sent = set(rec.get("sent") or [])
+            symbol = str(rec.get("symbol") or "")
+            direction = str(rec.get("direction") or "WAIT").upper()
+            signal_text = str(rec.get("signal") or "N/A")
+            source = str(rec.get("source") or "SIGNAL")
+            entry_price = float(rec.get("entry_price") or 0.0)
+            if not symbol or entry_price <= 0:
+                outcomes.pop(key, None)
+                continue
+
+            current = _latest_close_price(symbol)
+            if current is None:
+                continue
+
+            move_pts = current - entry_price
+            move_pct = (move_pts / entry_price) * 100 if entry_price else 0.0
+
+            # Score outcome from signal perspective.
+            score_pts = move_pts if direction == "BUY" else -move_pts
+            score_pct = move_pct if direction == "BUY" else -move_pct
+            if score_pct >= 0.10:
+                outcome = "WIN"
+            elif score_pct <= -0.10:
+                outcome = "LOSS"
+            else:
+                outcome = "FLAT"
+
+            for label, sec in checkpoints:
+                if label in sent:
+                    continue
+                if (now_ts - entry_ts) < sec:
+                    continue
+
+                _send_message(
+                    f"Signal Outcome [{label}] — {symbol}\n"
+                    f"Source : {source}\n"
+                    f"Signal : {signal_text}\n"
+                    f"Entry  : {entry_price:.2f} -> {current:.2f}\n"
+                    f"Move   : {move_pts:+.2f} pts ({move_pct:+.2f}%)\n"
+                    f"Result : {outcome} ({score_pts:+.2f} pts, {score_pct:+.2f}%)\n"
+                    f"Time   : {_fmt_ist()}"
+                )
+                sent.add(label)
+
+            rec["sent"] = sorted(sent)
+            outcomes[key] = rec
+
+            # Remove completed trackers once 1h checkpoint is sent.
+            if "1h" in sent:
+                outcomes.pop(key, None)
+        except Exception:
+            continue
+
+    state["signal_outcomes"] = outcomes
+    return state
 
 
 def _links_block() -> str:
@@ -1775,6 +1900,7 @@ def _event_alerts(state: Dict[str, Any]) -> Dict[str, Any]:
                         f"Time  : {_fmt_ist()}\n"
                         f"Market Reaction:\n{reaction_text}"
                     )
+                    _register_signal_outcome(state, symbol, str(signal), source="MENTOR")
 
             if prev_astro_sig not in (None, "", astro_sig):
                 # Only alert when the astro signal itself is actionable.
@@ -1791,6 +1917,7 @@ def _event_alerts(state: Dict[str, Any]) -> Dict[str, Any]:
                         f"Reason : {astro.get('reason', 'N/A')}\n"
                         f"Market Reaction:\n{reaction_text}"
                     )
+                    _register_signal_outcome(state, symbol, str(astro.get("signal", "")), source="ASTRO")
 
             last_bias_map[symbol] = bias
             last_signal_map[symbol] = signal
@@ -2168,6 +2295,7 @@ def main() -> int:
         try:
             state = _poll_updates(state)
             state = _event_alerts(state)
+            state = _signal_outcome_followups(state)
             state = _trade_approval_alerts(state)
             state = _periodic_report(state)
             state = _periodic_daemon_health(state)
